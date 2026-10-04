@@ -1,0 +1,339 @@
+{
+ "rutas": [
+  {
+   "id": "fundamentos",
+   "titulo": "Fundamentos: del azar a la inferencia",
+   "para": "Desde cero. No hace falta saber nada de estadística ni de programación.",
+   "nivel": "Principiante",
+   "duracion": "unas 2 horas",
+   "desc": "Qué es una variable aleatoria, las distribuciones más importantes, por qué los promedios se estabilizan, y cómo se pasa de unos pocos datos a una conclusión con intervalos de confianza y contrastes de hipótesis.",
+   "pasos": [
+    {
+     "id": "datos-azar",
+     "titulo": "Datos, azar y variables aleatorias",
+     "idea": [
+      "Un **dato** es una medición: la altura de una persona, el número de siniestros de un mes. Si repetimos el experimento, los datos cambian: hay **azar**.",
+      "Una **variable aleatoria** es el valor que todavía no ha salido: describe lo que podría pasar y con qué probabilidad. Su **distribución** es ese reparto de probabilidades.",
+      "Abajo hay una distribución uniforme: todos los valores entre 0 y 1 son igual de probables. Vamos a sacar valores de uno en uno y a ver qué forma toma el conjunto."
+     ],
+     "prueba": [
+      "Pulsa «+1» varias veces: cada barra nueva es una observación. Con tan pocos datos aún no se ve ninguna forma.",
+      "Pulsa «+100» y luego «+1000»: el histograma empieza a parecerse a la línea naranja (la distribución teórica).",
+      "Cambia a otra distribución con el desplegable y repite: cada una tiene su forma."
+     ],
+     "demo": "demo_dist_animada",
+     "demo_concepto": "c_distribucion_uniforme",
+     "claves": [
+      ["variable aleatoria", "Cantidad cuyo valor depende del azar."],
+      ["distribución", "Reparto de la probabilidad entre los valores posibles."],
+      ["muestra", "Conjunto de observaciones que hemos obtenido."],
+      ["histograma", "Gráfico de barras que cuenta cuántas observaciones caen en cada tramo."]
+     ],
+     "conceptos": ["c_variables_aleatorias_y_distribuciones", "c_distribucion_uniforme"],
+     "funciones": ["generar_por_inversion"],
+     "pregunta": {
+      "texto": "Con 5 observaciones el histograma es irregular y con 5000 se parece a la curva teórica. ¿Por qué?",
+      "opciones": ["Porque el generador mejora con el tiempo", "Porque con pocas observaciones el azar domina y con muchas las fluctuaciones se compensan", "Porque el programa suaviza la curva"],
+      "correcta": 1,
+      "pista": "Piensa en cuánto pesa cada observación cuando solo tienes 5 y cuánto cuando tienes 5000.",
+      "explicacion": "Con pocas observaciones cada una pesa mucho y el azar produce formas irregulares; con muchas, las fluctuaciones se compensan y aparece la forma real de la distribución."
+     }
+    },
+    {
+     "id": "media-lgn",
+     "titulo": "La media y la ley de los grandes números",
+     "idea": [
+      "La **media** es el promedio de las observaciones. Si la distribución tiene una media teórica, la media de la muestra intenta acercarse a ella.",
+      "La **ley de los grandes números** dice que, al aumentar n (el número de datos), la media muestral se acerca a la teórica. El gráfico inferior (media muestral frente a n) lo enseña: al principio da saltos y después se estabiliza."
+     ],
+     "prueba": [
+      "Pulsa «+10» varias veces y mira la línea verde del gráfico de abajo: da saltos grandes.",
+      "Pulsa «▶ Reproducir» hasta llegar a 5000: la línea se pega a la media teórica.",
+      "Elige la distribución «t de Student» y baja los grados de libertad a 1: ¡la media no se estabiliza nunca! Hay distribuciones sin media."
+     ],
+     "demo": "demo_dist_animada",
+     "demo_concepto": "c_ley_de_los_grandes_numeros",
+     "claves": [
+      ["media muestral", "Promedio de las n observaciones."],
+      ["error típico", "Cuánto varía la media muestral de una muestra a otra: σ/√n."]
+     ],
+     "conceptos": ["c_ley_de_los_grandes_numeros", "c_distribucion_muestral_y_error_estandar"],
+     "funciones": ["convergencia_media_muestral"],
+     "pregunta": {
+      "texto": "Para reducir a la mitad el error típico de la media, hay que…",
+      "opciones": ["duplicar n", "multiplicar n por 4", "añadir 10 observaciones"],
+      "correcta": 1,
+      "pista": "El error típico es σ dividido entre la raíz cuadrada de n.",
+      "explicacion": "El error típico es σ/√n: para dividirlo entre 2 hace falta multiplicar √n por 2, es decir, multiplicar n por 4."
+     }
+    },
+    {
+     "id": "normal",
+     "titulo": "La campana: la distribución normal",
+     "idea": [
+      "La **normal** (o campana de Gauss) aparece cuando un valor es la suma de muchos efectos pequeños: alturas, errores de medida, promedios…",
+      "Se describe con dos números: la media μ (dónde está el centro) y la desviación típica σ (cuánto se abre la campana)."
+     ],
+     "prueba": [
+      "Con la normal elegida, mueve σ: la campana se hace más alta y estrecha o más baja y ancha.",
+      "Mueve μ: la campana se desplaza sin cambiar de forma.",
+      "Añade 1000 datos con distintos σ: el histograma siempre sigue la curva."
+     ],
+     "demo": "demo_dist_animada",
+     "demo_concepto": "c_distribucion_normal",
+     "claves": [
+      ["μ (media)", "Centro de la distribución."],
+      ["σ (desviación típica)", "Anchura: cuánto se alejan los valores de la media, en promedio."],
+      ["regla 68-95-99,7", "En una normal, ≈68 % de los valores queda a menos de 1σ de la media, ≈95 % a menos de 2σ y ≈99,7 % a menos de 3σ."]
+     ],
+     "conceptos": ["c_distribucion_normal"],
+     "funciones": ["grafico_qq", "contraste_normalidad"],
+     "pregunta": {
+      "texto": "Una variable normal tiene μ = 100 y σ = 15. ¿Qué parte de los valores esperas entre 70 y 130 (μ ± 2σ)?",
+      "opciones": ["Alrededor del 68 %", "Alrededor del 95 %", "Alrededor del 50 %"],
+      "correcta": 1,
+      "pista": "70 y 130 están a 2σ de la media.",
+      "explicacion": "μ ± 2σ contiene en torno al 95 % de una normal (regla 68-95-99,7)."
+     }
+    },
+    {
+     "id": "binomial",
+     "titulo": "Éxitos y fracasos: Bernoulli y binomial",
+     "idea": [
+      "Muchas preguntas tienen dos respuestas: ¿renueva el cliente?, ¿hay siniestro? Un único ensayo así es una **Bernoulli** con probabilidad de éxito p.",
+      "Si repites n ensayos independientes y cuentas los éxitos, obtienes una **binomial**. Su media es n·p."
+     ],
+     "prueba": [
+      "Elige Bernoulli y añade datos: solo salen ceros y unos, y la barra del 1 se acerca a p.",
+      "Pasa a binomial: con n = 10 y p = 0,3 el valor más típico es 3.",
+      "Sube n: la forma se parece cada vez más a una campana."
+     ],
+     "demo": "demo_dist_animada",
+     "demo_concepto": "c_distribucion_binomial",
+     "claves": [
+      ["Bernoulli", "Un ensayo con dos resultados (1 éxito, 0 fracaso)."],
+      ["binomial", "Número de éxitos en n ensayos independientes con la misma probabilidad p."]
+     ],
+     "conceptos": ["c_distribucion_de_bernoulli", "c_distribucion_binomial"],
+     "funciones": ["intervalo_proporcion"],
+     "pregunta": {
+      "texto": "Si 10 clientes renuevan cada uno con probabilidad 0,3, ¿cuántos esperas que renueven de media?",
+      "opciones": ["0,3", "3", "10"],
+      "correcta": 1,
+      "pista": "La media de una binomial es n·p.",
+      "explicacion": "n·p = 10 · 0,3 = 3 renovaciones de media."
+     }
+    },
+    {
+     "id": "poisson",
+     "titulo": "Contar sucesos raros: Poisson",
+     "idea": [
+      "Cuando contamos cuántas veces ocurre algo en un tiempo fijo (siniestros al mes, llamadas por hora) y los sucesos son independientes y poco frecuentes, el recuento sigue una **Poisson** con un único parámetro λ: la media.",
+      "Una propiedad clave: en una Poisson la **media y la varianza son iguales**. Si en tus datos la varianza es mayor, hay *sobredispersión* y hace falta otra distribución (la binomial negativa)."
+     ],
+     "prueba": [
+      "Con λ = 3, añade 1000 datos y mira la desviación típica muestral: se acerca a √3 ≈ 1,73.",
+      "Sube λ a 20: la forma se vuelve simétrica, casi una campana."
+     ],
+     "demo": "demo_dist_animada",
+     "demo_concepto": "c_distribucion_de_poisson",
+     "claves": [
+      ["λ", "Número medio de sucesos en el periodo."],
+      ["sobredispersión", "Varianza mayor que la media: señal de que Poisson no basta."]
+     ],
+     "conceptos": ["c_distribucion_de_poisson", "c_sobredispersion"],
+     "funciones": ["ajustar_distribucion_discreta", "indice_dispersion"],
+     "pregunta": {
+      "texto": "En una Poisson con λ = 4, ¿cuánto vale la varianza?",
+      "opciones": ["2", "4", "16"],
+      "correcta": 1,
+      "pista": "En una Poisson media y varianza coinciden.",
+      "explicacion": "En una Poisson la varianza es igual a la media: 4."
+     }
+    },
+    {
+     "id": "galeria",
+     "titulo": "Cómo elegir la familia: la galería",
+     "idea": [
+      "Antes de modelar hay que decidir qué tipo de distribución describe los datos. La galería reúne las más usadas con su forma, media, varianza y un ejemplo típico de uso."
+     ],
+     "prueba": [
+      "Fíjate en cuáles son simétricas y cuáles tienen una cola larga a la derecha.",
+      "Busca la que usarías para: el número de siniestros de un mes; el importe de un siniestro; una probabilidad desconocida (entre 0 y 1)."
+     ],
+     "demo": "demo_dist_galeria",
+     "claves": [
+      ["cola pesada", "Cola larga: valores extremos más probables de lo que predice una normal."],
+      ["asimetría", "Falta de simetría; positiva si la cola larga está a la derecha."]
+     ],
+     "conceptos": ["c_variables_aleatorias_y_distribuciones", "c_distribucion_gamma", "c_distribucion_lognormal"],
+     "funciones": ["ajustar_distribuciones"],
+     "pregunta": {
+      "texto": "¿Qué familia usarías para el importe de un siniestro (siempre positivo y con cola larga a la derecha)?",
+      "opciones": ["Normal", "Gamma o lognormal", "Uniforme"],
+      "correcta": 1,
+      "pista": "Necesitas una distribución que solo tome valores positivos y sea asimétrica.",
+      "explicacion": "La gamma y la lognormal solo toman valores positivos y tienen cola derecha larga, justo lo que se ve en importes de siniestros."
+     }
+    },
+    {
+     "id": "tcl",
+     "titulo": "El teorema central del límite",
+     "idea": [
+      "Aunque los datos no sean normales, **la media de muchos datos sí se parece a una normal**. Es el teorema central del límite y explica por qué tantos métodos usan la normal.",
+      "Cuántos datos hacen falta depende de lo asimétrica que sea la población."
+     ],
+     "prueba": [
+      "Elige una población asimétrica y pon n pequeño: la distribución de las medias es sesgada.",
+      "Sube n: se vuelve cada vez más simétrica y acampanada.",
+      "Pulsa «Remuestrear» varias veces: la forma es estable, aunque los valores cambian."
+     ],
+     "demo": "demo_tcl",
+     "claves": [
+      ["distribución muestral", "Cómo se reparte un estadístico (por ejemplo la media) entre muestras distintas."],
+      ["TCL", "Teorema central del límite: las medias de muestras grandes son aproximadamente normales."]
+     ],
+     "conceptos": ["c_teorema_central_del_limite"],
+     "funciones": ["distribucion_muestral_simulada", "bootstrap_ic"],
+     "pregunta": {
+      "texto": "El teorema central del límite dice que, al aumentar n, la distribución de la media muestral…",
+      "opciones": ["se parece a una normal aunque los datos no lo sean", "copia la distribución de los datos", "se hace uniforme"],
+      "correcta": 0,
+      "pista": "Es el motivo por el que se usa la normal para medias aunque los datos sean asimétricos.",
+      "explicacion": "La media de muchos datos tiende a una normal aunque la población no lo sea; cuanto más asimétrica sea, más datos hacen falta."
+     }
+    },
+    {
+     "id": "intervalos",
+     "titulo": "Intervalos de confianza",
+     "idea": [
+      "Una media muestral es una estimación: otra muestra daría otro valor. Un **intervalo de confianza** del 95 % es un rango construido para que, si repites el proceso muchas veces, el 95 % de los intervalos contenga el valor verdadero.",
+      "Ojo: no significa «hay un 95 % de probabilidad de que el valor verdadero esté en este intervalo». El valor verdadero es fijo; lo que cambia entre muestras es el intervalo."
+     ],
+     "prueba": [
+      "Pulsa «Otras 50 muestras» varias veces y cuenta los intervalos naranjas (los que no contienen la media verdadera): con un 95 % esperas unos 2 o 3 de cada 50.",
+      "Sube el nivel de confianza al 99 %: hay menos fallos, pero los intervalos son más anchos.",
+      "Sube «n de cada muestra»: los intervalos se estrechan, y la proporción de fallos sigue siendo parecida."
+     ],
+     "demo": "demo_intervalos",
+     "claves": [
+      ["intervalo de confianza", "Rango de valores plausibles para un parámetro, con un nivel de confianza asociado al procedimiento."],
+      ["nivel de confianza", "Porcentaje de intervalos que cubrirían el valor verdadero si se repitiera el procedimiento."]
+     ],
+     "conceptos": ["c_intervalos_de_confianza"],
+     "funciones": ["intervalo_proporcion", "bootstrap_ic"],
+     "pregunta": {
+      "texto": "Al aumentar el tamaño de la muestra n, un intervalo de confianza al 95 %…",
+      "opciones": ["se hace más estrecho y sigue cubriendo el valor verdadero el 95 % de las veces", "cubre más veces el valor verdadero", "se hace más ancho"],
+      "correcta": 0,
+      "pista": "El nivel de confianza lo fijas tú; lo que cambia con n es la precisión.",
+      "explicacion": "Más datos dan más precisión (intervalos más estrechos), pero el nivel de confianza sigue siendo el que elegiste, el 95 %."
+     }
+    },
+    {
+     "id": "contraste",
+     "titulo": "Contrastes de hipótesis y p-valor",
+     "idea": [
+      "Un **contraste de hipótesis** responde a: «¿son los datos compatibles con que no haya diferencia (la hipótesis nula, H0)?». Calculamos un estadístico (aquí el t) y su **p-valor**: la probabilidad de ver algo tan raro como lo observado si H0 fuera cierta.",
+      "Si el p-valor es menor que α (normalmente 0,05) rechazamos H0. Pero un p-valor pequeño no dice que el efecto sea grande, y uno grande no demuestra que no haya efecto."
+     ],
+     "prueba": [
+      "Pon la diferencia real en 0 y pulsa «Repetir 1000 veces»: aproximadamente un 5 % de las repeticiones sale «significativo» sin que haya nada (error de tipo I).",
+      "Sube la diferencia a 0,5: el porcentaje de rechazos es ahora la potencia.",
+      "Con n grande, incluso un efecto pequeño se detecta con frecuencia; por eso conviene mirar también el tamaño del efecto y no solo el p-valor."
+     ],
+     "demo": "demo_contraste_t",
+     "claves": [
+      ["H0", "Hipótesis nula: «no hay diferencia / no hay efecto»."],
+      ["p-valor", "Probabilidad de observar algo tan extremo como lo visto si H0 fuera cierta."],
+      ["α", "Umbral de decisión (p. ej. 0,05); es la tasa de falsos positivos que aceptamos."]
+     ],
+     "conceptos": ["c_contraste_de_hipotesis", "c_significacion_estadistica_y_p_valor", "c_test_t_y_test_t_de_welch"],
+     "funciones": ["elegir_contraste"],
+     "pregunta": {
+      "texto": "Si H0 es cierta y α = 0,05, ¿qué porcentaje de contrastes esperas que salgan «significativos»?",
+      "opciones": ["0 %", "5 %", "95 %"],
+      "correcta": 1,
+      "pista": "α es justamente la probabilidad de rechazar H0 cuando es cierta.",
+      "explicacion": "Con H0 cierta se rechaza, por azar, una proporción α de las veces: un 5 %."
+     }
+    },
+    {
+     "id": "potencia",
+     "titulo": "Potencia y tamaño muestral",
+     "idea": [
+      "La **potencia** es la probabilidad de detectar un efecto que sí existe. Depende del tamaño del efecto, del tamaño de muestra n y de α.",
+      "Antes de recoger datos conviene calcular qué n necesitas para tener, por ejemplo, un 80 % de potencia: con muy pocos datos un estudio puede no detectar nada aunque el efecto sea real."
+     ],
+     "prueba": [
+      "Sube n por grupo: las dos campanas se separan y la potencia crece.",
+      "Pon un efecto pequeño (0,2): se necesitan unas 400 observaciones por grupo para llegar al 80 %.",
+      "Sube α: la potencia crece, pero también los falsos positivos."
+     ],
+     "demo": "demo_potencia",
+     "claves": [
+      ["potencia", "Probabilidad de rechazar H0 cuando H1 es cierta (1 − β)."],
+      ["tamaño del efecto", "Magnitud de la diferencia, medida en desviaciones típicas (d de Cohen)."]
+     ],
+     "conceptos": ["c_error_tipo_i_y_potencia", "c_tamano_muestral"],
+     "funciones": ["tamano_muestral_medias", "potencia_contraste_medias"],
+     "pregunta": {
+      "texto": "Quieres detectar un efecto pequeño. ¿Qué haces para aumentar la potencia?",
+      "opciones": ["Aumentar n", "Reducir n", "Pedir un p-valor menor"],
+      "correcta": 0,
+      "pista": "Más datos separan más las dos distribuciones.",
+      "explicacion": "Aumentar n reduce el error típico y separa las distribuciones de H0 y H1, así que sube la potencia."
+     }
+    },
+    {
+     "id": "multiples",
+     "titulo": "Muchos contrastes a la vez",
+     "idea": [
+      "Si haces 100 contrastes con α = 0,05, esperas unos 5 «descubrimientos» falsos aunque no haya nada. Con 1000 contrastes, 50.",
+      "Hay que corregir. **Bonferroni** es muy estricto (casi no deja falsos positivos pero pierde efectos reales). **Benjamini-Hochberg** controla la proporción de falsos descubrimientos (FDR) y encuentra más efectos reales."
+     ],
+     "prueba": [
+      "Con 0 % de efectos reales y 100 contrastes, pulsa «Nuevo experimento» varias veces: ¿cuántos salen significativos sin corregir?",
+      "Con 10 % de efectos reales, compara los métodos: falsos positivos frente a efectos reales encontrados."
+     ],
+     "demo": "demo_fdr",
+     "claves": [
+      ["FDR", "Tasa de falsos descubrimientos: proporción esperada de falsos positivos entre los resultados significativos."],
+      ["Bonferroni", "Corrección estricta: divide α entre el número de contrastes."]
+     ],
+     "conceptos": ["c_tasa_de_falsos_descubrimientos_fdr", "c_significacion_estadistica_y_p_valor"],
+     "funciones": ["ajustar_p_valores"],
+     "pregunta": {
+      "texto": "Haces 200 contrastes con α = 0,05 y ningún efecto real. ¿Cuántos falsos positivos esperas sin corregir?",
+      "opciones": ["Ninguno", "Unos 10", "Unos 100"],
+      "correcta": 1,
+      "pista": "Multiplica el número de contrastes por α.",
+      "explicacion": "200 · 0,05 = 10 falsos positivos esperados."
+     }
+    },
+    {
+     "id": "cierre",
+     "titulo": "Qué sigue",
+     "idea": [
+      "Has recorrido el camino completo: variables aleatorias → distribuciones → ley de los grandes números → teorema central del límite → intervalos → contrastes → potencia → contrastes múltiples.",
+      "Para aplicarlo a datos reales, la función `elegir_contraste` compara una variable entre grupos eligiendo el test correcto y avisando de los supuestos. Cada función del árbol tiene su ejemplo ejecutable en el mapa."
+     ],
+     "prueba": [
+      "Abre `elegir_contraste` en el mapa (botón «Ver en el mapa» de abajo) y ejecuta su ejemplo con datos simulados.",
+      "Vuelve a esta guía y repasa los pasos que menos claros te hayan quedado."
+     ],
+     "claves": [],
+     "conceptos": ["c_contraste_de_hipotesis"],
+     "funciones": ["elegir_contraste", "intervalo_proporcion", "tamano_muestral_medias"],
+     "pregunta": {
+      "texto": "¿Qué dos números describen una distribución normal?",
+      "opciones": ["Media y desviación típica", "Mínimo y máximo", "Moda y mediana"],
+      "correcta": 0,
+      "pista": "Uno marca el centro y el otro la anchura.",
+      "explicacion": "La normal queda completamente definida por su media μ y su desviación típica σ."
+     }
+    }
+   ]
+  }
+ ]
+}

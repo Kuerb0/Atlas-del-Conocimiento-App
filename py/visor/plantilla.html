@@ -232,6 +232,37 @@ details.pbloque[open]>summary .pb-t::before{content:"▾ "}
 .pp-nota{font-size:11.5px;color:var(--muted);margin:4px 0 0}
 @media (max-width:520px){ .pp-pc{grid-template-columns:1fr} .pb{grid-template-columns:minmax(90px,1fr) minmax(50px,1fr) 30px} .pb-o{display:none} }
 
+/* ---------- guía de aprendizaje («Aprender») ---------- */
+.app.modo-aprender .cuerpo{display:none}
+.aprender{min-height:0;overflow:auto;padding:16px 16px 48px;background:var(--bg)}
+.aprender[hidden]{display:none}
+.ap-cont{max-width:860px;margin:0 auto;display:grid;gap:14px}
+.ap-cont h2{margin:0;font:700 22px var(--sans)} .ap-cont h4{margin:12px 0 4px;font:700 12px var(--sans);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.ap-sub{margin:0;color:var(--muted);font-size:14px}
+.ap-rutas{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.ap-ruta{display:grid;gap:6px;text-align:left;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);cursor:pointer;font:inherit}
+.ap-ruta:hover{border-color:var(--accent)} .ap-ruta b{font-size:15px} .ap-ruta span{font-size:12.5px;color:var(--muted)}
+.ap-barra{height:8px;border-radius:5px;background:var(--surface-2);overflow:hidden} .ap-barra i{display:block;height:100%;background:var(--accent);border-radius:5px;transition:width .3s}
+.ap-pasos{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+details.ap-paso{border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+details.ap-paso>summary{display:flex;gap:10px;align-items:center;padding:10px 14px;cursor:pointer;font-weight:650;list-style:none}
+details.ap-paso>summary::-webkit-details-marker{display:none}
+details.ap-paso[open]>summary{border-bottom:1px solid var(--line)}
+.ap-num{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--surface-2);font-size:12.5px;font-weight:700}
+details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(--on-leaf)}
+.ap-cuerpo{padding:6px 14px 14px;display:grid;gap:4px;font-size:14px;line-height:1.55}
+.ap-cuerpo p{margin:6px 0} .ap-cuerpo ol{margin:4px 0;padding-left:22px} .ap-cuerpo li{margin:3px 0}
+.ap-cuerpo code,.ap-cont code{font:12.5px var(--mono);background:var(--surface-2);padding:1px 5px;border-radius:4px}
+.ap-claves{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;font-size:13px;margin:0} .ap-claves dt{font-weight:700} .ap-claves dd{margin:0}
+.ap-ops{display:grid;gap:6px;margin:6px 0}
+.ap-op{text-align:left;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);cursor:pointer;font:inherit}
+.ap-op:hover:not([disabled]){border-color:var(--accent)}
+.ap-op.ok{border-color:var(--c-clustering,#2a9d6f);background:var(--surface-2);font-weight:650} .ap-op.mal{border-color:var(--danger);background:var(--danger-bg)}
+.ap-fb{font-size:13px;min-height:1.2em} .ap-fb.ok{color:var(--c-clustering,#2a9d6f)} .ap-fb.mal{color:var(--danger)}
+.ap-pre{margin:4px 0;padding:8px 10px;border-radius:8px;background:var(--surface-2);font:12.5px var(--mono);white-space:pre-wrap;overflow-wrap:anywhere}
+.ap-nav{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.ap-enl{display:flex;flex-wrap:wrap;gap:6px}
+
 /* panel plegado: queda una pestaña fina para volver a abrirlo */
 .cuerpo.sin-detalle .divisor::after{height:64px;margin-top:-32px;width:8px;left:3px;background:var(--accent)}
 :fullscreen .app,:-webkit-full-screen .app{min-height:0}
@@ -258,7 +289,8 @@ details.pbloque[open]>summary .pb-t::before{content:"▾ "}
     </div>
     <nav class="ramas" id="chips" aria-label="Ramas"></nav>
     <div class="tools">
-      <details class="filtros"><summary class="btn ic" title="Filtros">Filtros</summary>
+      <button class="btn" id="aprenderBtn" type="button" title="Guía de aprendizaje paso a paso" aria-pressed="false">🎓 Aprender</button>
+            <details class="filtros"><summary class="btn ic" title="Filtros">Filtros</summary>
         <div class="pop">
           <label class="chk"><input type="checkbox" id="soloSas"> Solo con equivalente SAS</label>
           <label class="chk" title="Conceptos de método (estadística, actuarial, finanzas) que todavía no tienen una función en el árbol. Los normativos no cuentan: no se programan"><input type="checkbox" id="soloHuecos"> Solo huecos (sin código)</label>
@@ -284,6 +316,7 @@ details.pbloque[open]>summary .pb-t::before{content:"▾ "}
          title="Arrastra para cambiar el tamaño del mapa · doble clic: ocultar/mostrar el panel · flechas: ajustar" aria-label="Cambiar el ancho del panel de detalle"></div>
     <aside class="detalle" id="detalle" aria-live="polite"></aside>
   </main>
+  <section class="aprender" id="aprender" hidden aria-label="Guía de aprendizaje"></section>
 </div>
 <div class="toast" id="toast" role="status"></div>
 <script type="application/json" id="datos">__DATOS__</script>
@@ -546,6 +579,7 @@ function detalleVacio() {
     '<li>Cada <b>punto</b> es una función (más grande = más código) o un <b>concepto</b> del máster, de Very Normal o de los manuales. Los punteados aún no tienen código: son huecos por rellenar. Los arcos unen cada concepto con las funciones que lo implementan.</li>' +
     '<li>Cada función tiene una <b>ficha de propiedades</b> (barras de 0 a 10: insesgadez, consistencia, eficiencia, potencia… y escalabilidad, velocidad, memoria…). Elige arriba el <b>perfil de proyecto</b> (cartera grande, pocos datos, regulatorio…) y se reordenan las alternativas. Pulsa una rama o un módulo para ver su media.</li>' +
     '<li>En <b>Cómo funciona</b> hay demos interactivas (distribuciones básicas animadas y en galería, t-test, potencia, FDR, IC, TCL, regresión, logística, censura).</li>' +
+    '<li>El botón <b>🎓 Aprender</b> abre una guía paso a paso desde cero, con demos, preguntas y el código en Python.</li>' +
     '<li>Con <b>/</b> buscas por nombre, concepto o PROC de SAS.</li></ul>' +
     '<h3>Búsquedas rápidas</h3><div class="rapidas"></div></div>';
   ['odds ratio', 'VIF', 'chi cuadrado', 'potencia', 'Kaplan', 'gráfico ROC', 'FDR', 'PROC LOGISTIC', 'Very Normal', 'bootstrap', 'Solvencia', 'Markov'].forEach(function (q) {
@@ -714,6 +748,95 @@ function detalleDemo(n, d) {
   catch (e) { caja.textContent = 'La demo falló: ' + e.message; if (window.console) console.error(e); }
   d.onclick = function (ev) { var go = ev.target.closest('button[data-ir]'); if (go && porNombre[go.dataset.ir]) seleccionar(porNombre[go.dataset.ir], true); };
 }
+
+/* ---------- guía de aprendizaje: rutas con pasos, demo, pregunta y progreso (se guarda en el navegador) ---------- */
+var RUTAS = DATA.rutas || [], apProg = {}, apRuta = null;
+try { apProg = JSON.parse(localStorage.getItem('arbol-aprender') || '{}') || {}; } catch (e) { apProg = {}; }
+function apGuardar() { try { localStorage.setItem('arbol-aprender', JSON.stringify(apProg)); } catch (e) {} }
+function md(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`(.+?)`/g, '<code>$1</code>').replace(/\*(.+?)\*/g, '<i>$1</i>'); }
+function apClave(r, p) { return r.id + '/' + p.id; }
+function apHechos(r) { return r.pasos.filter(function (p) { return apProg[apClave(r, p)]; }).length; }
+function apAbierta() { return $('.app').classList.contains('modo-aprender'); }
+function apMostrar(on) {
+  $('.app').classList.toggle('modo-aprender', on); $('#aprender').hidden = !on; $('#aprenderBtn').setAttribute('aria-pressed', String(on));
+  if (on) { if (apRuta) apVistaRuta(apRuta); else apVistaRutas(); $('#aprender').scrollTop = 0; } else pintar();
+}
+function apVistaRutas() {
+  apRuta = null; var cont = $('#aprender');
+  var h = '<div class="ap-cont"><h2>Guía de aprendizaje</h2><p class="ap-sub">Rutas paso a paso con demos interactivas, preguntas y el código para hacerlo en Python. Tu progreso se guarda en este navegador.</p><div class="ap-rutas">';
+  RUTAS.forEach(function (r, i) {
+    var n = apHechos(r), tot = r.pasos.length;
+    h += '<button type="button" class="ap-ruta" data-ruta="' + i + '"><b>' + esc(r.titulo) + '</b><span>' + esc(r.nivel) + ' · ' + esc(r.duracion) + ' · ' + tot + ' pasos</span>' +
+      '<span>' + esc(r.desc) + '</span><span><i>' + esc(r.para) + '</i></span><div class="ap-barra"><i style="width:' + Math.round(100 * n / tot) + '%"></i></div>' +
+      '<span>' + (n === 0 ? 'Empezar' : n === tot ? '✓ Completada · repasar' : n + ' de ' + tot + ' · continuar') + '</span></button>';
+  });
+  cont.innerHTML = h + '</div></div>';
+  cont.onclick = function (ev) { var b = ev.target.closest('button[data-ruta]'); if (b) apVistaRuta(RUTAS[+b.dataset.ruta]); };
+}
+function apVistaRuta(r) {
+  apRuta = r; var cont = $('#aprender');
+  var h = '<div class="ap-cont"><div><button type="button" class="btn" data-a="atras">← Todas las rutas</button></div><h2>' + esc(r.titulo) + '</h2><p class="ap-sub">' + esc(r.para) + '</p>' +
+    '<div class="ap-barra"><i id="apBarra"></i></div><p class="ap-sub" id="apTxt"></p><ol class="ap-pasos">';
+  r.pasos.forEach(function (p, i) {
+    h += '<li><details class="ap-paso" data-i="' + i + '"><summary><span class="ap-num">' + (i + 1) + '</span>' + esc(p.titulo) + '</summary><div class="ap-cuerpo"></div></details></li>';
+  });
+  cont.innerHTML = h + '</ol></div>'; apRefrescar();
+  cont.onclick = function (ev) { if (ev.target.closest('button[data-a="atras"]')) apVistaRutas(); };
+  cont.querySelectorAll('details.ap-paso').forEach(function (d) {
+    d.addEventListener('toggle', function () {
+      var p = r.pasos[+d.dataset.i], cuerpo = d.querySelector('.ap-cuerpo');
+      if (d.open) {
+        cont.querySelectorAll('details.ap-paso[open]').forEach(function (o) { if (o !== d) o.open = false; });
+        apPaso(r, +d.dataset.i, cuerpo);
+      } else cuerpo.innerHTML = '';                      /* al cerrar se quita la demo: así dejan de correr sus temporizadores */
+    });
+  });
+  var primero = 0; for (var i = 0; i < r.pasos.length; i++) if (!apProg[apClave(r, r.pasos[i])]) { primero = i; break; }
+  cont.querySelectorAll('details.ap-paso')[primero].open = true;
+}
+function apRefrescar() {
+  var r = apRuta; if (!r) return; var n = apHechos(r);
+  var b = $('#apBarra'); if (b) b.style.width = Math.round(100 * n / r.pasos.length) + '%';
+  var tx = $('#apTxt'); if (tx) tx.textContent = n + ' de ' + r.pasos.length + ' pasos completados' + (n === r.pasos.length ? ' ✓' : '');
+  document.querySelectorAll('details.ap-paso').forEach(function (d) { d.classList.toggle('hecho', !!apProg[apClave(r, r.pasos[+d.dataset.i])]); });
+}
+function apPaso(r, i, cuerpo) {
+  var p = r.pasos[i], clave = apClave(r, p), h = '';
+  h += p.idea.map(function (t) { return '<p>' + md(t) + '</p>'; }).join('');
+  if ((p.prueba || []).length) h += '<h4>Pruébalo tú</h4><ol>' + p.prueba.map(function (t) { return '<li>' + md(t) + '</li>'; }).join('') + '</ol>';
+  if (p.demo) h += '<div class="dm ap-demo"></div>';
+  if ((p.claves || []).length) h += '<h4>Palabras clave</h4><dl class="ap-claves">' + p.claves.map(function (c) { return '<dt>' + esc(c[0]) + '</dt><dd>' + md(c[1]) + '</dd>'; }).join('') + '</dl>';
+  var q = p.pregunta;
+  h += '<h4>Comprueba lo aprendido</h4><p>' + md(q.texto) + '</p><div class="ap-ops">' + q.opciones.map(function (o, k) { return '<button type="button" class="ap-op" data-k="' + k + '">' + md(o) + '</button>'; }).join('') + '</div><div class="ap-fb" role="status"></div>';
+  var fns = (p.funciones || []).filter(function (f) { return porNombre[f]; });
+  if (fns.length) h += '<h4>Y en Python</h4><div class="ap-pre">' + esc(fns.map(function (f) { return porNombre[f].importar; }).filter(Boolean).join('\n')) + '</div><div class="ap-enl">' +
+    fns.map(function (f) { return '<button type="button" class="btn" data-ir="' + esc(f) + '">Ver ' + esc(f) + ' en el mapa</button>'; }).join('') + '<button type="button" class="btn" data-a="copiar">Copiar imports</button></div>';
+  h += '<div class="ap-nav"><button type="button" class="btn" data-a="hecho"></button>' + (i + 1 < r.pasos.length ? '<button type="button" class="btn" data-a="sig">Siguiente paso →</button>' : '') + '</div>';
+  cuerpo.innerHTML = h;
+  var caja = cuerpo.querySelector('.ap-demo');
+  if (caja) { try { DEMOS[p.demo](caja, {concepto: p.demo_concepto}); } catch (e) { caja.textContent = 'La demo falló: ' + e.message; } }
+  function marca() { cuerpo.querySelector('[data-a="hecho"]').textContent = apProg[clave] ? '✓ Hecho (quitar marca)' : 'Marcar como hecho'; apRefrescar(); }
+  marca();
+  var fb = cuerpo.querySelector('.ap-fb');
+  cuerpo.onclick = function (ev) {
+    var op = ev.target.closest('.ap-op');
+    if (op && !op.disabled) {
+      if (+op.dataset.k === q.correcta) {
+        op.classList.add('ok'); fb.className = 'ap-fb ok'; fb.textContent = '✓ Correcto. ' + q.explicacion;
+        cuerpo.querySelectorAll('.ap-op').forEach(function (o) { o.disabled = true; });
+        apProg[clave] = 1; apGuardar(); marca();
+      } else { op.classList.add('mal'); op.disabled = true; fb.className = 'ap-fb mal'; fb.textContent = 'Todavía no. ' + (q.pista || 'Vuelve a mirar la demo e inténtalo de nuevo.'); }
+      return;
+    }
+    var go = ev.target.closest('button[data-ir]'); if (go && porNombre[go.dataset.ir]) { apMostrar(false); seleccionar(porNombre[go.dataset.ir], true); return; }
+    var a = ev.target.closest('button[data-a]'); if (!a) return;
+    if (a.dataset.a === 'hecho') { if (apProg[clave]) delete apProg[clave]; else apProg[clave] = 1; apGuardar(); marca(); }
+    else if (a.dataset.a === 'copiar') copiar(fns.map(function (f) { return porNombre[f].importar; }).filter(Boolean).join('\n'), 'Imports copiados');
+    else if (a.dataset.a === 'sig') { var ds = document.querySelectorAll('details.ap-paso'); ds[i + 1].open = true; ds[i + 1].scrollIntoView({behavior: reducir ? 'auto' : 'smooth', block: 'start'}); }
+  };
+}
+$('#aprenderBtn').onclick = function () { apMostrar(!apAbierta()); };
+if (!RUTAS.length) $('#aprenderBtn').hidden = true;
 
 /* ---------- propiedades: barras 0-10, perfiles de proyecto, alternativas y comparador ---------- */
 var PROP = DATA.propiedades || {bloques: [], propiedades: [], perfiles: [], grupos: [], peso_por_defecto: 5};

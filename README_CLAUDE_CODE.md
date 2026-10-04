@@ -5,7 +5,7 @@ no se deben reintroducir, la tabla «qué usar») están en `CLAUDE.md`, que Cla
 en `INDEX.md`. Este fichero explica **cómo trabajar**: entorno, comandos, el procedimiento para añadir una función y las
 trampas que ya han aparecido.
 
-Estado actual: **v0.13.0**.
+Estado actual: **v0.14.0**.
 - 14 ramas, 343 funciones con ficha y 580 tests en verde.
 - 348 de los 374 conceptos del catálogo tienen código. Los 26 restantes son de ámbito normativo y no se programan.
 

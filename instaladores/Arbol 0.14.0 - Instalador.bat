@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 0.13.0 - Instalador
+title Arbol de la estadistica 0.14.0 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
 set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=0.13.0"
+set "ARBOL_VERSION=0.14.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -483,7 +483,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-0.13.0
+0.14.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -821,6 +821,7 @@ DOCS = {
 }
 CATALOGO = RAIZ / "conceptos" / "catalogo.json"
 PROPIEDADES = CODIGO / "propiedades"
+RUTAS = CODIGO / "aprender" / "rutas.json"
 FICHAS_MIAS = RAIZ / "conceptos" / "fichas_mias.json"
 EJEMPLOS = None   # se carga en construir()
 AVISO_RE = re.compile(r"OJO|ATENCI[ÓO]N|CORRECCI[ÓO]N|IMPORTANTE|Gauss", re.I)
@@ -1011,6 +1012,27 @@ def cargar_propiedades(nombres_fn: set[str]) -> tuple[dict, dict]:
     return meta, fichas
 
 
+def cargar_rutas(funciones: set[str], conceptos: set[str], demos: set[str]) -> list[dict]:
+    """Rutas de la pestaña «Aprender» (py/aprender/rutas.json). Los enlaces rotos se quitan y se avisan; una pregunta mal formada es un error."""
+    if not RUTAS.exists():
+        return []
+    rutas = json.loads(RUTAS.read_text(encoding="utf-8"))["rutas"]
+    for r in rutas:
+        for p in r["pasos"]:
+            q = p["pregunta"]
+            if not 0 <= q["correcta"] < len(q["opciones"]):
+                raise ValueError(f"Ruta {r['id']}, paso {p['id']}: «correcta» fuera de rango")
+            if p.get("demo") and p["demo"] not in demos:
+                print(f"AVISO: el paso «{p['id']}» usa una demo que no existe: {p['demo']}")
+                p.pop("demo")
+            for campo, validos in (("funciones", funciones), ("conceptos", conceptos)):
+                malos = [x for x in p.get(campo, []) if x not in validos]
+                if malos:
+                    print(f"AVISO: el paso «{p['id']}» enlaza {campo} que no existen: {malos}")
+                    p[campo] = [x for x in p.get(campo, []) if x in validos]
+    return rutas
+
+
 def construir() -> dict:
     global EJEMPLOS
     EJEMPLOS = _ejemplos()
@@ -1063,8 +1085,10 @@ def construir() -> dict:
                               {"id": "ejemplos", "nombre": "ejemplos/", "desc": "Scripts de ejemplo", "archivo": "ejemplos", "items": ejemplos}]})
 
     n_tests = sum(len(re.findall(r"^def test_", p.read_text(encoding="utf-8"), re.M)) for p in (CODIGO / "tests").glob("test_*.py"))
+    ids_conceptos = {k["id"] for k in json.loads(CATALOGO.read_text(encoding="utf-8"))["conceptos"]}
+    ids_demos = {d["id"] for _, _, ds in DEMOS for d in ds}
     return {"raiz": RAIZ_POR_DEFECTO, "generado": dt.date.today().isoformat(), "pruebas": n_tests, "ramas": ramas,
-            "propiedades": meta_prop}
+            "propiedades": meta_prop, "rutas": cargar_rutas(nombres_fn, ids_conceptos, ids_demos)}
 
 
 def ensamblar(datos: dict) -> str:
@@ -2438,7 +2462,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "0.13.0"
+version = "0.14.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -2486,6 +2510,347 @@ patsy
 matplotlib>=3.7
 pytest
 :::END
+:::BEGIN py/aprender/rutas.json|text
+{
+ "rutas": [
+  {
+   "id": "fundamentos",
+   "titulo": "Fundamentos: del azar a la inferencia",
+   "para": "Desde cero. No hace falta saber nada de estadística ni de programación.",
+   "nivel": "Principiante",
+   "duracion": "unas 2 horas",
+   "desc": "Qué es una variable aleatoria, las distribuciones más importantes, por qué los promedios se estabilizan, y cómo se pasa de unos pocos datos a una conclusión con intervalos de confianza y contrastes de hipótesis.",
+   "pasos": [
+    {
+     "id": "datos-azar",
+     "titulo": "Datos, azar y variables aleatorias",
+     "idea": [
+      "Un **dato** es una medición: la altura de una persona, el número de siniestros de un mes. Si repetimos el experimento, los datos cambian: hay **azar**.",
+      "Una **variable aleatoria** es el valor que todavía no ha salido: describe lo que podría pasar y con qué probabilidad. Su **distribución** es ese reparto de probabilidades.",
+      "Abajo hay una distribución uniforme: todos los valores entre 0 y 1 son igual de probables. Vamos a sacar valores de uno en uno y a ver qué forma toma el conjunto."
+     ],
+     "prueba": [
+      "Pulsa «+1» varias veces: cada barra nueva es una observación. Con tan pocos datos aún no se ve ninguna forma.",
+      "Pulsa «+100» y luego «+1000»: el histograma empieza a parecerse a la línea naranja (la distribución teórica).",
+      "Cambia a otra distribución con el desplegable y repite: cada una tiene su forma."
+     ],
+     "demo": "demo_dist_animada",
+     "demo_concepto": "c_distribucion_uniforme",
+     "claves": [
+      ["variable aleatoria", "Cantidad cuyo valor depende del azar."],
+      ["distribución", "Reparto de la probabilidad entre los valores posibles."],
+      ["muestra", "Conjunto de observaciones que hemos obtenido."],
+      ["histograma", "Gráfico de barras que cuenta cuántas observaciones caen en cada tramo."]
+     ],
+     "conceptos": ["c_variables_aleatorias_y_distribuciones", "c_distribucion_uniforme"],
+     "funciones": ["generar_por_inversion"],
+     "pregunta": {
+      "texto": "Con 5 observaciones el histograma es irregular y con 5000 se parece a la curva teórica. ¿Por qué?",
+      "opciones": ["Porque el generador mejora con el tiempo", "Porque con pocas observaciones el azar domina y con muchas las fluctuaciones se compensan", "Porque el programa suaviza la curva"],
+      "correcta": 1,
+      "pista": "Piensa en cuánto pesa cada observación cuando solo tienes 5 y cuánto cuando tienes 5000.",
+      "explicacion": "Con pocas observaciones cada una pesa mucho y el azar produce formas irregulares; con muchas, las fluctuaciones se compensan y aparece la forma real de la distribución."
+     }
+    },
+    {
+     "id": "media-lgn",
+     "titulo": "La media y la ley de los grandes números",
+     "idea": [
+      "La **media** es el promedio de las observaciones. Si la distribución tiene una media teórica, la media de la muestra intenta acercarse a ella.",
+      "La **ley de los grandes números** dice que, al aumentar n (el número de datos), la media muestral se acerca a la teórica. El gráfico inferior (media muestral frente a n) lo enseña: al principio da saltos y después se estabiliza."
+     ],
+     "prueba": [
+      "Pulsa «+10» varias veces y mira la línea verde del gráfico de abajo: da saltos grandes.",
+      "Pulsa «▶ Reproducir» hasta llegar a 5000: la línea se pega a la media teórica.",
+      "Elige la distribución «t de Student» y baja los grados de libertad a 1: ¡la media no se estabiliza nunca! Hay distribuciones sin media."
+     ],
+     "demo": "demo_dist_animada",
+     "demo_concepto": "c_ley_de_los_grandes_numeros",
+     "claves": [
+      ["media muestral", "Promedio de las n observaciones."],
+      ["error típico", "Cuánto varía la media muestral de una muestra a otra: σ/√n."]
+     ],
+     "conceptos": ["c_ley_de_los_grandes_numeros", "c_distribucion_muestral_y_error_estandar"],
+     "funciones": ["convergencia_media_muestral"],
+     "pregunta": {
+      "texto": "Para reducir a la mitad el error típico de la media, hay que…",
+      "opciones": ["duplicar n", "multiplicar n por 4", "añadir 10 observaciones"],
+      "correcta": 1,
+      "pista": "El error típico es σ dividido entre la raíz cuadrada de n.",
+      "explicacion": "El error típico es σ/√n: para dividirlo entre 2 hace falta multiplicar √n por 2, es decir, multiplicar n por 4."
+     }
+    },
+    {
+     "id": "normal",
+     "titulo": "La campana: la distribución normal",
+     "idea": [
+      "La **normal** (o campana de Gauss) aparece cuando un valor es la suma de muchos efectos pequeños: alturas, errores de medida, promedios…",
+      "Se describe con dos números: la media μ (dónde está el centro) y la desviación típica σ (cuánto se abre la campana)."
+     ],
+     "prueba": [
+      "Con la normal elegida, mueve σ: la campana se hace más alta y estrecha o más baja y ancha.",
+      "Mueve μ: la campana se desplaza sin cambiar de forma.",
+      "Añade 1000 datos con distintos σ: el histograma siempre sigue la curva."
+     ],
+     "demo": "demo_dist_animada",
+     "demo_concepto": "c_distribucion_normal",
+     "claves": [
+      ["μ (media)", "Centro de la distribución."],
+      ["σ (desviación típica)", "Anchura: cuánto se alejan los valores de la media, en promedio."],
+      ["regla 68-95-99,7", "En una normal, ≈68 % de los valores queda a menos de 1σ de la media, ≈95 % a menos de 2σ y ≈99,7 % a menos de 3σ."]
+     ],
+     "conceptos": ["c_distribucion_normal"],
+     "funciones": ["grafico_qq", "contraste_normalidad"],
+     "pregunta": {
+      "texto": "Una variable normal tiene μ = 100 y σ = 15. ¿Qué parte de los valores esperas entre 70 y 130 (μ ± 2σ)?",
+      "opciones": ["Alrededor del 68 %", "Alrededor del 95 %", "Alrededor del 50 %"],
+      "correcta": 1,
+      "pista": "70 y 130 están a 2σ de la media.",
+      "explicacion": "μ ± 2σ contiene en torno al 95 % de una normal (regla 68-95-99,7)."
+     }
+    },
+    {
+     "id": "binomial",
+     "titulo": "Éxitos y fracasos: Bernoulli y binomial",
+     "idea": [
+      "Muchas preguntas tienen dos respuestas: ¿renueva el cliente?, ¿hay siniestro? Un único ensayo así es una **Bernoulli** con probabilidad de éxito p.",
+      "Si repites n ensayos independientes y cuentas los éxitos, obtienes una **binomial**. Su media es n·p."
+     ],
+     "prueba": [
+      "Elige Bernoulli y añade datos: solo salen ceros y unos, y la barra del 1 se acerca a p.",
+      "Pasa a binomial: con n = 10 y p = 0,3 el valor más típico es 3.",
+      "Sube n: la forma se parece cada vez más a una campana."
+     ],
+     "demo": "demo_dist_animada",
+     "demo_concepto": "c_distribucion_binomial",
+     "claves": [
+      ["Bernoulli", "Un ensayo con dos resultados (1 éxito, 0 fracaso)."],
+      ["binomial", "Número de éxitos en n ensayos independientes con la misma probabilidad p."]
+     ],
+     "conceptos": ["c_distribucion_de_bernoulli", "c_distribucion_binomial"],
+     "funciones": ["intervalo_proporcion"],
+     "pregunta": {
+      "texto": "Si 10 clientes renuevan cada uno con probabilidad 0,3, ¿cuántos esperas que renueven de media?",
+      "opciones": ["0,3", "3", "10"],
+      "correcta": 1,
+      "pista": "La media de una binomial es n·p.",
+      "explicacion": "n·p = 10 · 0,3 = 3 renovaciones de media."
+     }
+    },
+    {
+     "id": "poisson",
+     "titulo": "Contar sucesos raros: Poisson",
+     "idea": [
+      "Cuando contamos cuántas veces ocurre algo en un tiempo fijo (siniestros al mes, llamadas por hora) y los sucesos son independientes y poco frecuentes, el recuento sigue una **Poisson** con un único parámetro λ: la media.",
+      "Una propiedad clave: en una Poisson la **media y la varianza son iguales**. Si en tus datos la varianza es mayor, hay *sobredispersión* y hace falta otra distribución (la binomial negativa)."
+     ],
+     "prueba": [
+      "Con λ = 3, añade 1000 datos y mira la desviación típica muestral: se acerca a √3 ≈ 1,73.",
+      "Sube λ a 20: la forma se vuelve simétrica, casi una campana."
+     ],
+     "demo": "demo_dist_animada",
+     "demo_concepto": "c_distribucion_de_poisson",
+     "claves": [
+      ["λ", "Número medio de sucesos en el periodo."],
+      ["sobredispersión", "Varianza mayor que la media: señal de que Poisson no basta."]
+     ],
+     "conceptos": ["c_distribucion_de_poisson", "c_sobredispersion"],
+     "funciones": ["ajustar_distribucion_discreta", "indice_dispersion"],
+     "pregunta": {
+      "texto": "En una Poisson con λ = 4, ¿cuánto vale la varianza?",
+      "opciones": ["2", "4", "16"],
+      "correcta": 1,
+      "pista": "En una Poisson media y varianza coinciden.",
+      "explicacion": "En una Poisson la varianza es igual a la media: 4."
+     }
+    },
+    {
+     "id": "galeria",
+     "titulo": "Cómo elegir la familia: la galería",
+     "idea": [
+      "Antes de modelar hay que decidir qué tipo de distribución describe los datos. La galería reúne las más usadas con su forma, media, varianza y un ejemplo típico de uso."
+     ],
+     "prueba": [
+      "Fíjate en cuáles son simétricas y cuáles tienen una cola larga a la derecha.",
+      "Busca la que usarías para: el número de siniestros de un mes; el importe de un siniestro; una probabilidad desconocida (entre 0 y 1)."
+     ],
+     "demo": "demo_dist_galeria",
+     "claves": [
+      ["cola pesada", "Cola larga: valores extremos más probables de lo que predice una normal."],
+      ["asimetría", "Falta de simetría; positiva si la cola larga está a la derecha."]
+     ],
+     "conceptos": ["c_variables_aleatorias_y_distribuciones", "c_distribucion_gamma", "c_distribucion_lognormal"],
+     "funciones": ["ajustar_distribuciones"],
+     "pregunta": {
+      "texto": "¿Qué familia usarías para el importe de un siniestro (siempre positivo y con cola larga a la derecha)?",
+      "opciones": ["Normal", "Gamma o lognormal", "Uniforme"],
+      "correcta": 1,
+      "pista": "Necesitas una distribución que solo tome valores positivos y sea asimétrica.",
+      "explicacion": "La gamma y la lognormal solo toman valores positivos y tienen cola derecha larga, justo lo que se ve en importes de siniestros."
+     }
+    },
+    {
+     "id": "tcl",
+     "titulo": "El teorema central del límite",
+     "idea": [
+      "Aunque los datos no sean normales, **la media de muchos datos sí se parece a una normal**. Es el teorema central del límite y explica por qué tantos métodos usan la normal.",
+      "Cuántos datos hacen falta depende de lo asimétrica que sea la población."
+     ],
+     "prueba": [
+      "Elige una población asimétrica y pon n pequeño: la distribución de las medias es sesgada.",
+      "Sube n: se vuelve cada vez más simétrica y acampanada.",
+      "Pulsa «Remuestrear» varias veces: la forma es estable, aunque los valores cambian."
+     ],
+     "demo": "demo_tcl",
+     "claves": [
+      ["distribución muestral", "Cómo se reparte un estadístico (por ejemplo la media) entre muestras distintas."],
+      ["TCL", "Teorema central del límite: las medias de muestras grandes son aproximadamente normales."]
+     ],
+     "conceptos": ["c_teorema_central_del_limite"],
+     "funciones": ["distribucion_muestral_simulada", "bootstrap_ic"],
+     "pregunta": {
+      "texto": "El teorema central del límite dice que, al aumentar n, la distribución de la media muestral…",
+      "opciones": ["se parece a una normal aunque los datos no lo sean", "copia la distribución de los datos", "se hace uniforme"],
+      "correcta": 0,
+      "pista": "Es el motivo por el que se usa la normal para medias aunque los datos sean asimétricos.",
+      "explicacion": "La media de muchos datos tiende a una normal aunque la población no lo sea; cuanto más asimétrica sea, más datos hacen falta."
+     }
+    },
+    {
+     "id": "intervalos",
+     "titulo": "Intervalos de confianza",
+     "idea": [
+      "Una media muestral es una estimación: otra muestra daría otro valor. Un **intervalo de confianza** del 95 % es un rango construido para que, si repites el proceso muchas veces, el 95 % de los intervalos contenga el valor verdadero.",
+      "Ojo: no significa «hay un 95 % de probabilidad de que el valor verdadero esté en este intervalo». El valor verdadero es fijo; lo que cambia entre muestras es el intervalo."
+     ],
+     "prueba": [
+      "Pulsa «Otras 50 muestras» varias veces y cuenta los intervalos naranjas (los que no contienen la media verdadera): con un 95 % esperas unos 2 o 3 de cada 50.",
+      "Sube el nivel de confianza al 99 %: hay menos fallos, pero los intervalos son más anchos.",
+      "Sube «n de cada muestra»: los intervalos se estrechan, y la proporción de fallos sigue siendo parecida."
+     ],
+     "demo": "demo_intervalos",
+     "claves": [
+      ["intervalo de confianza", "Rango de valores plausibles para un parámetro, con un nivel de confianza asociado al procedimiento."],
+      ["nivel de confianza", "Porcentaje de intervalos que cubrirían el valor verdadero si se repitiera el procedimiento."]
+     ],
+     "conceptos": ["c_intervalos_de_confianza"],
+     "funciones": ["intervalo_proporcion", "bootstrap_ic"],
+     "pregunta": {
+      "texto": "Al aumentar el tamaño de la muestra n, un intervalo de confianza al 95 %…",
+      "opciones": ["se hace más estrecho y sigue cubriendo el valor verdadero el 95 % de las veces", "cubre más veces el valor verdadero", "se hace más ancho"],
+      "correcta": 0,
+      "pista": "El nivel de confianza lo fijas tú; lo que cambia con n es la precisión.",
+      "explicacion": "Más datos dan más precisión (intervalos más estrechos), pero el nivel de confianza sigue siendo el que elegiste, el 95 %."
+     }
+    },
+    {
+     "id": "contraste",
+     "titulo": "Contrastes de hipótesis y p-valor",
+     "idea": [
+      "Un **contraste de hipótesis** responde a: «¿son los datos compatibles con que no haya diferencia (la hipótesis nula, H0)?». Calculamos un estadístico (aquí el t) y su **p-valor**: la probabilidad de ver algo tan raro como lo observado si H0 fuera cierta.",
+      "Si el p-valor es menor que α (normalmente 0,05) rechazamos H0. Pero un p-valor pequeño no dice que el efecto sea grande, y uno grande no demuestra que no haya efecto."
+     ],
+     "prueba": [
+      "Pon la diferencia real en 0 y pulsa «Repetir 1000 veces»: aproximadamente un 5 % de las repeticiones sale «significativo» sin que haya nada (error de tipo I).",
+      "Sube la diferencia a 0,5: el porcentaje de rechazos es ahora la potencia.",
+      "Con n grande, incluso un efecto pequeño se detecta con frecuencia; por eso conviene mirar también el tamaño del efecto y no solo el p-valor."
+     ],
+     "demo": "demo_contraste_t",
+     "claves": [
+      ["H0", "Hipótesis nula: «no hay diferencia / no hay efecto»."],
+      ["p-valor", "Probabilidad de observar algo tan extremo como lo visto si H0 fuera cierta."],
+      ["α", "Umbral de decisión (p. ej. 0,05); es la tasa de falsos positivos que aceptamos."]
+     ],
+     "conceptos": ["c_contraste_de_hipotesis", "c_significacion_estadistica_y_p_valor", "c_test_t_y_test_t_de_welch"],
+     "funciones": ["elegir_contraste"],
+     "pregunta": {
+      "texto": "Si H0 es cierta y α = 0,05, ¿qué porcentaje de contrastes esperas que salgan «significativos»?",
+      "opciones": ["0 %", "5 %", "95 %"],
+      "correcta": 1,
+      "pista": "α es justamente la probabilidad de rechazar H0 cuando es cierta.",
+      "explicacion": "Con H0 cierta se rechaza, por azar, una proporción α de las veces: un 5 %."
+     }
+    },
+    {
+     "id": "potencia",
+     "titulo": "Potencia y tamaño muestral",
+     "idea": [
+      "La **potencia** es la probabilidad de detectar un efecto que sí existe. Depende del tamaño del efecto, del tamaño de muestra n y de α.",
+      "Antes de recoger datos conviene calcular qué n necesitas para tener, por ejemplo, un 80 % de potencia: con muy pocos datos un estudio puede no detectar nada aunque el efecto sea real."
+     ],
+     "prueba": [
+      "Sube n por grupo: las dos campanas se separan y la potencia crece.",
+      "Pon un efecto pequeño (0,2): se necesitan unas 400 observaciones por grupo para llegar al 80 %.",
+      "Sube α: la potencia crece, pero también los falsos positivos."
+     ],
+     "demo": "demo_potencia",
+     "claves": [
+      ["potencia", "Probabilidad de rechazar H0 cuando H1 es cierta (1 − β)."],
+      ["tamaño del efecto", "Magnitud de la diferencia, medida en desviaciones típicas (d de Cohen)."]
+     ],
+     "conceptos": ["c_error_tipo_i_y_potencia", "c_tamano_muestral"],
+     "funciones": ["tamano_muestral_medias", "potencia_contraste_medias"],
+     "pregunta": {
+      "texto": "Quieres detectar un efecto pequeño. ¿Qué haces para aumentar la potencia?",
+      "opciones": ["Aumentar n", "Reducir n", "Pedir un p-valor menor"],
+      "correcta": 0,
+      "pista": "Más datos separan más las dos distribuciones.",
+      "explicacion": "Aumentar n reduce el error típico y separa las distribuciones de H0 y H1, así que sube la potencia."
+     }
+    },
+    {
+     "id": "multiples",
+     "titulo": "Muchos contrastes a la vez",
+     "idea": [
+      "Si haces 100 contrastes con α = 0,05, esperas unos 5 «descubrimientos» falsos aunque no haya nada. Con 1000 contrastes, 50.",
+      "Hay que corregir. **Bonferroni** es muy estricto (casi no deja falsos positivos pero pierde efectos reales). **Benjamini-Hochberg** controla la proporción de falsos descubrimientos (FDR) y encuentra más efectos reales."
+     ],
+     "prueba": [
+      "Con 0 % de efectos reales y 100 contrastes, pulsa «Nuevo experimento» varias veces: ¿cuántos salen significativos sin corregir?",
+      "Con 10 % de efectos reales, compara los métodos: falsos positivos frente a efectos reales encontrados."
+     ],
+     "demo": "demo_fdr",
+     "claves": [
+      ["FDR", "Tasa de falsos descubrimientos: proporción esperada de falsos positivos entre los resultados significativos."],
+      ["Bonferroni", "Corrección estricta: divide α entre el número de contrastes."]
+     ],
+     "conceptos": ["c_tasa_de_falsos_descubrimientos_fdr", "c_significacion_estadistica_y_p_valor"],
+     "funciones": ["ajustar_p_valores"],
+     "pregunta": {
+      "texto": "Haces 200 contrastes con α = 0,05 y ningún efecto real. ¿Cuántos falsos positivos esperas sin corregir?",
+      "opciones": ["Ninguno", "Unos 10", "Unos 100"],
+      "correcta": 1,
+      "pista": "Multiplica el número de contrastes por α.",
+      "explicacion": "200 · 0,05 = 10 falsos positivos esperados."
+     }
+    },
+    {
+     "id": "cierre",
+     "titulo": "Qué sigue",
+     "idea": [
+      "Has recorrido el camino completo: variables aleatorias → distribuciones → ley de los grandes números → teorema central del límite → intervalos → contrastes → potencia → contrastes múltiples.",
+      "Para aplicarlo a datos reales, la función `elegir_contraste` compara una variable entre grupos eligiendo el test correcto y avisando de los supuestos. Cada función del árbol tiene su ejemplo ejecutable en el mapa."
+     ],
+     "prueba": [
+      "Abre `elegir_contraste` en el mapa (botón «Ver en el mapa» de abajo) y ejecuta su ejemplo con datos simulados.",
+      "Vuelve a esta guía y repasa los pasos que menos claros te hayan quedado."
+     ],
+     "claves": [],
+     "conceptos": ["c_contraste_de_hipotesis"],
+     "funciones": ["elegir_contraste", "intervalo_proporcion", "tamano_muestral_medias"],
+     "pregunta": {
+      "texto": "¿Qué dos números describen una distribución normal?",
+      "opciones": ["Media y desviación típica", "Mínimo y máximo", "Moda y mediana"],
+      "correcta": 0,
+      "pista": "Uno marca el centro y el otro la anchura.",
+      "explicacion": "La normal queda completamente definida por su media μ y su desviación típica σ."
+     }
+    }
+   ]
+  }
+ ]
+}
+:::END
 :::BEGIN py/arbol_estadistica/__init__.py|text
 """Arbol de la estadística: funciones estadísticas reutilizables (origen en trabajos de consultoría; máster).
 
@@ -2498,7 +2863,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "0.13.0"
+__version__ = "0.14.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -28906,6 +29271,44 @@ def test_demografia():
     ult = l["poblaciones"].iloc[-1].to_numpy()
     assert np.allclose(ult / ult.sum(), l["estructura_estable"], atol=1e-3)
 :::END
+:::BEGIN py/tests/test_aprender.py|text
+"""Guía de aprendizaje (py/aprender/rutas.json): estructura y enlaces válidos. El visor la muestra en la pestaña «Aprender»."""
+import importlib
+import json
+import sys
+from pathlib import Path
+
+CODIGO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(CODIGO))
+construir_visor = importlib.import_module("construir_visor")
+RUTAS = json.loads((CODIGO / "aprender" / "rutas.json").read_text(encoding="utf-8"))["rutas"]
+PASO = {"id", "titulo", "idea", "prueba", "pregunta"}
+PREGUNTA = {"texto", "opciones", "correcta", "pista", "explicacion"}
+
+
+def test_estructura_de_las_rutas():
+    assert RUTAS and len({r["id"] for r in RUTAS}) == len(RUTAS)
+    for r in RUTAS:
+        assert {"id", "titulo", "para", "nivel", "duracion", "desc", "pasos"} <= set(r)
+        assert len({p["id"] for p in r["pasos"]}) == len(r["pasos"]), f"pasos repetidos en {r['id']}"
+        for p in r["pasos"]:
+            assert PASO <= set(p), f"{r['id']}/{p.get('id')}: faltan {PASO - set(p)}"
+            q = p["pregunta"]
+            assert PREGUNTA <= set(q) and len(q["opciones"]) >= 2 and 0 <= q["correcta"] < len(q["opciones"])
+
+
+def test_los_enlaces_de_las_rutas_existen():
+    datos = construir_visor.construir()          # imprime AVISO y quita lo que no exista; aquí exigimos que no se quite nada
+    nombres_fn = {i["nombre"] for r in datos["ramas"] for m in r["modulos"] for i in m["items"] if i["tipo"] == "funcion"}
+    conceptos = {k["id"] for k in json.loads(construir_visor.CATALOGO.read_text(encoding="utf-8"))["conceptos"]}
+    demos = {d["id"] for _, _, ds in construir_visor.DEMOS for d in ds}
+    for r in RUTAS:
+        for p in r["pasos"]:
+            assert not p.get("demo") or p["demo"] in demos, f"{p['id']}: demo inexistente"
+            assert set(p.get("funciones", [])) <= nombres_fn, f"{p['id']}: funciones inexistentes"
+            assert set(p.get("conceptos", [])) <= conceptos, f"{p['id']}: conceptos inexistentes"
+    assert [len(r["pasos"]) for r in datos["rutas"]] == [len(r["pasos"]) for r in RUTAS]
+:::END
 :::BEGIN py/tests/test_clustering_contrastes.py|text
 import numpy as np
 import pandas as pd
@@ -33573,6 +33976,37 @@ details.pbloque[open]>summary .pb-t::before{content:"▾ "}
 .pp-nota{font-size:11.5px;color:var(--muted);margin:4px 0 0}
 @media (max-width:520px){ .pp-pc{grid-template-columns:1fr} .pb{grid-template-columns:minmax(90px,1fr) minmax(50px,1fr) 30px} .pb-o{display:none} }
 
+/* ---------- guía de aprendizaje («Aprender») ---------- */
+.app.modo-aprender .cuerpo{display:none}
+.aprender{min-height:0;overflow:auto;padding:16px 16px 48px;background:var(--bg)}
+.aprender[hidden]{display:none}
+.ap-cont{max-width:860px;margin:0 auto;display:grid;gap:14px}
+.ap-cont h2{margin:0;font:700 22px var(--sans)} .ap-cont h4{margin:12px 0 4px;font:700 12px var(--sans);text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.ap-sub{margin:0;color:var(--muted);font-size:14px}
+.ap-rutas{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.ap-ruta{display:grid;gap:6px;text-align:left;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);cursor:pointer;font:inherit}
+.ap-ruta:hover{border-color:var(--accent)} .ap-ruta b{font-size:15px} .ap-ruta span{font-size:12.5px;color:var(--muted)}
+.ap-barra{height:8px;border-radius:5px;background:var(--surface-2);overflow:hidden} .ap-barra i{display:block;height:100%;background:var(--accent);border-radius:5px;transition:width .3s}
+.ap-pasos{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+details.ap-paso{border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+details.ap-paso>summary{display:flex;gap:10px;align-items:center;padding:10px 14px;cursor:pointer;font-weight:650;list-style:none}
+details.ap-paso>summary::-webkit-details-marker{display:none}
+details.ap-paso[open]>summary{border-bottom:1px solid var(--line)}
+.ap-num{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--surface-2);font-size:12.5px;font-weight:700}
+details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(--on-leaf)}
+.ap-cuerpo{padding:6px 14px 14px;display:grid;gap:4px;font-size:14px;line-height:1.55}
+.ap-cuerpo p{margin:6px 0} .ap-cuerpo ol{margin:4px 0;padding-left:22px} .ap-cuerpo li{margin:3px 0}
+.ap-cuerpo code,.ap-cont code{font:12.5px var(--mono);background:var(--surface-2);padding:1px 5px;border-radius:4px}
+.ap-claves{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;font-size:13px;margin:0} .ap-claves dt{font-weight:700} .ap-claves dd{margin:0}
+.ap-ops{display:grid;gap:6px;margin:6px 0}
+.ap-op{text-align:left;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);cursor:pointer;font:inherit}
+.ap-op:hover:not([disabled]){border-color:var(--accent)}
+.ap-op.ok{border-color:var(--c-clustering,#2a9d6f);background:var(--surface-2);font-weight:650} .ap-op.mal{border-color:var(--danger);background:var(--danger-bg)}
+.ap-fb{font-size:13px;min-height:1.2em} .ap-fb.ok{color:var(--c-clustering,#2a9d6f)} .ap-fb.mal{color:var(--danger)}
+.ap-pre{margin:4px 0;padding:8px 10px;border-radius:8px;background:var(--surface-2);font:12.5px var(--mono);white-space:pre-wrap;overflow-wrap:anywhere}
+.ap-nav{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.ap-enl{display:flex;flex-wrap:wrap;gap:6px}
+
 /* panel plegado: queda una pestaña fina para volver a abrirlo */
 .cuerpo.sin-detalle .divisor::after{height:64px;margin-top:-32px;width:8px;left:3px;background:var(--accent)}
 :fullscreen .app,:-webkit-full-screen .app{min-height:0}
@@ -33599,7 +34033,8 @@ details.pbloque[open]>summary .pb-t::before{content:"▾ "}
     </div>
     <nav class="ramas" id="chips" aria-label="Ramas"></nav>
     <div class="tools">
-      <details class="filtros"><summary class="btn ic" title="Filtros">Filtros</summary>
+      <button class="btn" id="aprenderBtn" type="button" title="Guía de aprendizaje paso a paso" aria-pressed="false">🎓 Aprender</button>
+            <details class="filtros"><summary class="btn ic" title="Filtros">Filtros</summary>
         <div class="pop">
           <label class="chk"><input type="checkbox" id="soloSas"> Solo con equivalente SAS</label>
           <label class="chk" title="Conceptos de método (estadística, actuarial, finanzas) que todavía no tienen una función en el árbol. Los normativos no cuentan: no se programan"><input type="checkbox" id="soloHuecos"> Solo huecos (sin código)</label>
@@ -33625,6 +34060,7 @@ details.pbloque[open]>summary .pb-t::before{content:"▾ "}
          title="Arrastra para cambiar el tamaño del mapa · doble clic: ocultar/mostrar el panel · flechas: ajustar" aria-label="Cambiar el ancho del panel de detalle"></div>
     <aside class="detalle" id="detalle" aria-live="polite"></aside>
   </main>
+  <section class="aprender" id="aprender" hidden aria-label="Guía de aprendizaje"></section>
 </div>
 <div class="toast" id="toast" role="status"></div>
 <script type="application/json" id="datos">__DATOS__</script>
@@ -33887,6 +34323,7 @@ function detalleVacio() {
     '<li>Cada <b>punto</b> es una función (más grande = más código) o un <b>concepto</b> del máster, de Very Normal o de los manuales. Los punteados aún no tienen código: son huecos por rellenar. Los arcos unen cada concepto con las funciones que lo implementan.</li>' +
     '<li>Cada función tiene una <b>ficha de propiedades</b> (barras de 0 a 10: insesgadez, consistencia, eficiencia, potencia… y escalabilidad, velocidad, memoria…). Elige arriba el <b>perfil de proyecto</b> (cartera grande, pocos datos, regulatorio…) y se reordenan las alternativas. Pulsa una rama o un módulo para ver su media.</li>' +
     '<li>En <b>Cómo funciona</b> hay demos interactivas (distribuciones básicas animadas y en galería, t-test, potencia, FDR, IC, TCL, regresión, logística, censura).</li>' +
+    '<li>El botón <b>🎓 Aprender</b> abre una guía paso a paso desde cero, con demos, preguntas y el código en Python.</li>' +
     '<li>Con <b>/</b> buscas por nombre, concepto o PROC de SAS.</li></ul>' +
     '<h3>Búsquedas rápidas</h3><div class="rapidas"></div></div>';
   ['odds ratio', 'VIF', 'chi cuadrado', 'potencia', 'Kaplan', 'gráfico ROC', 'FDR', 'PROC LOGISTIC', 'Very Normal', 'bootstrap', 'Solvencia', 'Markov'].forEach(function (q) {
@@ -34055,6 +34492,95 @@ function detalleDemo(n, d) {
   catch (e) { caja.textContent = 'La demo falló: ' + e.message; if (window.console) console.error(e); }
   d.onclick = function (ev) { var go = ev.target.closest('button[data-ir]'); if (go && porNombre[go.dataset.ir]) seleccionar(porNombre[go.dataset.ir], true); };
 }
+
+/* ---------- guía de aprendizaje: rutas con pasos, demo, pregunta y progreso (se guarda en el navegador) ---------- */
+var RUTAS = DATA.rutas || [], apProg = {}, apRuta = null;
+try { apProg = JSON.parse(localStorage.getItem('arbol-aprender') || '{}') || {}; } catch (e) { apProg = {}; }
+function apGuardar() { try { localStorage.setItem('arbol-aprender', JSON.stringify(apProg)); } catch (e) {} }
+function md(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`(.+?)`/g, '<code>$1</code>').replace(/\*(.+?)\*/g, '<i>$1</i>'); }
+function apClave(r, p) { return r.id + '/' + p.id; }
+function apHechos(r) { return r.pasos.filter(function (p) { return apProg[apClave(r, p)]; }).length; }
+function apAbierta() { return $('.app').classList.contains('modo-aprender'); }
+function apMostrar(on) {
+  $('.app').classList.toggle('modo-aprender', on); $('#aprender').hidden = !on; $('#aprenderBtn').setAttribute('aria-pressed', String(on));
+  if (on) { if (apRuta) apVistaRuta(apRuta); else apVistaRutas(); $('#aprender').scrollTop = 0; } else pintar();
+}
+function apVistaRutas() {
+  apRuta = null; var cont = $('#aprender');
+  var h = '<div class="ap-cont"><h2>Guía de aprendizaje</h2><p class="ap-sub">Rutas paso a paso con demos interactivas, preguntas y el código para hacerlo en Python. Tu progreso se guarda en este navegador.</p><div class="ap-rutas">';
+  RUTAS.forEach(function (r, i) {
+    var n = apHechos(r), tot = r.pasos.length;
+    h += '<button type="button" class="ap-ruta" data-ruta="' + i + '"><b>' + esc(r.titulo) + '</b><span>' + esc(r.nivel) + ' · ' + esc(r.duracion) + ' · ' + tot + ' pasos</span>' +
+      '<span>' + esc(r.desc) + '</span><span><i>' + esc(r.para) + '</i></span><div class="ap-barra"><i style="width:' + Math.round(100 * n / tot) + '%"></i></div>' +
+      '<span>' + (n === 0 ? 'Empezar' : n === tot ? '✓ Completada · repasar' : n + ' de ' + tot + ' · continuar') + '</span></button>';
+  });
+  cont.innerHTML = h + '</div></div>';
+  cont.onclick = function (ev) { var b = ev.target.closest('button[data-ruta]'); if (b) apVistaRuta(RUTAS[+b.dataset.ruta]); };
+}
+function apVistaRuta(r) {
+  apRuta = r; var cont = $('#aprender');
+  var h = '<div class="ap-cont"><div><button type="button" class="btn" data-a="atras">← Todas las rutas</button></div><h2>' + esc(r.titulo) + '</h2><p class="ap-sub">' + esc(r.para) + '</p>' +
+    '<div class="ap-barra"><i id="apBarra"></i></div><p class="ap-sub" id="apTxt"></p><ol class="ap-pasos">';
+  r.pasos.forEach(function (p, i) {
+    h += '<li><details class="ap-paso" data-i="' + i + '"><summary><span class="ap-num">' + (i + 1) + '</span>' + esc(p.titulo) + '</summary><div class="ap-cuerpo"></div></details></li>';
+  });
+  cont.innerHTML = h + '</ol></div>'; apRefrescar();
+  cont.onclick = function (ev) { if (ev.target.closest('button[data-a="atras"]')) apVistaRutas(); };
+  cont.querySelectorAll('details.ap-paso').forEach(function (d) {
+    d.addEventListener('toggle', function () {
+      var p = r.pasos[+d.dataset.i], cuerpo = d.querySelector('.ap-cuerpo');
+      if (d.open) {
+        cont.querySelectorAll('details.ap-paso[open]').forEach(function (o) { if (o !== d) o.open = false; });
+        apPaso(r, +d.dataset.i, cuerpo);
+      } else cuerpo.innerHTML = '';                      /* al cerrar se quita la demo: así dejan de correr sus temporizadores */
+    });
+  });
+  var primero = 0; for (var i = 0; i < r.pasos.length; i++) if (!apProg[apClave(r, r.pasos[i])]) { primero = i; break; }
+  cont.querySelectorAll('details.ap-paso')[primero].open = true;
+}
+function apRefrescar() {
+  var r = apRuta; if (!r) return; var n = apHechos(r);
+  var b = $('#apBarra'); if (b) b.style.width = Math.round(100 * n / r.pasos.length) + '%';
+  var tx = $('#apTxt'); if (tx) tx.textContent = n + ' de ' + r.pasos.length + ' pasos completados' + (n === r.pasos.length ? ' ✓' : '');
+  document.querySelectorAll('details.ap-paso').forEach(function (d) { d.classList.toggle('hecho', !!apProg[apClave(r, r.pasos[+d.dataset.i])]); });
+}
+function apPaso(r, i, cuerpo) {
+  var p = r.pasos[i], clave = apClave(r, p), h = '';
+  h += p.idea.map(function (t) { return '<p>' + md(t) + '</p>'; }).join('');
+  if ((p.prueba || []).length) h += '<h4>Pruébalo tú</h4><ol>' + p.prueba.map(function (t) { return '<li>' + md(t) + '</li>'; }).join('') + '</ol>';
+  if (p.demo) h += '<div class="dm ap-demo"></div>';
+  if ((p.claves || []).length) h += '<h4>Palabras clave</h4><dl class="ap-claves">' + p.claves.map(function (c) { return '<dt>' + esc(c[0]) + '</dt><dd>' + md(c[1]) + '</dd>'; }).join('') + '</dl>';
+  var q = p.pregunta;
+  h += '<h4>Comprueba lo aprendido</h4><p>' + md(q.texto) + '</p><div class="ap-ops">' + q.opciones.map(function (o, k) { return '<button type="button" class="ap-op" data-k="' + k + '">' + md(o) + '</button>'; }).join('') + '</div><div class="ap-fb" role="status"></div>';
+  var fns = (p.funciones || []).filter(function (f) { return porNombre[f]; });
+  if (fns.length) h += '<h4>Y en Python</h4><div class="ap-pre">' + esc(fns.map(function (f) { return porNombre[f].importar; }).filter(Boolean).join('\n')) + '</div><div class="ap-enl">' +
+    fns.map(function (f) { return '<button type="button" class="btn" data-ir="' + esc(f) + '">Ver ' + esc(f) + ' en el mapa</button>'; }).join('') + '<button type="button" class="btn" data-a="copiar">Copiar imports</button></div>';
+  h += '<div class="ap-nav"><button type="button" class="btn" data-a="hecho"></button>' + (i + 1 < r.pasos.length ? '<button type="button" class="btn" data-a="sig">Siguiente paso →</button>' : '') + '</div>';
+  cuerpo.innerHTML = h;
+  var caja = cuerpo.querySelector('.ap-demo');
+  if (caja) { try { DEMOS[p.demo](caja, {concepto: p.demo_concepto}); } catch (e) { caja.textContent = 'La demo falló: ' + e.message; } }
+  function marca() { cuerpo.querySelector('[data-a="hecho"]').textContent = apProg[clave] ? '✓ Hecho (quitar marca)' : 'Marcar como hecho'; apRefrescar(); }
+  marca();
+  var fb = cuerpo.querySelector('.ap-fb');
+  cuerpo.onclick = function (ev) {
+    var op = ev.target.closest('.ap-op');
+    if (op && !op.disabled) {
+      if (+op.dataset.k === q.correcta) {
+        op.classList.add('ok'); fb.className = 'ap-fb ok'; fb.textContent = '✓ Correcto. ' + q.explicacion;
+        cuerpo.querySelectorAll('.ap-op').forEach(function (o) { o.disabled = true; });
+        apProg[clave] = 1; apGuardar(); marca();
+      } else { op.classList.add('mal'); op.disabled = true; fb.className = 'ap-fb mal'; fb.textContent = 'Todavía no. ' + (q.pista || 'Vuelve a mirar la demo e inténtalo de nuevo.'); }
+      return;
+    }
+    var go = ev.target.closest('button[data-ir]'); if (go && porNombre[go.dataset.ir]) { apMostrar(false); seleccionar(porNombre[go.dataset.ir], true); return; }
+    var a = ev.target.closest('button[data-a]'); if (!a) return;
+    if (a.dataset.a === 'hecho') { if (apProg[clave]) delete apProg[clave]; else apProg[clave] = 1; apGuardar(); marca(); }
+    else if (a.dataset.a === 'copiar') copiar(fns.map(function (f) { return porNombre[f].importar; }).filter(Boolean).join('\n'), 'Imports copiados');
+    else if (a.dataset.a === 'sig') { var ds = document.querySelectorAll('details.ap-paso'); ds[i + 1].open = true; ds[i + 1].scrollIntoView({behavior: reducir ? 'auto' : 'smooth', block: 'start'}); }
+  };
+}
+$('#aprenderBtn').onclick = function () { apMostrar(!apAbierta()); };
+if (!RUTAS.length) $('#aprenderBtn').hidden = true;
 
 /* ---------- propiedades: barras 0-10, perfiles de proyecto, alternativas y comparador ---------- */
 var PROP = DATA.propiedades || {bloques: [], propiedades: [], perfiles: [], grupos: [], peso_por_defecto: 5};
@@ -34703,6 +35229,7 @@ arbol_estadistica
 (visor) mapa 3D: núcleo + ramas en órbita; arrastrar = girar, rueda = acercar, clic en una rama = entrar (py/visor/mapa3d.js)
 (visor) «Probar»: cada función con su ejemplo ejecutable por celdas (py/cuaderno/ejemplos.py; se ejecuta desde la app)
 (visor) fichas de propiedades: barras 0-10 por función y por módulo, perfil de proyecto (arriba) que pondera y ordena las alternativas, comparador
+(visor) «🎓 Aprender»: guía paso a paso desde cero (py/aprender/rutas.json) con demos, preguntas y código; progreso guardado en el navegador
 (visor) «Cómo funciona»: 21 demos interactivas (distribuciones básicas animadas y en galería, t-test, potencia, FDR, IC, TCL, regresión, logística, censura, MCMC, Markov, bandidos, PCA, K-means, VaR, diversificación, ruina, diferencias en diferencias, sobreajuste)
 ```
 
@@ -35248,6 +35775,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 4. Si falta algo, escríbelo siguiendo las convenciones de abajo y **añádelo al árbol** (módulo + test + línea en `INDEX.md`), y regenera el visor con `python py/construir_visor.py`. Si cambias `py/`, `assets/` o los `.bat`, sube `py/VERSION.txt` (y `pyproject.toml`) y ejecuta `python herramientas/generar_instaladores.py`. **Al terminar cualquier tarea que cambie el programa, genera siempre los instaladores, publícalos con `python herramientas/publicar.py "qué cambió"` (regenera, revisa que no haya datos privados, commit y push a GitHub; en `instaladores/` solo queda la versión actual) y dile a Mario la ruta de `Arbol X.Y.Z - Instalador.bat` y `- Actualizar.bat` para que los pruebe.**
 5. `visor_arbol.html` (doble clic, `abrir_arbol.bat` o el acceso directo del Escritorio): mapa 3D (núcleo = el árbol, ramas orbitando con sus funciones y conceptos como puntos; motor en `py/visor/mapa3d.js`, canvas sin librerías), buscador y botones para copiar código; lo genera `py/construir_visor.py` leyendo el propio código y `INDEX.md`, sin depender de nada más. Los instaladores autoextraíbles están en `instaladores/` (Instalador = Python + librerías + visor + accesos; Actualizar = solo programa, con copia en `anteriores/`); `regenerar_visor.bat` vuelve a generar el visor.
 5c. **Probar (cuaderno):** cada función tiene un ejemplo ejecutable por celdas con datos simulados en `py/cuaderno/ejemplos.py` (escenarios + celdas, con gráfico cuando lo hay). La app (`py/arbol_app.pyw`, pywebview) lo ejecuta en Python desde el visor. Al añadir una función, añade su ejemplo: un test exige que exista y que se ejecute sin errores.
+5e. **Guía de aprendizaje:** la pestaña «🎓 Aprender» del visor muestra rutas paso a paso (`py/aprender/rutas.json`): cada paso tiene idea, instrucciones, una demo, palabras clave, una pregunta y las funciones en Python. Los enlaces (demos, funciones, conceptos) se validan al construir el visor y en `tests/test_aprender.py`; el progreso se guarda en el navegador. Al añadir una demo o un concepto importante, plantéate si encaja en una ruta.
 5b. **Demos:** la rama «Cómo funciona» del visor tiene demos interactivas (`py/visor/demos.js`, metadatos en `DEMOS` de `construir_visor.py`); al añadir una, registra ambas cosas.
 5d. **Propiedades (fichas 0-10):** cada función tiene una ficha con barras de 0 a 10 en ~33 propiedades agrupadas en 5 bloques
    (Estimación: insesgadez, consistencia, eficiencia, ECM, normalidad asintótica, identificabilidad · Inferencia: tamaño α, potencia,

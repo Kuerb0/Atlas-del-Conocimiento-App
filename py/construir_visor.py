@@ -206,6 +206,7 @@ DOCS = {
 }
 CATALOGO = RAIZ / "conceptos" / "catalogo.json"
 PROPIEDADES = CODIGO / "propiedades"
+RUTAS = CODIGO / "aprender" / "rutas.json"
 FICHAS_MIAS = RAIZ / "conceptos" / "fichas_mias.json"
 EJEMPLOS = None   # se carga en construir()
 AVISO_RE = re.compile(r"OJO|ATENCI[ÓO]N|CORRECCI[ÓO]N|IMPORTANTE|Gauss", re.I)
@@ -396,6 +397,27 @@ def cargar_propiedades(nombres_fn: set[str]) -> tuple[dict, dict]:
     return meta, fichas
 
 
+def cargar_rutas(funciones: set[str], conceptos: set[str], demos: set[str]) -> list[dict]:
+    """Rutas de la pestaña «Aprender» (py/aprender/rutas.json). Los enlaces rotos se quitan y se avisan; una pregunta mal formada es un error."""
+    if not RUTAS.exists():
+        return []
+    rutas = json.loads(RUTAS.read_text(encoding="utf-8"))["rutas"]
+    for r in rutas:
+        for p in r["pasos"]:
+            q = p["pregunta"]
+            if not 0 <= q["correcta"] < len(q["opciones"]):
+                raise ValueError(f"Ruta {r['id']}, paso {p['id']}: «correcta» fuera de rango")
+            if p.get("demo") and p["demo"] not in demos:
+                print(f"AVISO: el paso «{p['id']}» usa una demo que no existe: {p['demo']}")
+                p.pop("demo")
+            for campo, validos in (("funciones", funciones), ("conceptos", conceptos)):
+                malos = [x for x in p.get(campo, []) if x not in validos]
+                if malos:
+                    print(f"AVISO: el paso «{p['id']}» enlaza {campo} que no existen: {malos}")
+                    p[campo] = [x for x in p.get(campo, []) if x in validos]
+    return rutas
+
+
 def construir() -> dict:
     global EJEMPLOS
     EJEMPLOS = _ejemplos()
@@ -448,8 +470,10 @@ def construir() -> dict:
                               {"id": "ejemplos", "nombre": "ejemplos/", "desc": "Scripts de ejemplo", "archivo": "ejemplos", "items": ejemplos}]})
 
     n_tests = sum(len(re.findall(r"^def test_", p.read_text(encoding="utf-8"), re.M)) for p in (CODIGO / "tests").glob("test_*.py"))
+    ids_conceptos = {k["id"] for k in json.loads(CATALOGO.read_text(encoding="utf-8"))["conceptos"]}
+    ids_demos = {d["id"] for _, _, ds in DEMOS for d in ds}
     return {"raiz": RAIZ_POR_DEFECTO, "generado": dt.date.today().isoformat(), "pruebas": n_tests, "ramas": ramas,
-            "propiedades": meta_prop}
+            "propiedades": meta_prop, "rutas": cargar_rutas(nombres_fn, ids_conceptos, ids_demos)}
 
 
 def ensamblar(datos: dict) -> str:
