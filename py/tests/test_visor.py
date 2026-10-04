@@ -85,8 +85,8 @@ def test_las_fuentes_de_manuales_citan_libro_y_capitulo():
     assert len(manuales) > 100
     for f in manuales:
         siglas, _, capitulo = f["ref"].partition(" · ")
-        assert siglas in ("ALSM", "JW", "HS", "ISLR", "APM", "RMS", "MSDA", "PSDS", "ESL", "DSUS") and capitulo, f["ref"]
-        assert f["base"].startswith(("Applied", "An Introduction", "Practical", "The Elements", "Discovering", "Regression", "Mathematical")), f["base"]
+        assert siglas in ("ALSM", "JW", "HS", "ISLR", "APM", "RMS", "MSDA", "PSDS", "ESL", "DSUS", "OIS", "TS2", "BR") and capitulo, f["ref"]
+        assert f["base"].startswith(("Applied", "An Introduction", "Practical", "The Elements", "Discovering", "Regression", "Mathematical", "OpenIntro", "Think Stats", "Bayes Rules")), f["base"]
 
 
 def test_los_conceptos_enlazan_funciones_reales_y_todas_las_funciones_tienen_concepto():

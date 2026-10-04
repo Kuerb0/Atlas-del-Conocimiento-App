@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 0.15.0 - Instalador
+title Arbol de la estadistica 0.15.1 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
 set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=0.15.0"
+set "ARBOL_VERSION=0.15.1"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -482,14 +482,8 @@ if ($Modo -eq 'actualizar') {
 Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
-:::BEGIN py/0|text
-
-:::END
-:::BEGIN py/TASA.B.leve|text
-
-:::END
 :::BEGIN py/VERSION.txt|text
-0.15.0
+0.15.1
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -2488,7 +2482,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "0.15.0"
+version = "0.15.1"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3167,7 +3161,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "0.15.0"
+__version__ = "0.15.1"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -32293,8 +32287,8 @@ def test_las_fuentes_de_manuales_citan_libro_y_capitulo():
     assert len(manuales) > 100
     for f in manuales:
         siglas, _, capitulo = f["ref"].partition(" · ")
-        assert siglas in ("ALSM", "JW", "HS", "ISLR", "APM", "RMS", "MSDA", "PSDS", "ESL", "DSUS") and capitulo, f["ref"]
-        assert f["base"].startswith(("Applied", "An Introduction", "Practical", "The Elements", "Discovering", "Regression", "Mathematical")), f["base"]
+        assert siglas in ("ALSM", "JW", "HS", "ISLR", "APM", "RMS", "MSDA", "PSDS", "ESL", "DSUS", "OIS", "TS2", "BR") and capitulo, f["ref"]
+        assert f["base"].startswith(("Applied", "An Introduction", "Practical", "The Elements", "Discovering", "Regression", "Mathematical", "OpenIntro", "Think Stats", "Bayes Rules")), f["base"]
 
 
 def test_los_conceptos_enlazan_funciones_reales_y_todas_las_funciones_tienen_concepto():
@@ -36877,6 +36871,36 @@ exit 1
      "ref": "The medical test paradox, and redesigning Bayes' rule",
      "base": "3Blue1Brown",
      "url": "https://www.3blue1brown.com/?topic=probability#medical-test"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 1: Introducción a la probabilidad",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-1"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lecciones en vídeo del curso completo",
+     "base": "MIT 6.041 Probabilistic Systems Analysis and Applied Probability (OCW, 2010)",
+     "url": "https://ocw.mit.edu/courses/6-041-probabilistic-systems-analysis-and-applied-probability-fall-2010/video_galleries/lecture-videos"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Apuntes de clase, problemas y tutoriales de R del curso",
+     "base": "MIT 18.05 Introduction to Probability and Statistics (OCW, 2022)",
+     "url": "https://ocw.mit.edu/courses/18-05-introduction-to-probability-and-statistics-spring-2022/"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 3 Probability",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-3"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 2 Bayes' Rule",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-2"
     }
    ]
   },
@@ -36920,6 +36944,30 @@ exit 1
      "ref": "But what is the Central Limit Theorem?",
      "base": "3Blue1Brown",
      "url": "https://www.youtube.com/watch?v=zeJD6dqJ5lo"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 5: Distribuciones de funciones de variables aleatorias",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-5"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lecciones en vídeo del curso completo",
+     "base": "MIT 6.041 Probabilistic Systems Analysis and Applied Probability (OCW, 2010)",
+     "url": "https://ocw.mit.edu/courses/6-041-probabilistic-systems-analysis-and-applied-probability-fall-2010/video_galleries/lecture-videos"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 5 Foundations for Inference",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-5"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 14 Analytic methods",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-14"
     }
    ]
   },
@@ -36986,6 +37034,24 @@ exit 1
      "ref": "Why π is in the normal distribution (beyond integral tricks)",
      "base": "3Blue1Brown",
      "url": "https://www.3blue1brown.com/?topic=probability#why-pi-normal"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 3: Distribuciones continuas",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-3"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 4 Distributions",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-4"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 5 Modeling distributions",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-5"
     }
    ]
   },
@@ -37020,6 +37086,24 @@ exit 1
      "ref": "Binomial distributions | Probabilities of probabilities, part 1",
      "base": "3Blue1Brown",
      "url": "https://www.youtube.com/watch?v=8idr1WZ1A7Q"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 2: Distribuciones discretas",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-2"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 4 Distributions",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-4"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 3 The Beta-Binomial Bayesian Model",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-3"
     }
    ]
   },
@@ -37056,6 +37140,12 @@ exit 1
      "ref": "Lección 11: Distribución de Poisson y aproximación de Poisson",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-11"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 2: Distribuciones discretas",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-2"
     }
    ]
   },
@@ -37086,6 +37176,12 @@ exit 1
      "ref": "Lección 10: Linealidad de la esperanza, binomial negativa",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-10"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 2: Distribuciones discretas",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-2"
     }
    ]
   },
@@ -37139,6 +37235,12 @@ exit 1
      "ref": "Lección 24: Distribución gamma y procesos de Poisson",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-24"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 3: Distribuciones continuas",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-3"
     }
    ]
   },
@@ -37371,6 +37473,24 @@ exit 1
      "ref": "Lección 11: Contrastes de hipótesis y bondad de ajuste",
      "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
      "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-11-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Apuntes de clase, problemas y tutoriales de R del curso",
+     "base": "MIT 18.05 Introduction to Probability and Statistics (OCW, 2022)",
+     "url": "https://ocw.mit.edu/courses/18-05-introduction-to-probability-and-statistics-spring-2022/"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 5 Foundations for Inference",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-5"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 9 Hypothesis testing",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-9"
     }
    ],
    "prioridad": "alta"
@@ -37531,6 +37651,12 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Comparing Two Samples",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 7 Inference for Numerical Data",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-7"
     }
    ]
   },
@@ -37700,6 +37826,18 @@ exit 1
      "ref": "Lección 12: Bondad de ajuste (cont.)",
      "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
      "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-12-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Tablas de contingencia 2×2 y r×c, independencia, test exacto de Fisher y odds ratio",
+     "base": "Penn State STAT 504 Analysis of Discrete Data (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat504/#tablas"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 6 Inference for Categorical Data",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-6"
     }
    ]
   },
@@ -37834,6 +37972,18 @@ exit 1
      "tipo": "manual",
      "ref": "ALSM · Inferences in Regression and Correlation Analysis",
      "base": "Applied Linear Statistical Models (Kutner, Nachtsheim, Neter, Li)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Apuntes de clase, problemas y tutoriales de R del curso",
+     "base": "MIT 18.05 Introduction to Probability and Statistics (OCW, 2022)",
+     "url": "https://ocw.mit.edu/courses/18-05-introduction-to-probability-and-statistics-spring-2022/"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 5 Foundations for Inference",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-5"
     }
    ],
    "prioridad": "alta"
@@ -38113,6 +38263,60 @@ exit 1
      "ref": "Lección 15: Regresión (cont.)",
      "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
      "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-15-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lecciones 1 a 4: Regresión lineal simple (modelo, evaluación, estimación y supuestos)",
+     "base": "Penn State STAT 501 Regression Methods (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat501/#leccion-1-4"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lecciones 5 a 7: Regresión lineal múltiple",
+     "base": "Penn State STAT 501 Regression Methods (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat501/#leccion-5-7"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 8: Predictores categóricos",
+     "base": "Penn State STAT 501 Regression Methods (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat501/#leccion-8"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Apuntes de clase, problemas y tutoriales de R del curso",
+     "base": "MIT 18.05 Introduction to Probability and Statistics (OCW, 2022)",
+     "url": "https://ocw.mit.edu/courses/18-05-introduction-to-probability-and-statistics-spring-2022/"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 8 Introduction to Linear Regression",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-8"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 9 Multiple and Logistic Regression",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-9"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 10 Linear least squares",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-10"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 11 Regression",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-11"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 9 Simple Normal Regression",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-9"
     }
    ],
    "prioridad": "alta"
@@ -38150,6 +38354,12 @@ exit 1
      "tipo": "manual",
      "ref": "RMS · Binary Logistic Regression",
      "base": "Regression Modeling Strategies (Harrell)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 12: Multicolinealidad y otros problemas de la regresión",
+     "base": "Penn State STAT 501 Regression Methods (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat501/#leccion-12"
     }
    ]
   },
@@ -38274,6 +38484,30 @@ exit 1
      "tipo": "manual",
      "ref": "RMS · Binary Logistic Regression",
      "base": "Regression Modeling Strategies (Harrell)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 13: Mínimos cuadrados ponderados y regresión logística",
+     "base": "Penn State STAT 501 Regression Methods (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat501/#leccion-13"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Regresión logística para respuesta dicotómica: interpretación, selección, diagnóstico y bondad de ajuste",
+     "base": "Penn State STAT 504 Analysis of Discrete Data (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat504/#logistica"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 9 Multiple and Logistic Regression",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-9"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 13 Logistic Regression",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-13"
     }
    ],
    "prioridad": "alta"
@@ -38312,6 +38546,12 @@ exit 1
      "tipo": "manual",
      "ref": "RMS · Binary Logistic Regression",
      "base": "Regression Modeling Strategies (Harrell)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Tablas de contingencia 2×2 y r×c, independencia, test exacto de Fisher y odds ratio",
+     "base": "Penn State STAT 504 Analysis of Discrete Data (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat504/#tablas"
     }
    ]
   },
@@ -38436,6 +38676,24 @@ exit 1
      "tipo": "manual",
      "ref": "ALSM · Logistic Regression, Poisson Regression, and Generalized Linear Models",
      "base": "Applied Linear Statistical Models (Kutner, Nachtsheim, Neter, Li)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Tema 3: Regresión de Poisson y no lineal",
+     "base": "Penn State STAT 501 Regression Methods (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat501/#leccion-t3"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Modelos lineales generalizados para conteos: regresión de Poisson",
+     "base": "Penn State STAT 504 Analysis of Discrete Data (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat504/#poisson"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 12 Poisson & Negative Binomial Regression",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-12"
     }
    ]
   },
@@ -38609,6 +38867,12 @@ exit 1
      "tipo": "manual",
      "ref": "RMS · Multivariable Modeling Strategies",
      "base": "Regression Modeling Strategies (Harrell)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 10: Construcción de modelos",
+     "base": "Penn State STAT 501 Regression Methods (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat501/#leccion-10"
     }
    ]
   },
@@ -39588,6 +39852,24 @@ exit 1
      "ref": "Binomial distributions | Probabilities of probabilities, part 1",
      "base": "3Blue1Brown",
      "url": "https://www.youtube.com/watch?v=8idr1WZ1A7Q"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Apuntes de clase, problemas y tutoriales de R del curso",
+     "base": "MIT 18.05 Introduction to Probability and Statistics (OCW, 2022)",
+     "url": "https://ocw.mit.edu/courses/18-05-introduction-to-probability-and-statistics-spring-2022/"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 3 The Beta-Binomial Bayesian Model",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-3"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 4 Balance and Sequentiality in Bayesian Analyses",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-4"
     }
    ]
   },
@@ -39608,6 +39890,12 @@ exit 1
      "ref": "The most important ideas in modern statistics (vídeo y post)",
      "url": "https://www.youtube.com/watch?v=nCyGhqQWj2g",
      "base": "lista de conceptos del vídeo"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 5 Conjugate Families",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-5"
     }
    ]
   },
@@ -39642,6 +39930,12 @@ exit 1
      "ref": "The algorithm that (eventually) revolutionized statistics - #SoMEpi",
      "url": "https://www.youtube.com/watch?v=Jr1GdNI3Vfo",
      "base": "título y descripción del vídeo"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 7 MCMC under the Hood",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-7"
     }
    ]
   },
@@ -39663,6 +39957,12 @@ exit 1
      "ref": "The most important ideas in modern statistics (vídeo y post)",
      "url": "https://www.youtube.com/watch?v=nCyGhqQWj2g",
      "base": "lista de conceptos del vídeo"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 8 Posterior Inference & Prediction",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-8"
     }
    ]
   },
@@ -39690,6 +39990,12 @@ exit 1
      "ref": "Statistical Gold Nuggets | Bayesian Hierarchical Models",
      "url": "https://www.youtube.com/watch?v=GUx5sOIAlCg",
      "base": "título y descripción del vídeo"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 15 Hierarchical Models are Exciting",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-15"
     }
    ]
   },
@@ -40382,6 +40688,12 @@ exit 1
      "tipo": "master",
      "ref": "Procesos Estocásticos (1º) · Tema 2",
      "base": "temario del curso"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lecciones en vídeo del curso completo",
+     "base": "MIT 6.041 Probabilistic Systems Analysis and Applied Probability (OCW, 2010)",
+     "url": "https://ocw.mit.edu/courses/6-041-probabilistic-systems-analysis-and-applied-probability-fall-2010/video_galleries/lecture-videos"
     }
    ]
   },
@@ -40462,6 +40774,12 @@ exit 1
      "ref": "Lección 24: Distribución gamma y procesos de Poisson",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-24"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lecciones en vídeo del curso completo",
+     "base": "MIT 6.041 Probabilistic Systems Analysis and Applied Probability (OCW, 2010)",
+     "url": "https://ocw.mit.edu/courses/6-041-probabilistic-systems-analysis-and-applied-probability-fall-2010/video_galleries/lecture-videos"
     }
    ]
   },
@@ -41587,6 +41905,18 @@ exit 1
      "ref": "Lección 12: Discretas frente a continuas, densidades, varianza, uniforme",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-12"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lecciones en vídeo del curso completo",
+     "base": "MIT 6.041 Probabilistic Systems Analysis and Applied Probability (OCW, 2010)",
+     "url": "https://ocw.mit.edu/courses/6-041-probabilistic-systems-analysis-and-applied-probability-fall-2010/video_galleries/lecture-videos"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 3 Probability mass functions",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-3"
     }
    ]
   },
@@ -41676,6 +42006,12 @@ exit 1
      "ref": "Lección 2: Introducción a la estadística (cont.)",
      "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
      "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-2-video/"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 8 Estimation",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-8"
     }
    ]
   },
@@ -41892,6 +42228,12 @@ exit 1
      "tipo": "manual",
      "ref": "RMS · Introduction to Survival Analysis",
      "base": "Regression Modeling Strategies (Harrell)"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 13 Survival analysis",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-13"
     }
    ]
   },
@@ -42101,6 +42443,12 @@ exit 1
      "tipo": "manual",
      "ref": "PSDS · Regression Diagnostics",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 11: Puntos influyentes",
+     "base": "Penn State STAT 501 Regression Methods (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat501/#leccion-11"
     }
    ]
   },
@@ -42296,6 +42644,12 @@ exit 1
      "tipo": "manual",
      "ref": "APM · Data Pre-processing",
      "base": "Applied Predictive Modeling (Kuhn, Johnson)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 9: Transformaciones de datos",
+     "base": "Penn State STAT 501 Regression Methods (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat501/#leccion-9"
     }
    ]
   },
@@ -42354,6 +42708,12 @@ exit 1
      "tipo": "manual",
      "ref": "PSDS · Regression Diagnostics",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Tema 1: Regresión robusta",
+     "base": "Penn State STAT 501 Regression Methods (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat501/#leccion-t1"
     }
    ]
   },
@@ -42566,6 +42926,18 @@ exit 1
      "tipo": "manual",
      "ref": "PSDS · Exploratory Data Analysis",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 2 Summarizing Data",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-2"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 1 Exploratory data analysis",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-1"
     }
    ]
   },
@@ -42647,6 +43019,18 @@ exit 1
      "tipo": "manual",
      "ref": "DSUS · Exploring data with graphs",
      "base": "Discovering Statistics Using IBM SPSS Statistics (Field)"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 2 Distributions",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-2"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 6 Probability density functions",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-6"
     }
    ]
   },
@@ -42696,6 +43080,12 @@ exit 1
      "tipo": "manual",
      "ref": "PSDS · Exploratory Data Analysis",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 7 Relationships between variables",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-7"
     }
    ]
   },
@@ -42740,6 +43130,12 @@ exit 1
      "tipo": "manual",
      "ref": "DSUS · Categorical data",
      "base": "Discovering Statistics Using IBM SPSS Statistics (Field)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Tablas de contingencia 2×2 y r×c, independencia, test exacto de Fisher y odds ratio",
+     "base": "Penn State STAT 504 Analysis of Discrete Data (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat504/#tablas"
     }
    ]
   },
@@ -43406,6 +43802,12 @@ exit 1
      "ref": "Lección 16: Distribución exponencial y falta de memoria",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-16"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 3: Distribuciones continuas",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-3"
     }
    ]
   },
@@ -44070,6 +44472,12 @@ exit 1
      "tipo": "manual",
      "ref": "APM · Discriminant Analysis and Other Linear Classification Models",
      "base": "Applied Predictive Modeling (Kuhn, Johnson)"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 14 Naive Bayes Classification",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-14"
     }
    ]
   },
@@ -44521,6 +44929,24 @@ exit 1
      "ref": "Lección 6: Problema de Monty Hall y paradoja de Simpson",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-6"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 1: Introducción a la probabilidad",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-1"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lecciones en vídeo del curso completo",
+     "base": "MIT 6.041 Probabilistic Systems Analysis and Applied Probability (OCW, 2010)",
+     "url": "https://ocw.mit.edu/courses/6-041-probabilistic-systems-analysis-and-applied-probability-fall-2010/video_galleries/lecture-videos"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 3 Probability",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-3"
     }
    ]
   },
@@ -44554,6 +44980,12 @@ exit 1
      "ref": "Lección 19: Distribuciones conjuntas, marginales y condicionadas",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-19"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 4: Distribuciones bivariantes",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-4"
     }
    ]
   },
@@ -44579,6 +45011,12 @@ exit 1
      "ref": "Lección 21: Covarianza, correlación y varianza de una suma",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-21"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 4: Distribuciones bivariantes",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-4"
     }
    ]
   },
@@ -44616,6 +45054,12 @@ exit 1
      "ref": "Lección 18: Funciones generadoras de momentos y distribuciones conjuntas",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-18"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 5: Distribuciones de funciones de variables aleatorias",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-5"
     }
    ]
   },
@@ -44673,6 +45117,12 @@ exit 1
      "ref": "Lección 25: Beta-gamma, estadísticos de orden y esperanza condicionada",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-25"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 5: Distribuciones de funciones de variables aleatorias",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-5"
     }
    ]
   },
@@ -44784,6 +45234,12 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Estimation of Parameters and Fitting of Probability Distributions",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 5 Modeling distributions",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-5"
     }
    ]
   },
@@ -44910,6 +45366,12 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Summarizing Data",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 4 Cumulative distribution functions",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-4"
     }
    ]
   },
@@ -46464,6 +46926,12 @@ exit 1
      "ref": "Lección 12: Discretas frente a continuas, densidades, varianza, uniforme",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-12"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 3: Distribuciones continuas",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-3"
     }
    ]
   },
@@ -46515,6 +46983,12 @@ exit 1
      "ref": "Lección 9: Geométrica, valores esperados, indicadoras y linealidad",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-9"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 2: Distribuciones discretas",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-2"
     }
    ]
   },
@@ -46538,6 +47012,12 @@ exit 1
      "tipo": "arbol",
      "base": "Árbol de la estadística",
      "ref": "Ruta «Estadística descriptiva» de la pestaña Aprender"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 1 Intro to Data",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-1"
     }
    ]
   },
@@ -46560,6 +47040,18 @@ exit 1
      "tipo": "arbol",
      "base": "Árbol de la estadística",
      "ref": "Demo «Describir una variable»"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 2 Summarizing Data",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-2"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 1 Exploratory data analysis",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-1"
     }
    ]
   },
@@ -46581,6 +47073,12 @@ exit 1
      "tipo": "arbol",
      "base": "Árbol de la estadística",
      "ref": "Demo «Cuarteto de Anscombe»"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 7 Relationships between variables",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-7"
     }
    ]
   },
@@ -47071,6 +47569,36 @@ exit 1
      "ref": "The medical test paradox, and redesigning Bayes' rule",
      "base": "3Blue1Brown",
      "url": "https://www.3blue1brown.com/?topic=probability#medical-test"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 1: Introducción a la probabilidad",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-1"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lecciones en vídeo del curso completo",
+     "base": "MIT 6.041 Probabilistic Systems Analysis and Applied Probability (OCW, 2010)",
+     "url": "https://ocw.mit.edu/courses/6-041-probabilistic-systems-analysis-and-applied-probability-fall-2010/video_galleries/lecture-videos"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Apuntes de clase, problemas y tutoriales de R del curso",
+     "base": "MIT 18.05 Introduction to Probability and Statistics (OCW, 2022)",
+     "url": "https://ocw.mit.edu/courses/18-05-introduction-to-probability-and-statistics-spring-2022/"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 3 Probability",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-3"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 2 Bayes' Rule",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-2"
     }
    ]
   },
@@ -47114,6 +47642,30 @@ exit 1
      "ref": "But what is the Central Limit Theorem?",
      "base": "3Blue1Brown",
      "url": "https://www.youtube.com/watch?v=zeJD6dqJ5lo"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 5: Distribuciones de funciones de variables aleatorias",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-5"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lecciones en vídeo del curso completo",
+     "base": "MIT 6.041 Probabilistic Systems Analysis and Applied Probability (OCW, 2010)",
+     "url": "https://ocw.mit.edu/courses/6-041-probabilistic-systems-analysis-and-applied-probability-fall-2010/video_galleries/lecture-videos"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 5 Foundations for Inference",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-5"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 14 Analytic methods",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-14"
     }
    ]
   },
@@ -47180,6 +47732,24 @@ exit 1
      "ref": "Why π is in the normal distribution (beyond integral tricks)",
      "base": "3Blue1Brown",
      "url": "https://www.3blue1brown.com/?topic=probability#why-pi-normal"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 3: Distribuciones continuas",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-3"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 4 Distributions",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-4"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 5 Modeling distributions",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-5"
     }
    ]
   },
@@ -47214,6 +47784,24 @@ exit 1
      "ref": "Binomial distributions | Probabilities of probabilities, part 1",
      "base": "3Blue1Brown",
      "url": "https://www.youtube.com/watch?v=8idr1WZ1A7Q"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 2: Distribuciones discretas",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-2"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 4 Distributions",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-4"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 3 The Beta-Binomial Bayesian Model",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-3"
     }
    ]
   },
@@ -47250,6 +47838,12 @@ exit 1
      "ref": "Lección 11: Distribución de Poisson y aproximación de Poisson",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-11"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 2: Distribuciones discretas",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-2"
     }
    ]
   },
@@ -47280,6 +47874,12 @@ exit 1
      "ref": "Lección 10: Linealidad de la esperanza, binomial negativa",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-10"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 2: Distribuciones discretas",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-2"
     }
    ]
   },
@@ -47333,6 +47933,12 @@ exit 1
      "ref": "Lección 24: Distribución gamma y procesos de Poisson",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-24"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 3: Distribuciones continuas",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-3"
     }
    ]
   },
@@ -47565,6 +48171,24 @@ exit 1
      "ref": "Lección 11: Contrastes de hipótesis y bondad de ajuste",
      "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
      "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-11-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Apuntes de clase, problemas y tutoriales de R del curso",
+     "base": "MIT 18.05 Introduction to Probability and Statistics (OCW, 2022)",
+     "url": "https://ocw.mit.edu/courses/18-05-introduction-to-probability-and-statistics-spring-2022/"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 5 Foundations for Inference",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-5"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 9 Hypothesis testing",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-9"
     }
    ],
    "prioridad": "alta"
@@ -47725,6 +48349,12 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Comparing Two Samples",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 7 Inference for Numerical Data",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-7"
     }
    ]
   },
@@ -47894,6 +48524,18 @@ exit 1
      "ref": "Lección 12: Bondad de ajuste (cont.)",
      "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
      "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-12-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Tablas de contingencia 2×2 y r×c, independencia, test exacto de Fisher y odds ratio",
+     "base": "Penn State STAT 504 Analysis of Discrete Data (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat504/#tablas"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 6 Inference for Categorical Data",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-6"
     }
    ]
   },
@@ -48028,6 +48670,18 @@ exit 1
      "tipo": "manual",
      "ref": "ALSM · Inferences in Regression and Correlation Analysis",
      "base": "Applied Linear Statistical Models (Kutner, Nachtsheim, Neter, Li)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Apuntes de clase, problemas y tutoriales de R del curso",
+     "base": "MIT 18.05 Introduction to Probability and Statistics (OCW, 2022)",
+     "url": "https://ocw.mit.edu/courses/18-05-introduction-to-probability-and-statistics-spring-2022/"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 5 Foundations for Inference",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-5"
     }
    ],
    "prioridad": "alta"
@@ -48307,6 +48961,60 @@ exit 1
      "ref": "Lección 15: Regresión (cont.)",
      "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
      "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-15-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lecciones 1 a 4: Regresión lineal simple (modelo, evaluación, estimación y supuestos)",
+     "base": "Penn State STAT 501 Regression Methods (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat501/#leccion-1-4"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lecciones 5 a 7: Regresión lineal múltiple",
+     "base": "Penn State STAT 501 Regression Methods (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat501/#leccion-5-7"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 8: Predictores categóricos",
+     "base": "Penn State STAT 501 Regression Methods (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat501/#leccion-8"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Apuntes de clase, problemas y tutoriales de R del curso",
+     "base": "MIT 18.05 Introduction to Probability and Statistics (OCW, 2022)",
+     "url": "https://ocw.mit.edu/courses/18-05-introduction-to-probability-and-statistics-spring-2022/"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 8 Introduction to Linear Regression",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-8"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 9 Multiple and Logistic Regression",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-9"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 10 Linear least squares",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-10"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 11 Regression",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-11"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 9 Simple Normal Regression",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-9"
     }
    ],
    "prioridad": "alta"
@@ -48344,6 +49052,12 @@ exit 1
      "tipo": "manual",
      "ref": "RMS · Binary Logistic Regression",
      "base": "Regression Modeling Strategies (Harrell)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 12: Multicolinealidad y otros problemas de la regresión",
+     "base": "Penn State STAT 501 Regression Methods (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat501/#leccion-12"
     }
    ]
   },
@@ -48468,6 +49182,30 @@ exit 1
      "tipo": "manual",
      "ref": "RMS · Binary Logistic Regression",
      "base": "Regression Modeling Strategies (Harrell)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 13: Mínimos cuadrados ponderados y regresión logística",
+     "base": "Penn State STAT 501 Regression Methods (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat501/#leccion-13"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Regresión logística para respuesta dicotómica: interpretación, selección, diagnóstico y bondad de ajuste",
+     "base": "Penn State STAT 504 Analysis of Discrete Data (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat504/#logistica"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 9 Multiple and Logistic Regression",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-9"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 13 Logistic Regression",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-13"
     }
    ],
    "prioridad": "alta"
@@ -48506,6 +49244,12 @@ exit 1
      "tipo": "manual",
      "ref": "RMS · Binary Logistic Regression",
      "base": "Regression Modeling Strategies (Harrell)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Tablas de contingencia 2×2 y r×c, independencia, test exacto de Fisher y odds ratio",
+     "base": "Penn State STAT 504 Analysis of Discrete Data (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat504/#tablas"
     }
    ]
   },
@@ -48630,6 +49374,24 @@ exit 1
      "tipo": "manual",
      "ref": "ALSM · Logistic Regression, Poisson Regression, and Generalized Linear Models",
      "base": "Applied Linear Statistical Models (Kutner, Nachtsheim, Neter, Li)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Tema 3: Regresión de Poisson y no lineal",
+     "base": "Penn State STAT 501 Regression Methods (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat501/#leccion-t3"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Modelos lineales generalizados para conteos: regresión de Poisson",
+     "base": "Penn State STAT 504 Analysis of Discrete Data (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat504/#poisson"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 12 Poisson & Negative Binomial Regression",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-12"
     }
    ]
   },
@@ -48803,6 +49565,12 @@ exit 1
      "tipo": "manual",
      "ref": "RMS · Multivariable Modeling Strategies",
      "base": "Regression Modeling Strategies (Harrell)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 10: Construcción de modelos",
+     "base": "Penn State STAT 501 Regression Methods (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat501/#leccion-10"
     }
    ]
   },
@@ -49782,6 +50550,24 @@ exit 1
      "ref": "Binomial distributions | Probabilities of probabilities, part 1",
      "base": "3Blue1Brown",
      "url": "https://www.youtube.com/watch?v=8idr1WZ1A7Q"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Apuntes de clase, problemas y tutoriales de R del curso",
+     "base": "MIT 18.05 Introduction to Probability and Statistics (OCW, 2022)",
+     "url": "https://ocw.mit.edu/courses/18-05-introduction-to-probability-and-statistics-spring-2022/"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 3 The Beta-Binomial Bayesian Model",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-3"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 4 Balance and Sequentiality in Bayesian Analyses",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-4"
     }
    ]
   },
@@ -49802,6 +50588,12 @@ exit 1
      "ref": "The most important ideas in modern statistics (vídeo y post)",
      "url": "https://www.youtube.com/watch?v=nCyGhqQWj2g",
      "base": "lista de conceptos del vídeo"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 5 Conjugate Families",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-5"
     }
    ]
   },
@@ -49836,6 +50628,12 @@ exit 1
      "ref": "The algorithm that (eventually) revolutionized statistics - #SoMEpi",
      "url": "https://www.youtube.com/watch?v=Jr1GdNI3Vfo",
      "base": "título y descripción del vídeo"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 7 MCMC under the Hood",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-7"
     }
    ]
   },
@@ -49857,6 +50655,12 @@ exit 1
      "ref": "The most important ideas in modern statistics (vídeo y post)",
      "url": "https://www.youtube.com/watch?v=nCyGhqQWj2g",
      "base": "lista de conceptos del vídeo"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 8 Posterior Inference & Prediction",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-8"
     }
    ]
   },
@@ -49884,6 +50688,12 @@ exit 1
      "ref": "Statistical Gold Nuggets | Bayesian Hierarchical Models",
      "url": "https://www.youtube.com/watch?v=GUx5sOIAlCg",
      "base": "título y descripción del vídeo"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 15 Hierarchical Models are Exciting",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-15"
     }
    ]
   },
@@ -50576,6 +51386,12 @@ exit 1
      "tipo": "master",
      "ref": "Procesos Estocásticos (1º) · Tema 2",
      "base": "temario del curso"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lecciones en vídeo del curso completo",
+     "base": "MIT 6.041 Probabilistic Systems Analysis and Applied Probability (OCW, 2010)",
+     "url": "https://ocw.mit.edu/courses/6-041-probabilistic-systems-analysis-and-applied-probability-fall-2010/video_galleries/lecture-videos"
     }
    ]
   },
@@ -50656,6 +51472,12 @@ exit 1
      "ref": "Lección 24: Distribución gamma y procesos de Poisson",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-24"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lecciones en vídeo del curso completo",
+     "base": "MIT 6.041 Probabilistic Systems Analysis and Applied Probability (OCW, 2010)",
+     "url": "https://ocw.mit.edu/courses/6-041-probabilistic-systems-analysis-and-applied-probability-fall-2010/video_galleries/lecture-videos"
     }
    ]
   },
@@ -51781,6 +52603,18 @@ exit 1
      "ref": "Lección 12: Discretas frente a continuas, densidades, varianza, uniforme",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-12"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lecciones en vídeo del curso completo",
+     "base": "MIT 6.041 Probabilistic Systems Analysis and Applied Probability (OCW, 2010)",
+     "url": "https://ocw.mit.edu/courses/6-041-probabilistic-systems-analysis-and-applied-probability-fall-2010/video_galleries/lecture-videos"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 3 Probability mass functions",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-3"
     }
    ]
   },
@@ -51870,6 +52704,12 @@ exit 1
      "ref": "Lección 2: Introducción a la estadística (cont.)",
      "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
      "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-2-video/"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 8 Estimation",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-8"
     }
    ]
   },
@@ -52086,6 +52926,12 @@ exit 1
      "tipo": "manual",
      "ref": "RMS · Introduction to Survival Analysis",
      "base": "Regression Modeling Strategies (Harrell)"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 13 Survival analysis",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-13"
     }
    ]
   },
@@ -52295,6 +53141,12 @@ exit 1
      "tipo": "manual",
      "ref": "PSDS · Regression Diagnostics",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 11: Puntos influyentes",
+     "base": "Penn State STAT 501 Regression Methods (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat501/#leccion-11"
     }
    ]
   },
@@ -52490,6 +53342,12 @@ exit 1
      "tipo": "manual",
      "ref": "APM · Data Pre-processing",
      "base": "Applied Predictive Modeling (Kuhn, Johnson)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 9: Transformaciones de datos",
+     "base": "Penn State STAT 501 Regression Methods (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat501/#leccion-9"
     }
    ]
   },
@@ -52548,6 +53406,12 @@ exit 1
      "tipo": "manual",
      "ref": "PSDS · Regression Diagnostics",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Tema 1: Regresión robusta",
+     "base": "Penn State STAT 501 Regression Methods (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat501/#leccion-t1"
     }
    ]
   },
@@ -52760,6 +53624,18 @@ exit 1
      "tipo": "manual",
      "ref": "PSDS · Exploratory Data Analysis",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 2 Summarizing Data",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-2"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 1 Exploratory data analysis",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-1"
     }
    ]
   },
@@ -52841,6 +53717,18 @@ exit 1
      "tipo": "manual",
      "ref": "DSUS · Exploring data with graphs",
      "base": "Discovering Statistics Using IBM SPSS Statistics (Field)"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 2 Distributions",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-2"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 6 Probability density functions",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-6"
     }
    ]
   },
@@ -52890,6 +53778,12 @@ exit 1
      "tipo": "manual",
      "ref": "PSDS · Exploratory Data Analysis",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 7 Relationships between variables",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-7"
     }
    ]
   },
@@ -52934,6 +53828,12 @@ exit 1
      "tipo": "manual",
      "ref": "DSUS · Categorical data",
      "base": "Discovering Statistics Using IBM SPSS Statistics (Field)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Tablas de contingencia 2×2 y r×c, independencia, test exacto de Fisher y odds ratio",
+     "base": "Penn State STAT 504 Analysis of Discrete Data (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat504/#tablas"
     }
    ]
   },
@@ -53600,6 +54500,12 @@ exit 1
      "ref": "Lección 16: Distribución exponencial y falta de memoria",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-16"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 3: Distribuciones continuas",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-3"
     }
    ]
   },
@@ -54264,6 +55170,12 @@ exit 1
      "tipo": "manual",
      "ref": "APM · Discriminant Analysis and Other Linear Classification Models",
      "base": "Applied Predictive Modeling (Kuhn, Johnson)"
+    },
+    {
+     "tipo": "manual",
+     "ref": "BR · 14 Naive Bayes Classification",
+     "base": "Bayes Rules! An Introduction to Applied Bayesian Modeling (Johnson, Ott, Dogucu; gratuito)",
+     "url": "https://www.bayesrulesbook.com/chapter-14"
     }
    ]
   },
@@ -54715,6 +55627,24 @@ exit 1
      "ref": "Lección 6: Problema de Monty Hall y paradoja de Simpson",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-6"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 1: Introducción a la probabilidad",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-1"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lecciones en vídeo del curso completo",
+     "base": "MIT 6.041 Probabilistic Systems Analysis and Applied Probability (OCW, 2010)",
+     "url": "https://ocw.mit.edu/courses/6-041-probabilistic-systems-analysis-and-applied-probability-fall-2010/video_galleries/lecture-videos"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 3 Probability",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-3"
     }
    ]
   },
@@ -54748,6 +55678,12 @@ exit 1
      "ref": "Lección 19: Distribuciones conjuntas, marginales y condicionadas",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-19"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 4: Distribuciones bivariantes",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-4"
     }
    ]
   },
@@ -54773,6 +55709,12 @@ exit 1
      "ref": "Lección 21: Covarianza, correlación y varianza de una suma",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-21"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 4: Distribuciones bivariantes",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-4"
     }
    ]
   },
@@ -54810,6 +55752,12 @@ exit 1
      "ref": "Lección 18: Funciones generadoras de momentos y distribuciones conjuntas",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-18"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 5: Distribuciones de funciones de variables aleatorias",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-5"
     }
    ]
   },
@@ -54867,6 +55815,12 @@ exit 1
      "ref": "Lección 25: Beta-gamma, estadísticos de orden y esperanza condicionada",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-25"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 5: Distribuciones de funciones de variables aleatorias",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-5"
     }
    ]
   },
@@ -54978,6 +55932,12 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Estimation of Parameters and Fitting of Probability Distributions",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 5 Modeling distributions",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-5"
     }
    ]
   },
@@ -55104,6 +56064,12 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Summarizing Data",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 4 Cumulative distribution functions",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-4"
     }
    ]
   },
@@ -56658,6 +57624,12 @@ exit 1
      "ref": "Lección 12: Discretas frente a continuas, densidades, varianza, uniforme",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-12"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 3: Distribuciones continuas",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-3"
     }
    ]
   },
@@ -56709,6 +57681,12 @@ exit 1
      "ref": "Lección 9: Geométrica, valores esperados, indicadoras y linealidad",
      "base": "Harvard Stat 110 (Joe Blitzstein)",
      "url": "https://stat110.hsites.harvard.edu/youtube#leccion-9"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Sección 2: Distribuciones discretas",
+     "base": "Penn State STAT 414 Introduction to Probability Theory (acceso abierto)",
+     "url": "https://online.stat.psu.edu/stat414/#seccion-2"
     }
    ]
   },
@@ -56732,6 +57710,12 @@ exit 1
      "tipo": "arbol",
      "base": "Árbol de la estadística",
      "ref": "Ruta «Estadística descriptiva» de la pestaña Aprender"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 1 Intro to Data",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-1"
     }
    ]
   },
@@ -56754,6 +57738,18 @@ exit 1
      "tipo": "arbol",
      "base": "Árbol de la estadística",
      "ref": "Demo «Describir una variable»"
+    },
+    {
+     "tipo": "manual",
+     "ref": "OIS · 2 Summarizing Data",
+     "base": "OpenIntro Statistics (Diez, Çetinkaya-Rundel, Barr; PDF gratuito)",
+     "url": "https://www.openintro.org/book/os/#cap-2"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 1 Exploratory data analysis",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-1"
     }
    ]
   },
@@ -56775,6 +57771,12 @@ exit 1
      "tipo": "arbol",
      "base": "Árbol de la estadística",
      "ref": "Demo «Cuarteto de Anscombe»"
+    },
+    {
+     "tipo": "manual",
+     "ref": "TS2 · 7 Relationships between variables",
+     "base": "Think Stats, 2nd edition (Downey; gratuito)",
+     "url": "https://greenteapress.com/thinkstats2/html/index.html#cap-7"
     }
    ]
   },

@@ -92,6 +92,11 @@ def main() -> int:
             print("  -", m)
         return 1
 
+    for rel in texto(["git", "ls-files", "--others", "--exclude-standard", "-z"]).split("\0"):      # basura de 1-2 bytes que crea el entorno (ver .gitignore)
+        f = RAIZ / rel
+        if rel and f.is_file() and not f.suffix and f.stat().st_size <= 8:
+            f.unlink()
+            print("Borrado fichero basura:", rel)
     ejecutar("git", "add", "-A")
     if not texto(["git", "status", "--porcelain"]).strip():
         print("No hay cambios que publicar.")
