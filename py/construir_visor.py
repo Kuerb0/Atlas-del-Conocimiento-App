@@ -170,6 +170,32 @@ DEMOS = [
          "aprender": "Con la misma media y desviación, la cola cambia el riesgo: el VaR solo marca el umbral, el TVaR promedia lo que se pierde al superarlo. Con cola pesada (Pareto) el TVaR se aleja mucho más del VaR y la normal infravalora el riesgo extremo.",
          "funciones": ["var_tvar"],
          "conceptos": ["c_value_at_risk_var", "c_tvar_y_medidas_coherentes_de_riesgo", "c_teoria_de_valores_extremos", "c_distribuciones_con_colas_pesadas"]},
+        {"id": "demo_frontera", "nombre": "Diversificación con dos activos",
+         "desc": "Dos activos con rentabilidad y riesgo distintos: mueve la correlación y el peso de cada uno y mira dónde cae tu cartera respecto a la curva de carteras posibles y a la de mínima varianza.",
+         "aprender": "Diversificar reduce el riesgo sin renunciar a toda la rentabilidad: cuanto menor es la correlación, más se curva la frontera hacia la izquierda. Con correlación 1 no hay beneficio y con −1 se puede eliminar el riesgo.",
+         "funciones": ["frontera_eficiente", "grafico_frontera_eficiente"],
+         "conceptos": ["c_modelo_de_markowitz_media_varianza"]},
+    ]),
+    ("Actuarial", "Seguros: capital y ruina", [
+        {"id": "demo_ruina", "nombre": "Teoría de la ruina de Cramér-Lundberg",
+         "desc": "El capital de un asegurador evoluciona con primas continuas y siniestros aleatorios: ajusta el capital inicial y el recargo de seguridad y compara la probabilidad de ruina simulada con la fórmula de Lundberg.",
+         "aprender": "La probabilidad de ruina baja de forma exponencial al subir el capital inicial o el recargo. Con recargos pequeños hace falta mucho capital, y con un horizonte infinito la ruina es casi segura si el recargo es muy bajo.",
+         "funciones": ["probabilidad_ruina", "ruina_jugador"],
+         "conceptos": ["c_teoria_de_la_ruina", "c_problema_de_la_ruina_del_jugador"]},
+    ]),
+    ("Causalidad", "Efectos sin aleatorizar", [
+        {"id": "demo_did", "nombre": "Diferencias en diferencias",
+         "desc": "Un grupo tratado y uno de control medidos antes y después: cambia el efecto verdadero, la tendencia común, la diferencia inicial y una tendencia extra, y compara los tres estimadores.",
+         "aprender": "Comparar solo antes y después mezcla el efecto con la tendencia; comparar solo tratado y control mezcla el efecto con la diferencia inicial. DiD resta ambas, pero exige tendencias paralelas: si el tratado ya iba por otro camino, el sesgo es exactamente esa diferencia.",
+         "funciones": ["diferencias_en_diferencias", "puntuacion_propension", "grafico_balance"],
+         "conceptos": ["c_inferencia_causal_contrafactica", "c_estudios_experimentales_y_observacionales"]},
+    ]),
+    ("Machine learning", "Complejidad y generalización", [
+        {"id": "demo_sobreajuste", "nombre": "Sobreajuste: el grado del polinomio",
+         "desc": "Ajusta un polinomio a datos con ruido: sube el grado y mira cómo el error de entrenamiento baja siempre mientras el de prueba tiene forma de U; cambia el ruido y el número de observaciones.",
+         "aprender": "El error de entrenamiento no sirve para elegir la complejidad: siempre mejora. Hay que medir el error en datos nuevos (validación cruzada). Con más datos admite más complejidad; con más ruido, menos.",
+         "funciones": ["validacion_cruzada", "dividir_train_test", "regresion_polinomica"],
+         "conceptos": ["c_sesgo_y_varianza", "c_validacion_cruzada", "c_interacciones_y_regresion_polinomica"]},
     ]),
 ]
 DOCS = {

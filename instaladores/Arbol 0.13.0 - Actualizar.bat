@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 0.12.0 - Instalador
+title Arbol de la estadistica 0.13.0 - Actualizar
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=0.12.0"
+set "ARBOL_MODO=actualizar"
+set "ARBOL_VERSION=0.13.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -483,7 +483,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-0.12.0
+0.13.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -785,6 +785,32 @@ DEMOS = [
          "aprender": "Con la misma media y desviación, la cola cambia el riesgo: el VaR solo marca el umbral, el TVaR promedia lo que se pierde al superarlo. Con cola pesada (Pareto) el TVaR se aleja mucho más del VaR y la normal infravalora el riesgo extremo.",
          "funciones": ["var_tvar"],
          "conceptos": ["c_value_at_risk_var", "c_tvar_y_medidas_coherentes_de_riesgo", "c_teoria_de_valores_extremos", "c_distribuciones_con_colas_pesadas"]},
+        {"id": "demo_frontera", "nombre": "Diversificación con dos activos",
+         "desc": "Dos activos con rentabilidad y riesgo distintos: mueve la correlación y el peso de cada uno y mira dónde cae tu cartera respecto a la curva de carteras posibles y a la de mínima varianza.",
+         "aprender": "Diversificar reduce el riesgo sin renunciar a toda la rentabilidad: cuanto menor es la correlación, más se curva la frontera hacia la izquierda. Con correlación 1 no hay beneficio y con −1 se puede eliminar el riesgo.",
+         "funciones": ["frontera_eficiente", "grafico_frontera_eficiente"],
+         "conceptos": ["c_modelo_de_markowitz_media_varianza"]},
+    ]),
+    ("Actuarial", "Seguros: capital y ruina", [
+        {"id": "demo_ruina", "nombre": "Teoría de la ruina de Cramér-Lundberg",
+         "desc": "El capital de un asegurador evoluciona con primas continuas y siniestros aleatorios: ajusta el capital inicial y el recargo de seguridad y compara la probabilidad de ruina simulada con la fórmula de Lundberg.",
+         "aprender": "La probabilidad de ruina baja de forma exponencial al subir el capital inicial o el recargo. Con recargos pequeños hace falta mucho capital, y con un horizonte infinito la ruina es casi segura si el recargo es muy bajo.",
+         "funciones": ["probabilidad_ruina", "ruina_jugador"],
+         "conceptos": ["c_teoria_de_la_ruina", "c_problema_de_la_ruina_del_jugador"]},
+    ]),
+    ("Causalidad", "Efectos sin aleatorizar", [
+        {"id": "demo_did", "nombre": "Diferencias en diferencias",
+         "desc": "Un grupo tratado y uno de control medidos antes y después: cambia el efecto verdadero, la tendencia común, la diferencia inicial y una tendencia extra, y compara los tres estimadores.",
+         "aprender": "Comparar solo antes y después mezcla el efecto con la tendencia; comparar solo tratado y control mezcla el efecto con la diferencia inicial. DiD resta ambas, pero exige tendencias paralelas: si el tratado ya iba por otro camino, el sesgo es exactamente esa diferencia.",
+         "funciones": ["diferencias_en_diferencias", "puntuacion_propension", "grafico_balance"],
+         "conceptos": ["c_inferencia_causal_contrafactica", "c_estudios_experimentales_y_observacionales"]},
+    ]),
+    ("Machine learning", "Complejidad y generalización", [
+        {"id": "demo_sobreajuste", "nombre": "Sobreajuste: el grado del polinomio",
+         "desc": "Ajusta un polinomio a datos con ruido: sube el grado y mira cómo el error de entrenamiento baja siempre mientras el de prueba tiene forma de U; cambia el ruido y el número de observaciones.",
+         "aprender": "El error de entrenamiento no sirve para elegir la complejidad: siempre mejora. Hay que medir el error en datos nuevos (validación cruzada). Con más datos admite más complejidad; con más ruido, menos.",
+         "funciones": ["validacion_cruzada", "dividir_train_test", "regresion_polinomica"],
+         "conceptos": ["c_sesgo_y_varianza", "c_validacion_cruzada", "c_interacciones_y_regresion_polinomica"]},
     ]),
 ]
 DOCS = {
@@ -2412,7 +2438,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "0.12.0"
+version = "0.13.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -2460,9 +2486,6 @@ patsy
 matplotlib>=3.7
 pytest
 :::END
-:::BEGIN py/x.tag|text
-
-:::END
 :::BEGIN py/arbol_estadistica/__init__.py|text
 """Arbol de la estadística: funciones estadísticas reutilizables (origen en trabajos de consultoría; máster).
 
@@ -2475,7 +2498,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "0.12.0"
+__version__ = "0.13.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -32617,6 +32640,134 @@ D.demo_var = function (cont) {
   pintar();
 };
 
+
+/* ================= 18. Teoría de la ruina (Cramér-Lundberg) ================= */
+D.demo_ruina = function (cont) {
+  var T = 100, NP = 800, NV = 25, ctr = ht('div', {'class': 'dm-ctrls'}, cont), bots = ht('div', {'class': 'dm-bots'}, cont), tanda = 0;
+  var cU = control(ctr, {etq: 'Capital inicial u (en siniestros medios)', min: 0, max: 20, paso: 1, valor: 5, fmt: function (v) { return String(v); }}, pintar);
+  var cT = control(ctr, {etq: 'Recargo de seguridad θ', min: 0.05, max: 0.8, paso: 0.05, valor: 0.2, fmt: function (v) { return pct(v, 0); }}, pintar);
+  var L1 = Lienzo(cont, {h: 200, aria: 'Trayectorias del capital del asegurador'});
+  leyenda(cont, [['dm-k1', 'trayectoria que sobrevive'], ['dm-k2', 'trayectoria arruinada']]);
+  var lec = lectura(cont);
+  function pintar() {
+    var u = cU.valor(), th = cT.valor(), c = 1 + th, rnd = semilla(42 + tanda), arr = 0, tray = [], i;
+    for (i = 0; i < NP; i++) {                       /* siniestros: Poisson(1) en el tiempo, importe exponencial de media 1 */
+      var t = 0, cap = u, pts = [[0, u]], ruina = false;
+      for (;;) { var dt = -Math.log(1 - rnd()); t += dt; if (t > T) { pts.push([T, cap + c * (T - (t - dt))]); break; }
+        cap += c * dt; pts.push([t, cap]); cap -= -Math.log(1 - rnd()); pts.push([t, cap]);
+        if (cap < 0) { ruina = true; break; } }
+      if (ruina) arr++; if (i < NV) tray.push({p: pts, r: ruina});
+    }
+    var teo = Math.exp(-th * u / (1 + th)) / (1 + th), ymax = Math.max(u * 2 + 10, 15);
+    L1.nuevo([0, 60], [-6, ymax], {xl: 'tiempo', yl: 'capital', ny: 4});
+    L1.linea([0, 60], [0, 0], 'dm-lfina');
+    tray.forEach(function (q) { L1.linea(q.p.map(function (a) { return a[0]; }), q.p.map(function (a) { return Math.max(-6, Math.min(ymax, a[1])); }), q.r ? 'dm-l2' : 'dm-l1'); });
+    escribir(lec, [['Probabilidad de ruina simulada (', [String(NP)], ' trayectorias, horizonte ' + T + '): ', [pct(arr / NP, 1)], ' · fórmula de Lundberg para siniestros exponenciales (horizonte infinito): ', [pct(teo, 1)]],
+      ['Más capital o más recargo reducen la ruina de forma exponencial. Con recargo pequeño hace falta mucho capital: la ruina es lenta pero casi segura a largo plazo.']]);
+  }
+  boton(bots, 'Otra tanda de trayectorias', function () { tanda++; pintar(); });
+  pintar();
+};
+
+/* ================= 19. Diferencias en diferencias ================= */
+D.demo_did = function (cont) {
+  var ctr = ht('div', {'class': 'dm-ctrls'}, cont);
+  var cE = control(ctr, {etq: 'Efecto verdadero del tratamiento', min: -5, max: 5, paso: 0.5, valor: 2, fmt: function (v) { return v.toFixed(1); }}, pintar);
+  var cD = control(ctr, {etq: 'Tendencia común a los dos grupos', min: 0, max: 6, paso: 0.5, valor: 3, fmt: function (v) { return v.toFixed(1); }}, pintar);
+  var cG = control(ctr, {etq: 'Diferencia inicial entre grupos', min: 0, max: 8, paso: 0.5, valor: 4, fmt: function (v) { return v.toFixed(1); }}, pintar);
+  var cV = control(ctr, {etq: 'Tendencia extra del tratado (rompe «tendencias paralelas»)', min: 0, max: 4, paso: 0.5, valor: 0, fmt: function (v) { return v.toFixed(1); }}, pintar);
+  var L1 = Lienzo(cont, {h: 200, aria: 'Medias de los grupos tratado y control antes y después'});
+  leyenda(cont, [['dm-k1', 'control'], ['dm-k2', 'tratado'], ['dm-km', 'tratado sin tratamiento (contrafactual)']]);
+  var lec = lectura(cont), rnd = semilla(42), RU = [], i, n = 100;
+  for (i = 0; i < 4 * n; i++) RU.push(normal(rnd));
+  function media(k) { var s = 0; for (var j = 0; j < n; j++) s += RU[k * n + j]; return s / n; }
+  function pintar() {
+    var tau = cE.valor(), de = cD.valor(), ga = cG.valor(), ex = cV.valor();
+    var cPre = 10 + media(0), cPos = 10 + de + media(1), tPre = 10 + ga + media(2), tPos = 10 + ga + de + ex + tau + media(3);
+    var did = (tPos - tPre) - (cPos - cPre), antes = tPos - tPre, entre = tPos - cPos, cf = tPre + (cPos - cPre);
+    var lo = Math.min(cPre, cPos, tPre, tPos, cf) - 2, hi = Math.max(cPre, cPos, tPre, tPos, cf) + 2;
+    L1.nuevo([-0.4, 1.4], [lo, hi], {x: false, ny: 4}); L1.texto(L1.sx(0), L1.H - L1.m.b + 13, 'antes', {'class': 'dm-tick', 'text-anchor': 'middle'}); L1.texto(L1.sx(1), L1.H - L1.m.b + 13, 'después', {'class': 'dm-tick', 'text-anchor': 'middle'});
+    L1.linea([0, 1], [cPre, cPos], 'dm-l1'); L1.linea([0, 1], [tPre, tPos], 'dm-l2'); L1.linea([0, 1], [tPre, cf], 'dm-lm');
+    var cp = L1.capa(); [[0, cPre, 'dm-f1'], [1, cPos, 'dm-f1'], [0, tPre, 'dm-f2'], [1, tPos, 'dm-f2']].forEach(function (a) { sv('circle', {cx: L1.sx(a[0]), cy: L1.sy(a[1]), r: 4, 'class': a[2] + ' dm-anillo'}, cp); });
+    escribir(lec, [['Efecto verdadero: ', [f(tau, 2)], ' · diferencias en diferencias: ', [f(did, 2)]],
+      ['Solo «antes y después» en el tratado: ' + f(antes, 2) + ' (mezcla el efecto con la tendencia) · solo «tratado frente a control» después: ' + f(entre, 2) + ' (mezcla el efecto con la diferencia inicial).'],
+      [ex > 0 ? 'Con tendencia extra en el tratado, el supuesto de tendencias paralelas falla y DiD se sesga justo en esa cantidad (' + f(ex, 1) + ').' : 'DiD resta la diferencia inicial y la tendencia común; funciona si, sin tratamiento, los dos grupos habrían seguido tendencias paralelas. Los datos son simulados con ruido, por eso no es exacto.']]);
+  }
+  pintar();
+};
+
+/* ================= 20. Diversificación: dos activos ================= */
+D.demo_frontera = function (cont) {
+  var A = {m: 0.06, s: 0.10}, B = {m: 0.11, s: 0.20}, ctr = ht('div', {'class': 'dm-ctrls'}, cont);
+  var cR = control(ctr, {etq: 'Correlación entre los dos activos', min: -1, max: 1, paso: 0.05, valor: 0.3, fmt: function (v) { return v.toFixed(2); }}, pintar);
+  var cW = control(ctr, {etq: 'Peso en el activo B (más arriesgado)', min: 0, max: 100, paso: 1, valor: 40, fmt: function (v) { return v + ' %'; }}, pintar);
+  var L1 = Lienzo(cont, {h: 210, aria: 'Rentabilidad esperada frente a riesgo de las carteras'});
+  leyenda(cont, [['dm-k1', 'carteras posibles'], ['dm-k2', 'tu cartera'], ['dm-km', 'mínima varianza']]);
+  var lec = lectura(cont);
+  function sd(w, r) { return Math.sqrt(Math.max((1 - w) * (1 - w) * A.s * A.s + w * w * B.s * B.s + 2 * w * (1 - w) * r * A.s * B.s, 0)); }
+  function pintar() {
+    var r = cR.valor(), w = cW.valor() / 100, xs = [], ys = [], i;
+    for (i = 0; i <= 100; i++) { var q = i / 100; xs.push(sd(q, r)); ys.push((1 - q) * A.m + q * B.m); }
+    var den = A.s * A.s + B.s * B.s - 2 * r * A.s * B.s, wm = den > 0 ? Math.min(1, Math.max(0, (A.s * A.s - r * A.s * B.s) / den)) : 0;
+    L1.nuevo([0, 0.22], [0.05, 0.12], {xl: 'riesgo (desviación típica)', yl: 'rentabilidad esperada', ny: 4, nx: 5});
+    L1.linea(xs, ys, 'dm-l1');
+    var cp = L1.capa(), mp = (1 - w) * A.m + w * B.m, sp = sd(w, r);
+    [[A.s, A.m, 'A'], [B.s, B.m, 'B']].forEach(function (a) { sv('circle', {cx: L1.sx(a[0]), cy: L1.sy(a[1]), r: 3.5, 'class': 'dm-f1 dm-anillo'}, cp); L1.texto(L1.sx(a[0]) + 6, L1.sy(a[1]) + 4, a[2], {'class': 'dm-txt'}, cp); });
+    sv('circle', {cx: L1.sx(sd(wm, r)), cy: L1.sy((1 - wm) * A.m + wm * B.m), r: 4, 'class': 'dm-fm dm-anillo'}, cp);
+    sv('circle', {cx: L1.sx(sp), cy: L1.sy(mp), r: 5, 'class': 'dm-f2 dm-anillo'}, cp);
+    var media = (1 - w) * A.s + w * B.s;
+    escribir(lec, [['Tu cartera: rentabilidad ', [pct(mp, 2)], ' · riesgo ', [pct(sp, 2)], ' · riesgo sin diversificar (media ponderada) ', [pct(media, 2)], ' → ahorro por diversificar ', [pct(media - sp, 2)]],
+      ['Cartera de mínima varianza: ' + pct(wm, 0) + ' en B, riesgo ' + pct(sd(wm, r), 2) + '. Con correlación 1 la curva es una recta (no hay beneficio); cuanto más baja, más se curva hacia la izquierda; con −1 se puede llegar a riesgo 0.']]);
+  }
+  pintar();
+};
+
+/* ================= 21. Sobreajuste: grado del polinomio ================= */
+D.demo_sobreajuste = function (cont) {
+  var DMAX = 12, ctr = ht('div', {'class': 'dm-ctrls'}, cont);
+  var cG = control(ctr, {etq: 'Grado del polinomio', min: 1, max: DMAX, paso: 1, valor: 3, fmt: function (v) { return String(v); }}, pintar);
+  var cN = control(ctr, {etq: 'Observaciones de entrenamiento', min: 10, max: 60, paso: 5, valor: 20, fmt: function (v) { return String(v); }}, pintar);
+  var cS = control(ctr, {etq: 'Ruido de los datos', min: 0, max: 0.6, paso: 0.05, valor: 0.25, fmt: function (v) { return v.toFixed(2); }}, pintar);
+  var L1 = Lienzo(cont, {h: 190, aria: 'Datos, función verdadera y polinomio ajustado'});
+  var L2 = Lienzo(cont, {h: 120, aria: 'Error de entrenamiento y de prueba según el grado'});
+  leyenda(cont, [['dm-k1', 'ajuste del modelo'], ['dm-k2', 'función verdadera'], ['dm-k3', 'error de entrenamiento'], ['dm-km', 'error de prueba']]);
+  var lec = lectura(cont), rnd = semilla(42), XU = [], ZU = [], XT = [], ZT = [], i;
+  for (i = 0; i < 60; i++) { XU.push(rnd()); ZU.push(normal(rnd)); }
+  for (i = 0; i < 300; i++) { XT.push(rnd()); ZT.push(normal(rnd)); }
+  function verdad(x) { return Math.sin(2 * Math.PI * x); }
+  function base(x, g) { var v = [], u = 2 * x - 1; for (var j = 0; j <= g; j++) v.push(Math.pow(u, j)); return v; }
+  function resolver(A, b) {                     /* eliminación gaussiana con pivote parcial */
+    var n = b.length, M = A.map(function (r, i) { return r.concat([b[i]]); }), i, j, k;
+    for (i = 0; i < n; i++) { var p = i; for (j = i + 1; j < n; j++) if (Math.abs(M[j][i]) > Math.abs(M[p][i])) p = j; var t = M[i]; M[i] = M[p]; M[p] = t;
+      for (j = i + 1; j < n; j++) { var fct = M[j][i] / (M[i][i] || 1e-12); for (k = i; k <= n; k++) M[j][k] -= fct * M[i][k]; } }
+    var x = new Array(n); for (i = n - 1; i >= 0; i--) { var s = M[i][n]; for (j = i + 1; j < n; j++) s -= M[i][j] * x[j]; x[i] = s / (M[i][i] || 1e-12); } return x;
+  }
+  function ajustar(X, Y, g) {
+    var m = g + 1, A = [], b = [], i, j, k; for (i = 0; i < m; i++) { A.push(new Array(m).fill(0)); A[i][i] = 1e-9; b.push(0); }
+    X.forEach(function (x, q) { var v = base(x, g); for (i = 0; i < m; i++) { b[i] += v[i] * Y[q]; for (j = 0; j < m; j++) A[i][j] += v[i] * v[j]; } });
+    return resolver(A, b);
+  }
+  function predecir(w, x) { var v = base(x, w.length - 1), s = 0; for (var j = 0; j < v.length; j++) s += w[j] * v[j]; return s; }
+  function ecm(w, X, Y) { var s = 0; X.forEach(function (x, q) { var e = predecir(w, x) - Y[q]; s += e * e; }); return Math.sqrt(s / X.length); }
+  function pintar() {
+    var g = cG.valor(), n = cN.valor(), sg = cS.valor(), X = XU.slice(0, n), Y = X.map(function (x, q) { return verdad(x) + sg * ZU[q]; }), YT = XT.map(function (x, q) { return verdad(x) + sg * ZT[q]; });
+    var tr = [], te = [], d, mejor = 1;
+    for (d = 1; d <= DMAX; d++) { var wd = ajustar(X, Y, d); tr.push(ecm(wd, X, Y)); te.push(ecm(wd, XT, YT)); if (te[d - 1] < te[mejor - 1]) mejor = d; }
+    var w = ajustar(X, Y, g), xs = [], ys = [], vs = [];
+    for (i = 0; i <= 200; i++) { var x = i / 200; xs.push(x); ys.push(Math.max(-2.5, Math.min(2.5, predecir(w, x)))); vs.push(verdad(x)); }
+    L1.nuevo([0, 1], [-2.5, 2.5], {xl: 'x', ny: 4}); var cp = L1.capa();
+    X.forEach(function (x, q) { sv('circle', {cx: L1.sx(x), cy: L1.sy(Math.max(-2.5, Math.min(2.5, Y[q]))), r: 2.8, 'class': 'dm-fm dm-op70'}, cp); });
+    L1.linea(xs, vs, 'dm-l2'); L1.linea(xs, ys, 'dm-l1');
+    var top = Math.max(0.1, Math.min(2, Math.max.apply(null, te.concat(tr)))); L2.nuevo([0.5, DMAX + 0.5], [0, top], {xl: 'grado', ny: 3, nx: DMAX});
+    var gs = []; for (d = 1; d <= DMAX; d++) gs.push(d);
+    L2.linea(gs, tr.map(function (v) { return Math.min(v, top); }), 'dm-l3'); L2.linea(gs, te.map(function (v) { return Math.min(v, top); }), 'dm-lm'); L2.vline(g, 'dm-lfina');
+    escribir(lec, [['Grado ', [String(g)], ': error de entrenamiento ', [f(tr[g - 1], 3)], ' · error de prueba ', [f(te[g - 1], 3)], ' · mejor grado según la prueba: ', [String(mejor)]],
+      [g < mejor ? 'Infraajuste: el modelo es demasiado simple y falla tanto en entrenamiento como en prueba.' : g > mejor + 1 ? 'Sobreajuste: el error de entrenamiento sigue bajando pero el de prueba sube, porque el polinomio persigue el ruido.' : 'Zona razonable: complejidad parecida a la que tienen los datos.'],
+      ['El error de entrenamiento baja siempre al añadir complejidad; solo el error en datos nuevos revela el sobreajuste (por eso se usa validación cruzada). Con más observaciones el mejor grado sube; con más ruido, baja.']]);
+  }
+  pintar();
+};
+
 /* utilidades expuestas para las pruebas automáticas */
 D._estad = {tcdf: tcdf, tinv: tinv, Phi: Phi, colaNormal: colaNormal, potenciaT: potenciaT, nPara: nPara};
 return D;
@@ -34552,7 +34703,7 @@ arbol_estadistica
 (visor) mapa 3D: núcleo + ramas en órbita; arrastrar = girar, rueda = acercar, clic en una rama = entrar (py/visor/mapa3d.js)
 (visor) «Probar»: cada función con su ejemplo ejecutable por celdas (py/cuaderno/ejemplos.py; se ejecuta desde la app)
 (visor) fichas de propiedades: barras 0-10 por función y por módulo, perfil de proyecto (arriba) que pondera y ordena las alternativas, comparador
-(visor) «Cómo funciona»: 17 demos interactivas (distribuciones básicas animadas y en galería, t-test, potencia, FDR, IC, TCL, regresión, logística, censura, MCMC, Markov, bandidos, PCA, K-means, VaR)
+(visor) «Cómo funciona»: 21 demos interactivas (distribuciones básicas animadas y en galería, t-test, potencia, FDR, IC, TCL, regresión, logística, censura, MCMC, Markov, bandidos, PCA, K-means, VaR, diversificación, ruina, diferencias en diferencias, sobreajuste)
 ```
 
 ## Estructura de carpetas

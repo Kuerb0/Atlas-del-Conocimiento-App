@@ -24,7 +24,7 @@ arbol_estadistica
 (visor) mapa 3D: núcleo + ramas en órbita; arrastrar = girar, rueda = acercar, clic en una rama = entrar (py/visor/mapa3d.js)
 (visor) «Probar»: cada función con su ejemplo ejecutable por celdas (py/cuaderno/ejemplos.py; se ejecuta desde la app)
 (visor) fichas de propiedades: barras 0-10 por función y por módulo, perfil de proyecto (arriba) que pondera y ordena las alternativas, comparador
-(visor) «Cómo funciona»: 17 demos interactivas (distribuciones básicas animadas y en galería, t-test, potencia, FDR, IC, TCL, regresión, logística, censura, MCMC, Markov, bandidos, PCA, K-means, VaR)
+(visor) «Cómo funciona»: 21 demos interactivas (distribuciones básicas animadas y en galería, t-test, potencia, FDR, IC, TCL, regresión, logística, censura, MCMC, Markov, bandidos, PCA, K-means, VaR, diversificación, ruina, diferencias en diferencias, sobreajuste)
 ```
 
 ## Estructura de carpetas
