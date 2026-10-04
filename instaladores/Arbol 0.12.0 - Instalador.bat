@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 0.11.7 - Actualizar
+title Arbol de la estadistica 0.12.0 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=actualizar"
-set "ARBOL_VERSION=0.11.7"
+set "ARBOL_MODO=instalar"
+set "ARBOL_VERSION=0.12.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -483,7 +483,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-0.11.7
+0.12.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -749,6 +749,42 @@ DEMOS = [
          "aprender": "Quitar a los censurados sesga la supervivencia hacia abajo: precisamente los que más duran son los que más se censuran. Kaplan-Meier los usa mientras están en riesgo y recupera la curva verdadera.",
          "funciones": ["kaplan_meier", "grafico_kaplan_meier", "contraste_log_rank"],
          "conceptos": ["c_analisis_de_supervivencia_y_censura", "c_estimador_de_kaplan_meier"]},
+    ]),
+    ("Simulación", "Procesos que evolucionan paso a paso", [
+        {"id": "demo_mcmc", "nombre": "MCMC: el algoritmo de Metropolis",
+         "desc": "Una cadena que camina por una distribución de dos picos: mueve el tamaño del salto, la separación de los picos y el punto de partida, y mira la traza, el histograma y la tasa de aceptación.",
+         "aprender": "Un salto demasiado grande rechaza casi todo y uno demasiado pequeño acepta todo pero avanza despacio: en los dos casos hay pocas muestras efectivas. Con picos separados la cadena puede quedarse en uno solo y parecer que converge; por eso se usan varias cadenas, R-hat y la traza.",
+         "funciones": ["metropolis", "diagnostico_mcmc", "grafico_trazas_mcmc"],
+         "conceptos": ["c_algoritmo_de_metropolis_y_mcmc"]},
+        {"id": "demo_markov", "nombre": "Cadenas de Markov y distribución estacionaria",
+         "desc": "Tres cadenas de ejemplo (tiempo, bonus-malus, estado absorbente): cómo evoluciona la probabilidad de cada estado y a qué distribución estacionaria converge; simula una trayectoria de 1000 pasos.",
+         "aprender": "La cadena olvida su estado inicial y converge a π, la distribución estacionaria; la fracción de tiempo en cada estado de una trayectoria larga coincide con π. Más persistencia solo ralentiza la convergencia; con un estado absorbente no hay π única que valga para cualquier inicio.",
+         "funciones": ["cadena_markov", "simular_cadena_markov", "bonus_malus"],
+         "conceptos": ["c_cadenas_de_markov_en_tiempo_discreto", "c_cadenas_de_markov_regulares_y_modelo_bonus_malus"]},
+        {"id": "demo_bandido", "nombre": "Bandidos multibrazo: explorar o explotar",
+         "desc": "Tres estrategias (al azar, ε-greedy y Thompson) juegan contra los mismos tres brazos: compara el arrepentimiento acumulado y el porcentaje de tiradas en el mejor brazo.",
+         "aprender": "Al azar pierde de forma lineal; ε-greedy explora un 10 % para siempre; Thompson explora mucho al principio y casi solo explota cuando ya sabe cuál es el mejor. Cuanto más parecidos son los brazos, más tarda en distinguirlos.",
+         "funciones": ["simular_bandido", "grafico_bandido", "ab_bayesiano"],
+         "conceptos": ["c_bandidos_multibrazo"]},
+    ]),
+    ("Multivariante", "Reducir y agrupar datos", [
+        {"id": "demo_pca", "nombre": "PCA: los ejes de máxima varianza",
+         "desc": "Una nube de puntos con dos variables: mueve la correlación y la desviación relativa y mira los ejes de las dos componentes principales y la varianza que explica cada una.",
+         "aprender": "Con correlación alta la nube se alarga y PC1 recoge casi toda la varianza (una variable basta); con correlación 0 y desviaciones iguales no hay dirección preferente y PCA no reduce nada.",
+         "funciones": ["pca_completo", "proyeccion_pca", "grafico_clusters_pca"],
+         "conceptos": ["c_analisis_de_componentes_principales_pca", "c_reduccion_de_datos_y_agrupamiento_de_variables", "c_regresion_por_componentes_principales_y_pls"]},
+        {"id": "demo_kmeans", "nombre": "K-means: cuántos grupos",
+         "desc": "Tres grupos simulados: elige k y la separación real; mira los grupos, la inercia (codo) y el silhouette para k = 1..6.",
+         "aprender": "K-means siempre devuelve k grupos, haya o no estructura. Con grupos bien separados la inercia deja de bajar de golpe en k = 3 y el silhouette es máximo ahí; con grupos mezclados no hay codo y el silhouette es bajo.",
+         "funciones": ["ajustar_kmeans", "buscar_k_silhouette", "grafico_clusters_pca"],
+         "conceptos": ["c_k_means"]},
+    ]),
+    ("Riesgo", "Colas y pérdidas extremas", [
+        {"id": "demo_var", "nombre": "VaR y TVaR: la cola importa",
+         "desc": "Tres distribuciones de pérdida con la misma media y dispersión (normal, lognormal, Pareto): compara el VaR y el TVaR según el nivel de confianza y el coeficiente de variación.",
+         "aprender": "Con la misma media y desviación, la cola cambia el riesgo: el VaR solo marca el umbral, el TVaR promedia lo que se pierde al superarlo. Con cola pesada (Pareto) el TVaR se aleja mucho más del VaR y la normal infravalora el riesgo extremo.",
+         "funciones": ["var_tvar"],
+         "conceptos": ["c_value_at_risk_var", "c_tvar_y_medidas_coherentes_de_riesgo", "c_teoria_de_valores_extremos", "c_distribuciones_con_colas_pesadas"]},
     ]),
 ]
 DOCS = {
@@ -2376,7 +2412,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "0.11.7"
+version = "0.12.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -2424,6 +2460,9 @@ patsy
 matplotlib>=3.7
 pytest
 :::END
+:::BEGIN py/x.tag|text
+
+:::END
 :::BEGIN py/arbol_estadistica/__init__.py|text
 """Arbol de la estadística: funciones estadísticas reutilizables (origen en trabajos de consultoría; máster).
 
@@ -2436,7 +2475,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "0.11.7"
+__version__ = "0.12.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -28641,6 +28680,74 @@ def datos_multi():
     df["clase"] = np.array(["base", "media", "alta"])[(u > p.cumsum(axis=1)).sum(axis=1).clip(0, 2)]
     return df
 :::END
+:::BEGIN py/tests/demos_stub.js|text
+// Prueba sin navegador de las demos del visor: carga visor/demos.js con un DOM mínimo, ejecuta cada demo,
+// pulsa todos los botones, mueve todos los deslizadores y cambia todos los selectores.
+// Falla si algo lanza una excepción o si se pinta NaN / undefined / Infinity. Uso: node demos_stub.js <ruta a demos.js>
+const fs = require('fs'), vm = require('vm');
+
+const temporizadores = [];
+function El(tag) {
+  const e = {tag, children: [], attrs: {}, listeners: {}, style: {}, isConnected: true, _text: '', _v: undefined, checked: false};
+  e.setAttribute = (k, v) => { e.attrs[k] = String(v); };
+  e.getAttribute = (k) => e.attrs[k];
+  e.appendChild = (c) => { e.children.push(c); return c; };
+  e.removeChild = (c) => { e.children = e.children.filter((x) => x !== c); return c; };
+  e.addEventListener = (t, f) => { (e.listeners[t] = e.listeners[t] || []).push(f); };
+  e.close = () => {};
+  Object.defineProperty(e, 'firstChild', {get: () => e.children[0] || null});
+  Object.defineProperty(e, 'lastChild', {get: () => e.children[e.children.length - 1] || null});
+  Object.defineProperty(e, 'textContent', {get: () => e._text, set: (v) => { e._text = String(v); e.children = []; }});
+  Object.defineProperty(e, 'value', {
+    get: () => (e._v !== undefined ? e._v : (tag === 'select' ? (e.children[0] || {attrs: {}}).attrs.value : e.attrs.value)),
+    set: (v) => { e._v = String(v); }});
+  return e;
+}
+const documento = {createElement: El, createElementNS: (ns, t) => El(t), createTextNode: (t) => ({text: String(t)})};
+const ctx = vm.createContext({document: documento, window: {}, console, Math, Date, Object, Array, String, Number, isFinite, isNaN, parseInt, parseFloat, JSON,
+  Float32Array, Float64Array, Int16Array, Uint8Array, Uint32Array,
+  setInterval: (f) => { temporizadores.push(f); return temporizadores.length; }, clearInterval: () => {}});
+vm.runInContext(fs.readFileSync(process.argv[2], 'utf8') + '\n;this.DEMOS = DEMOS;', ctx);
+const DEMOS = ctx.DEMOS;
+
+function recorrer(e, f) { f(e); (e.children || []).forEach((c) => c.tag && recorrer(c, f)); }
+function disparar(e, tipo) { (e.listeners[tipo] || []).forEach((f) => f({target: e, preventDefault() {}})); }
+function malos(raiz, nombre) {
+  const out = [];
+  recorrer(raiz, (e) => { for (const k in e.attrs) if (/NaN|undefined|Infinity/.test(e.attrs[k])) out.push(`${nombre}: <${e.tag} ${k}="${e.attrs[k].slice(0, 60)}">`);
+    if (/NaN|undefined/.test(e._text)) out.push(`${nombre}: texto «${e._text.slice(0, 60)}»`);
+    (e.children || []).forEach((c) => { if (c.text && /NaN|undefined/.test(c.text)) out.push(`${nombre}: texto «${c.text.slice(0, 60)}»`); }); });
+  return out;
+}
+
+const problemas = [];
+const nombres = Object.keys(DEMOS).filter((k) => k[0] !== '_');
+for (const nombre of nombres) {
+  const cont = El('div');
+  try {
+    DEMOS[nombre](cont, {});
+    const todos = [];
+    recorrer(cont, (e) => todos.push(e));
+    todos.filter((e) => e.tag === 'button').forEach((b) => { disparar(b, 'click'); temporizadores.splice(0).slice(0, 1).forEach((f) => { for (let i = 0; i < 5; i++) f(); }); disparar(b, 'click'); });
+    todos.filter((e) => e.tag === 'input' && e.attrs.type === 'range').forEach((i) => {
+      const mn = +i.attrs.min, mx = +i.attrs.max, st = +i.attrs.step || 1, ajusta = (v) => mn + Math.round((v - mn) / st) * st;
+      for (const v of [mn, mx, ajusta((mn + mx) / 2)]) { i._v = String(v); disparar(i, 'input'); } });
+    todos.filter((e) => e.tag === 'input' && e.attrs.type === 'checkbox').forEach((i) => { i.checked = true; disparar(i, 'change'); });
+    todos.filter((e) => e.tag === 'select').forEach((s) => s.children.forEach((o) => { s._v = o.attrs.value; disparar(s, 'change'); }));
+    problemas.push(...malos(cont, nombre));
+  } catch (err) { problemas.push(`${nombre}: EXCEPCIÓN ${err.stack.split('\n').slice(0, 3).join(' | ')}`); }
+}
+// Con un tercer argumento (nombres separados por comas) imprime la lectura numérica de esas demos con sus valores iniciales.
+if (process.argv[3]) for (const n of process.argv[3].split(',')) {
+  const c = El('div'); DEMOS[n](c, {}); const out = [];
+  (function pulsa(e) { if (e.tag === 'button' && e._text === '+1000') for (let i = 0; i < 5; i++) disparar(e, 'click'); e.children.forEach((x) => x.tag && pulsa(x)); })(c);   // 5000 pasos
+  (function rec(e) { if (e.attrs.class === 'dm-lect') e.children.forEach((ln) => out.push(ln.children.map((x) => (x.text !== undefined ? x.text : x._text)).join('')));
+    e.children.forEach((x) => x.tag && rec(x)); })(c);
+  console.log(n + ' =>', out);
+}
+console.log(`${nombres.length} demos ejecutadas`);
+if (problemas.length) { console.log(problemas.slice(0, 15).join('\n')); process.exit(1); }
+:::END
 :::BEGIN py/tests/test_actuarial.py|text
 """Rama actuarial (0.9): identidades actuariales exactas y resultados publicados (Taylor-Ashe / Mack)."""
 import numpy as np
@@ -29044,6 +29151,23 @@ def test_el_ejemplo_del_concepto_se_ejecuta_y_dibuja(concepto):
         assert not r["error"], f"{concepto}, celda {i}: {r['error']}"
         imagenes += len(r["imagenes"])
     assert imagenes >= 1
+:::END
+:::BEGIN py/tests/test_demos_js.py|text
+"""Las demos del visor (visor/demos.js) se ejecutan sin navegador con un DOM mínimo: sin excepciones ni NaN."""
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+AQUI = Path(__file__).resolve().parent
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="hace falta Node.js")
+def test_demos_se_ejecutan_sin_errores():
+    r = subprocess.run(["node", str(AQUI / "demos_stub.js"), str(AQUI.parent / "visor" / "demos.js")],
+                       capture_output=True, text=True, encoding="utf-8", timeout=120)
+    assert r.returncode == 0, r.stdout + r.stderr
 :::END
 :::BEGIN py/tests/test_descriptiva.py|text
 """Descriptiva: casos donde la teoría da la respuesta."""
@@ -32225,6 +32349,274 @@ D.demo_dist_galeria = function (cont) {
   ht('div', {'class': 'dm-nota'}, cont, 'La línea vertical es la media. Para ver cómo cada una se va dibujando al acumular datos usa «Se dibujan al añadir datos», y para mover sus parámetros el «Explorador de distribuciones».');
 };
 
+
+/* ================= 12. MCMC: el algoritmo de Metropolis ================= */
+D.demo_mcmc = function (cont) {
+  var NMAX = 20000, NB = 40, R = 10;
+  var ctr = ht('div', {'class': 'dm-ctrls'}, cont), bots = ht('div', {'class': 'dm-bots'}, cont);
+  var cD = control(ctr, {etq: 'Separación de los dos picos', min: 0, max: 8, paso: 0.5, valor: 5, fmt: function (v) { return v.toFixed(1); }}, reiniciar);
+  var cS = control(ctr, {etq: 'Tamaño del salto (desv. típica)', min: 0.05, max: 6, paso: 0.05, valor: 0.6, fmt: function (v) { return v.toFixed(2); }}, reiniciar);
+  var cX = control(ctr, {etq: 'Punto de partida', min: -8, max: 8, paso: 0.5, valor: -4, fmt: function (v) { return v.toFixed(1); }}, reiniciar);
+  var L1 = Lienzo(cont, {h: 190, aria: 'Histograma de la cadena y distribución objetivo'});
+  var L2 = Lienzo(cont, {h: 120, aria: 'Traza de la cadena'});
+  leyenda(cont, [['dm-k1', 'cadena (histograma)'], ['dm-k2', 'distribución objetivo'], ['dm-km', 'centro de cada pico']]);
+  var lec = lectura(cont), d, s, rnd, x, n, acep, cuentas, traza, timer = null, bPlay;
+  function objetivo(v) { return 0.5 * npdf(v, -d / 2, 1) + 0.5 * npdf(v, d / 2, 1); }
+  function parar() { if (timer) { clearInterval(timer); timer = null; } if (bPlay) bPlay.textContent = '▶ Reproducir'; }
+  function reiniciar() {
+    parar(); d = cD.valor(); s = cS.valor(); rnd = semilla(42); x = cX.valor(); n = 0; acep = 0; traza = [];
+    cuentas = []; for (var i = 0; i < NB; i++) cuentas.push(0); pintar();
+  }
+  function añadir(k) {
+    k = Math.min(k, NMAX - n);
+    for (var i = 0; i < k; i++) {
+      var y = x + s * normal(rnd);
+      if (rnd() < objetivo(y) / objetivo(x)) { x = y; acep++; }
+      n++; traza.push(x);
+      var j = Math.floor((x + R) / (2 * R) * NB); if (j >= 0 && j < NB) cuentas[j]++;
+    }
+    pintar(); if (n >= NMAX) parar();
+  }
+  function pintar() {
+    var bw = 2 * R / NB, i, h = cuentas.map(function (c) { return n ? c / (n * bw) : 0; });
+    var xs = [], ys = []; for (i = 0; i <= 300; i++) { var v = -R + 2 * R * i / 300; xs.push(v); ys.push(objetivo(v)); }
+    var top = Math.max(Math.max.apply(null, ys), Math.max.apply(null, h)) * 1.1;
+    L1.nuevo([-R, R], [0, top], {xl: 'x', ny: 3});
+    var capa = L1.capa();
+    h.forEach(function (hv, j) { var x0 = L1.sx(-R + j * bw), x1 = L1.sx(-R + (j + 1) * bw);
+      sv('rect', {x: x0, y: L1.sy(hv), width: Math.max(x1 - x0 - 1, 0.5), height: Math.max(L1.sy(0) - L1.sy(hv), 0), 'class': 'dm-f1 dm-op60'}, capa); });
+    L1.linea(xs, ys, 'dm-l2'); L1.vline(-d / 2, 'dm-lm'); if (d > 0) L1.vline(d / 2, 'dm-lm');
+    L1.texto(L1.m.l + 6, L1.m.t + 11, 'n = ' + n, {'class': 'dm-txt'});
+    L2.nuevo([0, Math.max(n, 100)], [-R, R], {xl: 'iteración', ny: 4});
+    L2.linea([0, Math.max(n, 100)], [-d / 2, -d / 2], 'dm-lm'); if (d > 0) L2.linea([0, Math.max(n, 100)], [d / 2, d / 2], 'dm-lm');
+    if (n) { var paso = Math.max(1, Math.floor(n / 500)), px = [], py = []; for (i = 0; i < n; i += paso) { px.push(i); py.push(traza[i]); } L2.linea(px, py, 'dm-l3'); }
+    var m = 0, der = 0; for (i = 0; i < n; i++) { m += traza[i]; if (traza[i] > 0) der++; } m = n ? m / n : NaN;
+    var rho = 0; if (n > 10) { var c0 = 0, c1 = 0; for (i = 0; i < n; i++) { c0 += (traza[i] - m) * (traza[i] - m); if (i + 1 < n) c1 += (traza[i] - m) * (traza[i + 1] - m); } rho = c0 > 0 ? c1 / c0 : 0; }
+    var ess = n > 10 && rho > 0 ? n * (1 - rho) / (1 + rho) : n, ta = n ? acep / n : NaN, aviso = '';
+    if (n > 50 && ta < 0.15) aviso = 'El salto es demasiado grande: casi todas las propuestas se rechazan y la cadena se queda quieta.';
+    else if (n > 50 && ta > 0.8) aviso = 'El salto es muy pequeño: se acepta casi todo, pero la cadena avanza despacio (autocorrelación alta, pocas muestras efectivas).';
+    if (d >= 4 && n > 500 && (der / n < 0.1 || der / n > 0.9)) aviso = 'La cadena se ha quedado en un solo pico: parece que todo va bien, pero no ha explorado la distribución. Prueba con más saltos, otro punto de partida o varias cadenas.';
+    escribir(lec, [['n = ', [String(n)], ' · aceptación ', [n ? pct(ta, 0) : '—'], ' · muestras efectivas ≈ ', [n > 10 ? f(ess, 0) : '—'], ' · en el pico derecho ', [n ? pct(der / n, 0) : '—'], ' (teórico 50 %)'],
+      [aviso || 'Aceptación entre el 20 % y el 50 % suele ser un buen equilibrio. Con n grande, el histograma se parece a la curva naranja.']]);
+  }
+  boton(bots, '+10', function () { parar(); añadir(10); }); boton(bots, '+100', function () { parar(); añadir(100); });
+  boton(bots, '+1000', function () { parar(); añadir(1000); });
+  bPlay = boton(bots, '▶ Reproducir', function () {
+    if (timer) { parar(); return; } if (n >= NMAX) reiniciar();
+    bPlay.textContent = '❚❚ Pausar';
+    timer = setInterval(function () { if (!cont.isConnected) { parar(); return; } añadir(Math.ceil(5 + n * 0.04)); }, 90); });
+  boton(bots, 'Reiniciar', reiniciar);
+  reiniciar();
+};
+
+/* ================= 13. Cadenas de Markov ================= */
+D.demo_markov = function (cont) {
+  var PRESETS = {
+    clima: {t: 'Tiempo: soleado / nublado / lluvia', e: ['Soleado', 'Nublado', 'Lluvia'], B: [[.7, .2, .1], [.3, .4, .3], [.2, .3, .5]]},
+    bonus: {t: 'Bonus-malus (3 niveles)', e: ['Bonus', 'Medio', 'Malus'], B: [[.9, .1, 0], [.9, 0, .1], [0, .9, .1]]},
+    absorbente: {t: 'Con un estado absorbente', e: ['Absorbente', 'A', 'B'], B: [[1, 0, 0], [.3, .4, .3], [.1, .4, .5]]}
+  };
+  var T = 40;
+  var ctr = ht('div', {'class': 'dm-ctrls'}, cont), bots = ht('div', {'class': 'dm-bots'}, cont);
+  var sP = selector(ctr, 'Cadena', Object.keys(PRESETS).map(function (k) { return {v: k, t: PRESETS[k].t}; }), 'clima', function () { pintar(); });
+  var sI = selector(ctr, 'Estado inicial', [{v: 0, t: 'estado 1'}, {v: 1, t: 'estado 2'}, {v: 2, t: 'estado 3'}], 0, function () { pintar(); });
+  var cQ = control(ctr, {etq: 'Persistencia (prob. extra de quedarse)', min: 0, max: 0.95, paso: 0.05, valor: 0, fmt: function (v) { return v.toFixed(2); }}, pintar);
+  var cT = control(ctr, {etq: 'Paso t', min: 0, max: T, paso: 1, valor: 5, fmt: function (v) { return String(v); }}, pintar);
+  var L1 = Lienzo(cont, {h: 170, aria: 'Probabilidad de cada estado según el paso'});
+  var L2 = Lienzo(cont, {h: 110, aria: 'Distribución en el paso t frente a la estacionaria'});
+  leyenda(cont, [['dm-k1', 'estado 1'], ['dm-k2', 'estado 2'], ['dm-k3', 'estado 3'], ['dm-km', 'paso t']]);
+  var lec = lectura(cont), emp = null, rnd = semilla(42), CL = ['dm-f1', 'dm-f2', 'dm-f3'], LN = ['dm-l1', 'dm-l2', 'dm-l3'];
+  function matriz() { var B = PRESETS[sP.valor()].B, q = cQ.valor();
+    return B.map(function (fila, i) { return fila.map(function (v, j) { return q * (i === j ? 1 : 0) + (1 - q) * v; }); }); }
+  function paso(p, P) { var r = [0, 0, 0]; for (var i = 0; i < 3; i++) for (var j = 0; j < 3; j++) r[j] += p[i] * P[i][j]; return r; }
+  function pintar() {
+    var P = matriz(), e0 = [0, 0, 0]; e0[+sI.valor()] = 1; var tray = [e0], i, j;
+    for (i = 1; i <= 400; i++) tray.push(paso(tray[i - 1], P));
+    var pi = tray[400], t = cT.valor(), hasta = null;
+    for (i = 0; i <= 400 && hasta === null; i++) if (Math.max(Math.abs(tray[i][0] - pi[0]), Math.abs(tray[i][1] - pi[1]), Math.abs(tray[i][2] - pi[2])) < 0.01) hasta = i;
+    L1.nuevo([0, T], [0, 1.02], {xl: 'paso', ny: 4});
+    for (j = 0; j < 3; j++) { var xs = [], ys = []; for (i = 0; i <= T; i++) { xs.push(i); ys.push(tray[i][j]); } L1.linea(xs, ys, LN[j]);
+      sv('circle', {cx: L1.sx(T), cy: L1.sy(pi[j]), r: 3.5, 'class': CL[j] + ' dm-anillo'}, L1.svg); }
+    L1.vline(t, 'dm-lm');
+    L2.nuevo([-0.6, 2.6], [0, 1.02], {ny: 2, nx: 3, x: false});
+    var capa = L2.capa();
+    for (j = 0; j < 3; j++) { var v = tray[t][j], x0 = L2.sx(j - 0.3), x1 = L2.sx(j + 0.3);
+      sv('rect', {x: x0, y: L2.sy(v), width: x1 - x0, height: Math.max(L2.sy(0) - L2.sy(v), 0), 'class': CL[j] + ' dm-op60'}, capa);
+      sv('circle', {cx: L2.sx(j), cy: L2.sy(pi[j]), r: 4, 'class': 'dm-fm dm-anillo'}, capa);
+      L2.texto(L2.sx(j), L2.H - L2.m.b + 13, PRESETS[sP.valor()].e[j], {'class': 'dm-tick', 'text-anchor': 'middle'}); }
+    var fila = function (r) { return r.map(function (v) { return v.toFixed(2); }).join('  '); };
+    escribir(lec, [['Paso ', [String(t)], ': ', [fila(tray[t])], '  ·  estacionaria π (puntos grises): ', [fila(pi)]],
+      ['Filas de P: ' + P.map(fila).join('  |  ')],
+      [hasta === null ? 'La cadena no converge a una distribución única desde ese estado.' : 'Llega a menos de 0,01 de π en ' + hasta + ' pasos. La persistencia solo cambia la VELOCIDAD: π es la misma.']]);
+  }
+  boton(bots, 'Simular 1000 pasos', function () {
+    var P = matriz(), s = +sI.valor(), c = [0, 0, 0];
+    for (var k = 0; k < 1000; k++) { c[s]++; var u = rnd(), a = 0, nx = 2; for (var j = 0; j < 3; j++) { a += P[s][j]; if (u < a) { nx = j; break; } } s = nx; }
+    pintar(); emp = c.map(function (v) { return v / 1000; });
+    var linea = ht('div', {}, lec); linea.textContent = 'Frecuencia observada en 1000 pasos: ' + emp.map(function (v) { return v.toFixed(2); }).join('  ') + ' (≈ π: la cadena pasa en cada estado la fracción de tiempo que dice π).'; });
+  pintar();
+};
+
+/* ================= 14. PCA ================= */
+D.demo_pca = function (cont) {
+  var N = 300, ctr = ht('div', {'class': 'dm-ctrls'}, cont);
+  var cR = control(ctr, {etq: 'Correlación entre X1 y X2', min: -0.95, max: 0.95, paso: 0.05, valor: 0.8, fmt: function (v) { return v.toFixed(2); }}, pintar);
+  var cS = control(ctr, {etq: 'Desviación de X2 / X1', min: 0.2, max: 2, paso: 0.1, valor: 1, fmt: function (v) { return v.toFixed(1); }}, pintar);
+  var L1 = Lienzo(cont, {h: 230, aria: 'Nube de puntos con los ejes de componentes principales'});
+  var L2 = Lienzo(cont, {h: 90, aria: 'Varianza explicada por componente'});
+  leyenda(cont, [['dm-k1', 'PC1 (más varianza)'], ['dm-k2', 'PC2']]);
+  var lec = lectura(cont), rnd = semilla(42), z1 = [], z2 = [], i;
+  for (i = 0; i < N; i++) { z1.push(normal(rnd)); z2.push(normal(rnd)); }
+  function pintar() {
+    var r = cR.valor(), sg = cS.valor(), X = [], Y = [], mx = 0, my = 0;
+    for (i = 0; i < N; i++) { X.push(z1[i]); Y.push(sg * (r * z1[i] + Math.sqrt(1 - r * r) * z2[i])); mx += X[i]; my += Y[i]; } mx /= N; my /= N;
+    var a = 0, b = 0, c = 0; for (i = 0; i < N; i++) { a += (X[i] - mx) * (X[i] - mx); b += (X[i] - mx) * (Y[i] - my); c += (Y[i] - my) * (Y[i] - my); } a /= N - 1; b /= N - 1; c /= N - 1;
+    var tr = a + c, dt = Math.sqrt((a - c) * (a - c) / 4 + b * b), l1 = tr / 2 + dt, l2 = tr / 2 - dt, ang = 0.5 * Math.atan2(2 * b, a - c);
+    var lim = 4.2; L1.nuevo([-lim, lim], [-lim, lim], {xl: 'X1', yl: 'X2', ny: 4, nx: 4});
+    var capa = L1.capa(); for (i = 0; i < N; i++) sv('circle', {cx: L1.sx(X[i]), cy: L1.sy(Y[i]), r: 2, 'class': 'dm-f1 dm-op35'}, capa);
+    var e1 = 2 * Math.sqrt(l1), e2 = 2 * Math.sqrt(Math.max(l2, 0));
+    L1.linea([mx - e1 * Math.cos(ang), mx + e1 * Math.cos(ang)], [my - e1 * Math.sin(ang), my + e1 * Math.sin(ang)], 'dm-l2');
+    L1.linea([mx + e2 * Math.sin(ang), mx - e2 * Math.sin(ang)], [my - e2 * Math.cos(ang), my + e2 * Math.cos(ang)], 'dm-l3');
+    L2.nuevo([-0.6, 1.6], [0, 1.05], {ny: 2, nx: 2, x: false}); var cp = L2.capa();
+    [l1 / tr, l2 / tr].forEach(function (v, j) { var x0 = L2.sx(j - 0.3), x1 = L2.sx(j + 0.3);
+      sv('rect', {x: x0, y: L2.sy(v), width: x1 - x0, height: Math.max(L2.sy(0) - L2.sy(v), 0), 'class': j ? 'dm-f3' : 'dm-f2'}, cp);
+      L2.texto(L2.sx(j), L2.sy(v) - 4, pct(v, 0), {'class': 'dm-txt', 'text-anchor': 'middle'}, cp);
+      L2.texto(L2.sx(j), L2.H - L2.m.b + 13, 'PC' + (j + 1), {'class': 'dm-tick', 'text-anchor': 'middle'}, cp); });
+    escribir(lec, [['PC1 explica ', [pct(l1 / tr, 1)], ' de la varianza total y PC2 ', [pct(l2 / tr, 1)], ' · ángulo de PC1: ', [f(ang * 180 / Math.PI, 0) + '°']],
+      [l1 / tr > 0.9 ? 'Casi toda la información está en una dirección: una sola componente resume bien las dos variables.'
+        : l1 / tr < 0.6 ? 'Las dos direcciones pesan parecido: reducir a una componente perdería mucha información.' : 'Una componente conserva la mayor parte, pero no todo.'],
+      ['PCA busca los ejes de máxima varianza: con correlación alta la nube se alarga y PC1 la sigue; con correlación 0 y desviaciones iguales no hay dirección preferente.']]);
+  }
+  pintar();
+};
+
+/* ================= 15. K-means ================= */
+D.demo_kmeans = function (cont) {
+  var N = 240, KMAX = 6, COL = ['#3987e5', '#d95926', '#199e70', '#c8a415', '#9b59b6', '#e0457b'];
+  var ctr = ht('div', {'class': 'dm-ctrls'}, cont);
+  var cK = control(ctr, {etq: 'Número de grupos k', min: 1, max: KMAX, paso: 1, valor: 3, fmt: function (v) { return String(v); }}, pintar);
+  var cS = control(ctr, {etq: 'Separación de los 3 grupos reales', min: 0.5, max: 6, paso: 0.25, valor: 4, fmt: function (v) { return v.toFixed(2); }}, pintar);
+  var L1 = Lienzo(cont, {h: 220, aria: 'Puntos coloreados por grupo y centroides'});
+  var L2 = Lienzo(cont, {h: 110, aria: 'Inercia y silhouette según k'});
+  leyenda(cont, [['dm-k1', 'inercia (relativa a k = 1)'], ['dm-k2', 'silhouette medio']]);
+  var lec = lectura(cont), rnd = semilla(42), Z = [], i;
+  for (i = 0; i < N; i++) Z.push([normal(rnd), normal(rnd), i % 3]);
+  function datos(s) { var C = [[0, 0], [s, 0], [s / 2, s * 0.87]]; return Z.map(function (z) { return [z[0] + C[z[2]][0], z[1] + C[z[2]][1]]; }); }
+  function d2(a, b) { return (a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]); }
+  function kmeans(X, k) {                       /* k-means++ determinista + Lloyd */
+    var r = semilla(42), cen = [X[Math.floor(r() * X.length)]], j, e;
+    while (cen.length < k) { var w = X.map(function (p) { return Math.min.apply(null, cen.map(function (c) { return d2(p, c); })); }), tot = w.reduce(function (a, b) { return a + b; }, 0), u = r() * tot, acu = 0, el = 0;
+      for (j = 0; j < w.length; j++) { acu += w[j]; if (acu >= u) { el = j; break; } } cen.push(X[el]); }
+    var lab = X.map(function () { return 0; });
+    for (var it = 0; it < 60; it++) {
+      var cambio = false; X.forEach(function (p, m) { var mj = 0, md = Infinity; cen.forEach(function (c, q) { var dd = d2(p, c); if (dd < md) { md = dd; mj = q; } }); if (lab[m] !== mj) { lab[m] = mj; cambio = true; } });
+      cen = cen.map(function (c, q) { var sx = 0, sy = 0, nn = 0; X.forEach(function (p, m) { if (lab[m] === q) { sx += p[0]; sy += p[1]; nn++; } }); return nn ? [sx / nn, sy / nn] : c; });
+      if (!cambio) break; }
+    var ine = 0; X.forEach(function (p, m) { ine += d2(p, cen[lab[m]]); });
+    return {lab: lab, cen: cen, ine: ine};
+  }
+  function silhouette(X, lab, k) {
+    if (k < 2) return NaN; var s = 0;
+    for (var m = 0; m < X.length; m++) { var sum = [], cnt = []; for (var q = 0; q < k; q++) { sum.push(0); cnt.push(0); }
+      for (var o = 0; o < X.length; o++) if (o !== m) { sum[lab[o]] += Math.sqrt(d2(X[m], X[o])); cnt[lab[o]]++; }
+      var a = cnt[lab[m]] ? sum[lab[m]] / cnt[lab[m]] : 0, b = Infinity; for (q = 0; q < k; q++) if (q !== lab[m] && cnt[q]) b = Math.min(b, sum[q] / cnt[q]);
+      s += isFinite(b) ? (b - a) / Math.max(a, b) : 0; }
+    return s / X.length;
+  }
+  function pintar() {
+    var X = datos(cS.valor()), k = cK.valor(), res = [], sil = [], j;
+    for (j = 1; j <= KMAX; j++) { var r = kmeans(X, j); res.push(r); sil.push(silhouette(X, r.lab, j)); }
+    var lim = 10; L1.nuevo([-4, lim], [-4, lim], {ny: 4, nx: 5}); var capa = L1.capa(), a = res[k - 1];
+    X.forEach(function (p, m) { sv('circle', {cx: L1.sx(p[0]), cy: L1.sy(p[1]), r: 2.4, fill: COL[a.lab[m]], 'fill-opacity': 0.6}, capa); });
+    a.cen.forEach(function (c) { sv('circle', {cx: L1.sx(c[0]), cy: L1.sy(c[1]), r: 6, fill: '#ffffff', stroke: '#000000', 'stroke-width': 2}, capa); });
+    L2.nuevo([0.5, KMAX + 0.5], [0, 1.05], {ny: 2, nx: KMAX, xl: 'k'});
+    L2.linea(res.map(function (_, q) { return q + 1; }), res.map(function (q) { return q.ine / res[0].ine; }), 'dm-l1');
+    var xs2 = [], ys2 = []; for (j = 2; j <= KMAX; j++) { xs2.push(j); ys2.push(Math.max(sil[j - 1], 0)); } L2.linea(xs2, ys2, 'dm-l2'); L2.vline(k, 'dm-lm');
+    var mejor = 2; for (j = 3; j <= KMAX; j++) if (sil[j - 1] > sil[mejor - 1]) mejor = j;
+    escribir(lec, [['k = ', [String(k)], ' · inercia ', [pct(a.ine / res[0].ine, 0)], ' de la de k = 1 · silhouette ', [k > 1 ? f(sil[k - 1], 2) : '—'], ' · mejor k por silhouette: ', [String(mejor)]],
+      [sil[mejor - 1] < 0.4 ? 'Grupos poco separados: el silhouette es bajo y la inercia baja sin «codo». K-means siempre devuelve k grupos, haya o no estructura real.'
+        : 'Con grupos separados, la inercia deja de bajar de golpe en k = 3 (el «codo») y el silhouette tiene su máximo ahí.']]);
+  }
+  pintar();
+};
+
+/* ================= 16. Bandidos multibrazo ================= */
+D.demo_bandido = function (cont) {
+  var NMAX = 3000, ctr = ht('div', {'class': 'dm-ctrls'}, cont), bots = ht('div', {'class': 'dm-bots'}, cont);
+  var cp = [0.3, 0.5, 0.6].map(function (v, q) { return control(ctr, {etq: 'Probabilidad real del brazo ' + (q + 1), min: 0.05, max: 0.95, paso: 0.05, valor: v, fmt: function (x) { return x.toFixed(2); }}, reiniciar); });
+  var L1 = Lienzo(cont, {h: 170, aria: 'Arrepentimiento acumulado (regret) de cada estrategia'});
+  var L2 = Lienzo(cont, {h: 100, aria: 'Porcentaje de tiradas en el mejor brazo'});
+  leyenda(cont, [['dm-k1', 'al azar'], ['dm-k2', 'ε-greedy (10 %)'], ['dm-k3', 'Thompson']]);
+  var lec = lectura(cont), NOM = ['al azar', 'ε-greedy', 'Thompson'], p, rnd, E, n, timer = null, bPlay;
+  function parar() { if (timer) { clearInterval(timer); timer = null; } if (bPlay) bPlay.textContent = '▶ Reproducir'; }
+  function reiniciar() {
+    parar(); p = cp.map(function (c) { return c.valor(); }); rnd = semilla(42); n = 0;
+    E = [0, 1, 2].map(function () { return {s: [0, 0, 0], f: [0, 0, 0], tir: [0, 0, 0], reg: [0], mej: [0]}; }); pintar();
+  }
+  function elegir(q, e) {
+    if (q === 0) return Math.floor(rnd() * 3);
+    if (q === 1) { if (rnd() < 0.1) return Math.floor(rnd() * 3); var m = 0, best = -1; for (var j = 0; j < 3; j++) { var t = e.tir[j] ? e.s[j] / e.tir[j] : 1; if (t > best) { best = t; m = j; } } return m; }
+    var m2 = 0, bv = -1; for (var j2 = 0; j2 < 3; j2++) { var v = MUESTRA.beta(rnd, [1 + e.s[j2], 1 + e.f[j2]]); if (v > bv) { bv = v; m2 = j2; } } return m2;
+  }
+  function añadir(k) {
+    k = Math.min(k, NMAX - n); var pm = Math.max.apply(null, p), mejor = p.indexOf(pm);
+    for (var i = 0; i < k; i++) { for (var q = 0; q < 3; q++) { var e = E[q], a = elegir(q, e), exito = rnd() < p[a];
+      e.tir[a]++; if (exito) e.s[a]++; else e.f[a]++; e.reg.push(e.reg[e.reg.length - 1] + pm - p[a]); e.mej.push(e.tir[mejor] / (e.reg.length - 1)); } n++; }
+    pintar(); if (n >= NMAX) parar();
+  }
+  function pintar() {
+    var T = Math.max(n, 100), top = Math.max(1, Math.max.apply(null, E.map(function (e) { return e.reg[e.reg.length - 1]; })) * 1.1), cls = ['dm-l1', 'dm-l2', 'dm-l3'];
+    L1.nuevo([0, T], [0, top], {xl: 'tirada', yl: 'arrepentimiento', ny: 3});
+    L2.nuevo([0, T], [0, 1.02], {xl: 'tirada', yl: '% mejor brazo', ny: 2});
+    E.forEach(function (e, q) { var paso = Math.max(1, Math.floor(n / 400)), xs = [], ys = [], zs = [];
+      for (var i = 0; i <= n; i += paso) { xs.push(i); ys.push(e.reg[i]); zs.push(i ? e.mej[i] : 0); } if (xs.length > 1) { L1.linea(xs, ys, cls[q]); L2.linea(xs, zs, cls[q]); } });
+    var pm = Math.max.apply(null, p), mejor = p.indexOf(pm);
+    escribir(lec, [['Tiradas: ', [String(n)], ' · mejor brazo: el ', [String(mejor + 1)], ' (p = ' + pm.toFixed(2) + ')'],
+      [E.map(function (e, q) { return NOM[q] + ': arrepentimiento ' + f(e.reg[e.reg.length - 1], 1) + ', ' + (n ? pct(e.tir[mejor] / n, 0) : '—') + ' en el mejor'; }).join('  ·  ')],
+      ['El arrepentimiento (regret) es lo que se pierde por no tirar siempre del mejor brazo. Al azar crece en línea recta; ε-greedy sigue explorando un 10 % para siempre; Thompson explora mucho al principio y luego casi solo explota.']]);
+  }
+  boton(bots, '+100', function () { parar(); añadir(100); }); boton(bots, '+1000', function () { parar(); añadir(1000); });
+  bPlay = boton(bots, '▶ Reproducir', function () {
+    if (timer) { parar(); return; } if (n >= NMAX) reiniciar();
+    bPlay.textContent = '❚❚ Pausar';
+    timer = setInterval(function () { if (!cont.isConnected) { parar(); return; } añadir(Math.ceil(2 + n * 0.03)); }, 90); });
+  boton(bots, 'Reiniciar', reiniciar);
+  reiniciar();
+};
+
+/* ================= 17. VaR y TVaR: la cola importa ================= */
+D.demo_var = function (cont) {
+  var M = 100, ctr = ht('div', {'class': 'dm-ctrls'}, cont);
+  var sD = selector(ctr, 'Distribución de la pérdida', [{v: 'normal', t: 'Normal'}, {v: 'lognormal', t: 'Lognormal'}, {v: 'pareto', t: 'Pareto (cola pesada)'}], 'normal', function () { pintar(); });
+  var cA = control(ctr, {etq: 'Nivel de confianza', min: 0.9, max: 0.999, paso: 0.001, valor: 0.99, fmt: function (v) { return (100 * v).toFixed(1) + ' %'; }}, pintar);
+  var cC = control(ctr, {etq: 'Coef. de variación (σ / media)', min: 0.2, max: 0.8, paso: 0.05, valor: 0.4, fmt: function (v) { return v.toFixed(2); }}, pintar);
+  var L1 = Lienzo(cont, {h: 190, aria: 'Densidad de la pérdida con VaR y TVaR'});
+  leyenda(cont, [['dm-k1', 'densidad (misma media y desviación)'], ['dm-km', 'VaR'], ['dm-k2', 'TVaR (media de la cola)']]);
+  var lec = lectura(cont);
+  function modelo(k, cv) {
+    var sd = M * cv;
+    if (k === 'normal') return {pdf: function (x) { return npdf(x, M, sd); }, q: function (u) { return M + sd * qnorm(u); }};
+    if (k === 'lognormal') { var s2 = Math.log(1 + cv * cv), mu = Math.log(M) - s2 / 2, sl = Math.sqrt(s2);
+      return {pdf: function (x) { return x <= 0 ? 0 : npdf(Math.log(x), mu, sl) / x; }, q: function (u) { return Math.exp(mu + sl * qnorm(u)); }}; }
+    var a = 1 + Math.sqrt(1 + 1 / (cv * cv)), xm = M * (a - 1) / a;
+    return {pdf: function (x) { return x < xm ? 0 : a * Math.pow(xm, a) / Math.pow(x, a + 1); }, q: function (u) { return xm * Math.pow(1 - u, -1 / a); }, a: a};
+  }
+  function qnorm(u) { var lo = -9, hi = 9; for (var i = 0; i < 45; i++) { var m = (lo + hi) / 2; if (Phi(m) < u) lo = m; else hi = m; } return (lo + hi) / 2; }
+  function pintar() {
+    var cv = cC.valor(), al = cA.valor(), md = modelo(sD.valor(), cv), var_ = md.q(al), tv = 0, N = 2000, i;
+    for (i = 0; i < N; i++) tv += md.q(1 - (1 - al) * (i + 0.5) / N); tv /= N;
+    var xmax = Math.max(M * (1 + 6 * cv), tv * 1.15), xs = [], ys = [];
+    for (i = 0; i <= 400; i++) { var x = xmax * i / 400; xs.push(x); ys.push(md.pdf(x)); }
+    var top = Math.max.apply(null, ys.filter(isFinite)) * 1.1; L1.nuevo([0, xmax], [0, top], {xl: 'pérdida', ny: 3});
+    var yc = ys.map(function (y) { return Math.min(y, top); });
+    L1.area(xs, yc, 'dm-f1 dm-op35'); L1.area(xs, yc, 'dm-f2 dm-op60', function (x) { return x >= var_; }); L1.linea(xs, yc, 'dm-l1');
+    L1.vline(var_, 'dm-lm'); L1.vline(tv, 'dm-l2');
+    escribir(lec, [['VaR ', [pct(al, 1)], ' = ', [f(var_, 1)], ' · TVaR = ', [f(tv, 1)], ' · TVaR / VaR = ', [f(tv / var_, 2)]],
+      ['Las tres familias tienen la misma media (100) y casi la misma dispersión, pero la cola cambia el riesgo: el VaR solo dice «a partir de aquí», el TVaR dice cuánto se pierde de media cuando se supera. Con cola pesada la diferencia es mayor' + (md.a ? ' (α = ' + f(md.a, 2) + ').' : '.')]]);
+  }
+  pintar();
+};
+
 /* utilidades expuestas para las pruebas automáticas */
 D._estad = {tcdf: tcdf, tinv: tinv, Phi: Phi, colaNormal: colaNormal, potenciaT: potenciaT, nPara: nPara};
 return D;
@@ -34160,7 +34552,7 @@ arbol_estadistica
 (visor) mapa 3D: núcleo + ramas en órbita; arrastrar = girar, rueda = acercar, clic en una rama = entrar (py/visor/mapa3d.js)
 (visor) «Probar»: cada función con su ejemplo ejecutable por celdas (py/cuaderno/ejemplos.py; se ejecuta desde la app)
 (visor) fichas de propiedades: barras 0-10 por función y por módulo, perfil de proyecto (arriba) que pondera y ordena las alternativas, comparador
-(visor) «Cómo funciona»: 11 demos interactivas (distribuciones básicas animadas y en galería, t-test, potencia, FDR, IC, TCL, regresión, logística, censura)
+(visor) «Cómo funciona»: 17 demos interactivas (distribuciones básicas animadas y en galería, t-test, potencia, FDR, IC, TCL, regresión, logística, censura, MCMC, Markov, bandidos, PCA, K-means, VaR)
 ```
 
 ## Estructura de carpetas
@@ -34781,6 +35173,14 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 - Código genérico: **nada de nombres de negocio** (`tasa_fuga`, `policy_complement`…) ni datos de cliente
   (de ningún cliente). Los tests usan datos sintéticos.
 - Todo cambio lleva test en `py/tests/` (`python -m pytest -q py`, o `ejecutar_tests.bat`). Un test por comportamiento, con casos donde la teoría dé la respuesta.
+
+## Commits y versiones
+
+- **Un commit por entrega**, con la versión: `vX.Y.Z: resumen en una línea` (lo genera `herramientas/publicar.py`).
+- El resumen va en español, dice el **efecto** («el mapa 3D limita los enlaces a 120») y no el método, y cabe en ~70 caracteres.
+- **Versión:** parche (`0.11.7` → `0.11.8`) para arreglos, textos y ajustes de rendimiento o instalador; menor (`0.12.0`) para funciones, demos o ramas nuevas; mayor (`1.0.0`) cuando Mario decida que es estable.
+- Cambios que no tocan el programa (solo documentación) van como `docs: …`, sin subir versión ni regenerar instaladores.
+- Nunca `Co-Authored-By`. Nunca datos privados (`publicar.py` lo comprueba antes de hacer commit).
 
 ## Reglas de estilo heredadas de los agentes de Mario
 
