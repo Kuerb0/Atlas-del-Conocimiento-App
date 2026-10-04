@@ -5,7 +5,7 @@ no se deben reintroducir, la tabla «qué usar») están en `CLAUDE.md`, que Cla
 en `INDEX.md`. Este fichero explica **cómo trabajar**: entorno, comandos, el procedimiento para añadir una función y las
 trampas que ya han aparecido.
 
-Estado actual: **v0.14.0**.
+Estado actual: **v0.15.0**.
 - 14 ramas, 343 funciones con ficha y 580 tests en verde.
 - 348 de los 374 conceptos del catálogo tienen código. Los 26 restantes son de ámbito normativo y no se programan.
 
@@ -136,7 +136,7 @@ Hay **tests que fallan si falta cualquiera de estos pasos**: ficha, bench, ejemp
 - **Código de consultoría: cerrado**; no hay nada que revisar de ahí.
 - **Ampliar el catálogo:** Shorts de Very Normal y el temario real de Derivados, Fiscalidad, Seguridad Social y Derecho Bancario.
 - **Volver a medir las propiedades en el PC del usuario** (`medir_propiedades.bat`).
-- **Demos del visor** (`py/visor/demos.js` + `DEMOS` en `construir_visor.py`): hay 21 (distribuciones, MCMC, Markov, bandidos, PCA, K-means, VaR, diversificación, ruina, DiD, sobreajuste…) y faltan para ANOVA/diseño de experimentos, supervivencia avanzada, chain-ladder y otras ramas. `python`-free test: `py/tests/test_demos_js.py` las ejecuta con Node sin navegador.
+- **Demos del visor** (`py/visor/demos.js` + `DEMOS` en `construir_visor.py`): hay 25 (distribuciones, MCMC, Markov, bandidos, PCA, K-means, VaR, diversificación, ruina, DiD, sobreajuste…) y faltan para ANOVA/diseño de experimentos, supervivencia avanzada, chain-ladder y otras ramas. `python`-free test: `py/tests/test_demos_js.py` las ejecuta con Node sin navegador.
 
 ## 7. Cómo pedirle cosas a Claude Code
 

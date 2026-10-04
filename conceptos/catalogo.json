@@ -374,6 +374,42 @@
      "tipo": "manual",
      "ref": "MSDA · Probability",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 1: Espacios muestrales, definición ingenua de probabilidad, conteo",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-1"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 2: Bose-Einstein, pruebas con historias, axiomas de la probabilidad",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-2"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 3: Problema del cumpleaños, inclusión-exclusión",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-3"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 4: Independencia, probabilidad condicionada, regla de Bayes",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-4"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Bayes' theorem",
+     "base": "3Blue1Brown",
+     "url": "https://www.3blue1brown.com/?topic=probability#bayes"
+    },
+    {
+     "tipo": "curso",
+     "ref": "The medical test paradox, and redesigning Bayes' rule",
+     "base": "3Blue1Brown",
+     "url": "https://www.3blue1brown.com/?topic=probability#medical-test"
     }
    ]
   },
@@ -411,6 +447,12 @@
      "tipo": "manual",
      "ref": "MSDA · Limit Theorems",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "But what is the Central Limit Theorem?",
+     "base": "3Blue1Brown",
+     "url": "https://www.youtube.com/watch?v=zeJD6dqJ5lo"
     }
    ]
   },
@@ -453,6 +495,30 @@
      "tipo": "manual",
      "ref": "PSDS · Data and Sampling Distributions",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 13: Normal estándar y su constante de normalización",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-13"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 14: Distribución normal, tipificación y LOTUS",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-14"
+    },
+    {
+     "tipo": "curso",
+     "ref": "But what is the Central Limit Theorem?",
+     "base": "3Blue1Brown",
+     "url": "https://www.youtube.com/watch?v=zeJD6dqJ5lo"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Why π is in the normal distribution (beyond integral tricks)",
+     "base": "3Blue1Brown",
+     "url": "https://www.3blue1brown.com/?topic=probability#why-pi-normal"
     }
    ]
   },
@@ -475,6 +541,18 @@
      "tipo": "manual",
      "ref": "PSDS · Data and Sampling Distributions",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 7: Ruina del jugador, variables aleatorias, Bernoulli y binomial",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-7"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Binomial distributions | Probabilities of probabilities, part 1",
+     "base": "3Blue1Brown",
+     "url": "https://www.youtube.com/watch?v=8idr1WZ1A7Q"
     }
    ]
   },
@@ -505,6 +583,12 @@
      "tipo": "manual",
      "ref": "PSDS · Data and Sampling Distributions",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 11: Distribución de Poisson y aproximación de Poisson",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-11"
     }
    ]
   },
@@ -529,6 +613,12 @@
      "tipo": "master",
      "ref": "Simulación y modelos (2º) · Tema 7 · GLM de conteo",
      "base": "guía docente"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 10: Linealidad de la esperanza, binomial negativa",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-10"
     }
    ]
   },
@@ -546,6 +636,12 @@
      "tipo": "master",
      "ref": "Mate No Vida (1º) · Tema 1 · distribuciones de la cuantía",
      "base": "temario del curso"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 22: Transformaciones, lognormal y convoluciones",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-22"
     }
    ]
   },
@@ -570,6 +666,12 @@
      "tipo": "master",
      "ref": "Simulación y modelos (2º) · Tema 8 · modelos de variable continua",
      "base": "guía docente"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 24: Distribución gamma y procesos de Poisson",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-24"
     }
    ]
   },
@@ -728,6 +830,12 @@
      "tipo": "manual",
      "ref": "MSDA · Expected Values",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 25: Beta-gamma, estadísticos de orden y esperanza condicionada",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-25"
     }
    ]
   },
@@ -772,6 +880,30 @@
      "tipo": "manual",
      "ref": "PSDS · Statistical Experiments and Significance Testing",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 7: Contrastes de hipótesis paramétricos",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-7-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 8: Contrastes de hipótesis paramétricos (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-8-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 9: Contrastes de hipótesis paramétricos (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-9-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 11: Contrastes de hipótesis y bondad de ajuste",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-11-video/"
     }
    ],
    "prioridad": "alta"
@@ -1089,6 +1221,18 @@
      "tipo": "manual",
      "ref": "MSDA · The Analysis of Categorical Data",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 11: Contrastes de hipótesis y bondad de ajuste",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-11-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 12: Bondad de ajuste (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-12-video/"
     }
    ]
   },
@@ -1160,6 +1304,30 @@
      "tipo": "manual",
      "ref": "RMS · Overview of Maximum Likelihood Estimation",
      "base": "Regression Modeling Strategies (Harrell)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 3: Inferencia paramétrica",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-3-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 4: Inferencia paramétrica y máxima verosimilitud",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-4-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 5: Máxima verosimilitud (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-5-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 6: Máxima verosimilitud y método de los momentos",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-6-video/"
     }
    ],
    "prioridad": "alta"
@@ -1460,6 +1628,24 @@
      "tipo": "manual",
      "ref": "MSDA · Linear Least Squares",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 13: Regresión",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-13-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 14: Regresión (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-14-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 15: Regresión (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-15-video/"
     }
    ],
    "prioridad": "alta"
@@ -1536,6 +1722,30 @@
      "tipo": "manual",
      "ref": "ALSM · Logistic Regression, Poisson Regression, and Generalized Linear Models",
      "base": "Applied Linear Statistical Models (Kutner, Nachtsheim, Neter, Li)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 21: Modelos lineales generalizados",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-21-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 22: Modelos lineales generalizados (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-22-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 23: Modelos lineales generalizados (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-23-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 24: Modelos lineales generalizados (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-24-video/"
     }
    ]
   },
@@ -2486,6 +2696,18 @@
      "tipo": "manual",
      "ref": "HS · Principal Components Analysis",
      "base": "Applied Multivariate Statistical Analysis (Härdle, Simar)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 19: Análisis de componentes principales",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-19-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 20: Análisis de componentes principales (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-20-video/"
     }
    ]
   },
@@ -2881,6 +3103,24 @@
      "tipo": "manual",
      "ref": "ESL · Model Inference and Averaging",
      "base": "The Elements of Statistical Learning (Hastie, Tibshirani, Friedman)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 17: Estadística bayesiana",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-17-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 18: Estadística bayesiana (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-18-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Binomial distributions | Probabilities of probabilities, part 1",
+     "base": "3Blue1Brown",
+     "url": "https://www.youtube.com/watch?v=8idr1WZ1A7Q"
     }
    ]
   },
@@ -3649,6 +3889,12 @@
      "tipo": "master",
      "ref": "Procesos Estocásticos (1º) · Tema 1",
      "base": "temario del curso"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 7: Ruina del jugador, variables aleatorias, Bernoulli y binomial",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-7"
     }
    ]
   },
@@ -3743,6 +3989,12 @@
      "tipo": "master",
      "ref": "Procesos Estocásticos (1º) · Tema 5",
      "base": "temario del curso"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 24: Distribución gamma y procesos de Poisson",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-24"
     }
    ]
   },
@@ -4850,6 +5102,24 @@
      "tipo": "manual",
      "ref": "MSDA · Random Variables",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 8: Variables aleatorias, funciones de distribución y de masa, hipergeométrica",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-8"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 9: Geométrica, valores esperados, indicadoras y linealidad",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-9"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 12: Discretas frente a continuas, densidades, varianza, uniforme",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-12"
     }
    ]
   },
@@ -4927,6 +5197,18 @@
      "ref": "What is a statistic?",
      "url": "https://www.youtube.com/watch?v=mX8qg0TXoPA",
      "base": "título y descripción del vídeo"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 1: Introducción a la estadística",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-1-introduction-to-statistics/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 2: Introducción a la estadística (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-2-video/"
     }
    ]
   },
@@ -6651,6 +6933,12 @@
      "tipo": "manual",
      "ref": "PSDS · Data and Sampling Distributions",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 16: Distribución exponencial y falta de memoria",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-16"
     }
    ]
   },
@@ -7748,6 +8036,24 @@
      "tipo": "manual",
      "ref": "MSDA · Probability",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 4: Independencia, probabilidad condicionada, regla de Bayes",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-4"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 5: Ley de la probabilidad total e independencia condicional",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-5"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 6: Problema de Monty Hall y paradoja de Simpson",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-6"
     }
    ]
   },
@@ -7769,6 +8075,18 @@
      "tipo": "manual",
      "ref": "MSDA · Joint Distributions",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 18: Funciones generadoras de momentos y distribuciones conjuntas",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-18"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 19: Distribuciones conjuntas, marginales y condicionadas",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-19"
     }
    ]
   },
@@ -7788,6 +8106,12 @@
      "tipo": "manual",
      "ref": "MSDA · Expected Values",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 21: Covarianza, correlación y varianza de una suma",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-21"
     }
    ]
   },
@@ -7813,6 +8137,18 @@
      "tipo": "manual",
      "ref": "HS · Multivariate Distributions",
      "base": "Applied Multivariate Statistical Analysis (Härdle, Simar)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 17: Funciones generadoras de momentos, regla de Bayes híbrida",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-17"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 18: Funciones generadoras de momentos y distribuciones conjuntas",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-18"
     }
    ]
   },
@@ -7858,6 +8194,18 @@
      "tipo": "manual",
      "ref": "MSDA · Joint Distributions",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 22: Transformaciones, lognormal y convoluciones",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-22"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 25: Beta-gamma, estadísticos de orden y esperanza condicionada",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-25"
     }
    ]
   },
@@ -7896,6 +8244,12 @@
      "tipo": "manual",
      "ref": "MSDA · Estimation of Parameters and Fitting of Probability Distributions",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 6: Máxima verosimilitud y método de los momentos",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-6-video/"
     }
    ]
   },
@@ -9637,6 +9991,12 @@
      "tipo": "arbol",
      "ref": "Distribuciones básicas (demos Fundamentos del visor)",
      "base": "Árbol de la estadística"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 12: Discretas frente a continuas, densidades, varianza, uniforme",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-12"
     }
    ]
   },
@@ -9657,6 +10017,12 @@
      "tipo": "arbol",
      "ref": "Distribuciones básicas (demos Fundamentos del visor)",
      "base": "Árbol de la estadística"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 7: Ruina del jugador, variables aleatorias, Bernoulli y binomial",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-7"
     }
    ]
   },
@@ -9676,6 +10042,149 @@
      "tipo": "arbol",
      "ref": "Distribuciones básicas (demos Fundamentos del visor)",
      "base": "Árbol de la estadística"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 9: Geométrica, valores esperados, indicadoras y linealidad",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-9"
+    }
+   ]
+  },
+  {
+   "id": "c_tipos_de_variables_y_escalas",
+   "nombre": "Tipos de variables y escalas de medida",
+   "area": "descriptiva",
+   "desc": "Cualitativas (nominal, ordinal) y cuantitativas (discretas, continuas): qué resumen y qué gráfico admite cada una.",
+   "funciones": [
+    "diccionario_datos",
+    "resumen_descriptivo"
+   ],
+   "sinonimos": [
+    "nominal",
+    "ordinal",
+    "escalas de medida",
+    "variables categóricas"
+   ],
+   "fuentes": [
+    {
+     "tipo": "arbol",
+     "base": "Árbol de la estadística",
+     "ref": "Ruta «Estadística descriptiva» de la pestaña Aprender"
+    }
+   ]
+  },
+  {
+   "id": "c_graficos_para_una_variable",
+   "nombre": "Gráficos para una variable (barras, histograma, caja, densidad)",
+   "area": "descriptiva",
+   "desc": "Qué gráfico usar según el tipo de variable y qué muestra cada uno: frecuencias, forma, centro, dispersión y atípicos.",
+   "funciones": [
+    "grafico_distribucion"
+   ],
+   "sinonimos": [
+    "histograma",
+    "diagrama de barras",
+    "boxplot",
+    "densidad"
+   ],
+   "fuentes": [
+    {
+     "tipo": "arbol",
+     "base": "Árbol de la estadística",
+     "ref": "Demo «Describir una variable»"
+    }
+   ]
+  },
+  {
+   "id": "c_graficos_para_dos_variables",
+   "nombre": "Gráficos para dos variables (dispersión y comparación de grupos)",
+   "area": "descriptiva",
+   "desc": "Diagrama de dispersión con tendencia para dos numéricas; cajas o violines para una numérica por grupos.",
+   "funciones": [
+    "grafico_regresion_simple",
+    "grafico_comparar_grupos"
+   ],
+   "sinonimos": [
+    "diagrama de dispersión",
+    "scatter plot"
+   ],
+   "fuentes": [
+    {
+     "tipo": "arbol",
+     "base": "Árbol de la estadística",
+     "ref": "Demo «Cuarteto de Anscombe»"
+    }
+   ]
+  },
+  {
+   "id": "c_visualizar_antes_de_resumir_cuarteto_de_anscombe",
+   "nombre": "Visualizar antes de resumir (cuarteto de Anscombe)",
+   "area": "descriptiva",
+   "desc": "Conjuntos de datos con la misma media, varianza, correlación y recta de regresión pero formas completamente distintas: los resúmenes numéricos no bastan.",
+   "funciones": [
+    "resumen_descriptivo",
+    "correlacion_con_ic",
+    "grafico_regresion_simple"
+   ],
+   "sinonimos": [
+    "Anscombe",
+    "datasaurus"
+   ],
+   "fuentes": [
+    {
+     "tipo": "arbol",
+     "base": "Árbol de la estadística",
+     "ref": "Anscombe (1973), «Graphs in Statistical Analysis»; demo del visor"
+    }
+   ]
+  },
+  {
+   "id": "c_paradoja_de_simpson",
+   "nombre": "Paradoja de Simpson y variables de confusión",
+   "area": "descriptiva",
+   "desc": "Una tendencia que aparece en cada subgrupo puede invertirse al juntar los datos si el reparto de los grupos no es equilibrado.",
+   "funciones": [
+    "tabla_contingencia",
+    "medidas_riesgo_2x2"
+   ],
+   "sinonimos": [
+    "Simpson",
+    "confusión",
+    "agregación"
+   ],
+   "fuentes": [
+    {
+     "tipo": "arbol",
+     "base": "Árbol de la estadística",
+     "ref": "Demo «Paradoja de Simpson»"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 6: Problema de Monty Hall y paradoja de Simpson",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-6"
+    }
+   ]
+  },
+  {
+   "id": "c_graficos_enganosos_y_buenas_practicas",
+   "nombre": "Gráficos engañosos y buenas prácticas",
+   "area": "descriptiva",
+   "desc": "Ejes truncados, escalas y áreas que exageran diferencias: cómo leer y cómo hacer gráficos honestos.",
+   "funciones": [
+    "grafico_distribucion",
+    "grafico_comparar_grupos"
+   ],
+   "sinonimos": [
+    "eje truncado",
+    "gráficos engañosos"
+   ],
+   "fuentes": [
+    {
+     "tipo": "arbol",
+     "base": "Árbol de la estadística",
+     "ref": "Demo «Gráficos que engañan»"
     }
    ]
   }

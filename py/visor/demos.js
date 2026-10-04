@@ -1116,6 +1116,136 @@ D.demo_sobreajuste = function (cont) {
   pintar();
 };
 
+
+/* ================= 22. Describir una variable: resumen y gráficos ================= */
+D.demo_descriptiva = function (cont) {
+  var N = 150, ctr = ht('div', {'class': 'dm-ctrls'}, cont);
+  var sF = selector(ctr, 'Forma de los datos', [{v: 'normal', t: 'Simétrica (campana)'}, {v: 'sesgo', t: 'Sesgada a la derecha (importes)'}, {v: 'bimodal', t: 'Dos grupos mezclados (bimodal)'}, {v: 'uniforme', t: 'Uniforme'}], 'normal', function () { pintar(); });
+  var cA = control(ctr, {etq: 'Valor del atípico añadido (0 = ninguno)', min: 0, max: 80, paso: 1, valor: 0, fmt: function (v) { return v ? String(v) : 'sin atípico'; }}, pintar);
+  var cB = control(ctr, {etq: 'Nº de barras del histograma', min: 3, max: 40, paso: 1, valor: 12, fmt: function (v) { return String(v); }}, pintar);
+  var L1 = Lienzo(cont, {h: 170, aria: 'Histograma con la media y la mediana'});
+  var L2 = Lienzo(cont, {h: 70, m: {t: 6, b: 22}, aria: 'Diagrama de caja'});
+  leyenda(cont, [['dm-k1', 'media'], ['dm-k2', 'mediana']]);
+  var lec = lectura(cont), rnd = semilla(42), Z = [], U = [], i;
+  for (i = 0; i < N; i++) { Z.push(normal(rnd)); U.push(rnd()); }
+  function datos(forma) {
+    return Z.map(function (z, q) { return forma === 'normal' ? 10 + 2 * z : forma === 'sesgo' ? Math.exp(2.2 + 0.5 * z) : forma === 'bimodal' ? (q % 2 ? 14 + 1.2 * z : 7 + 1.2 * z) : 4 + 12 * U[q]; });
+  }
+  function cuantil(s, p) { var h = (s.length - 1) * p, lo = Math.floor(h), hi = Math.ceil(h); return s[lo] + (s[hi] - s[lo]) * (h - lo); }
+  function resumen(x) {
+    var s = x.slice().sort(function (a, b) { return a - b; }), n = s.length, m = s.reduce(function (a, b) { return a + b; }, 0) / n;
+    var sd = Math.sqrt(s.reduce(function (a, b) { return a + (b - m) * (b - m); }, 0) / (n - 1)), q1 = cuantil(s, 0.25), med = cuantil(s, 0.5), q3 = cuantil(s, 0.75);
+    var mad = cuantil(s.map(function (v) { return Math.abs(v - med); }).sort(function (a, b) { return a - b; }), 0.5);
+    var asim = s.reduce(function (a, b) { return a + Math.pow((b - m) / sd, 3); }, 0) * n / ((n - 1) * (n - 2));
+    var lo = q1 - 1.5 * (q3 - q1), hi = q3 + 1.5 * (q3 - q1), dentro = s.filter(function (v) { return v >= lo && v <= hi; });
+    return {s: s, n: n, m: m, sd: sd, q1: q1, med: med, q3: q3, iqr: q3 - q1, mad: mad, asim: asim, min: s[0], max: s[n - 1],
+            atip: s.filter(function (v) { return v < lo || v > hi; }), wlo: dentro[0], whi: dentro[dentro.length - 1]};
+  }
+  function pintar() {
+    var base = datos(sF.valor()), a = cA.valor(), x = a ? base.concat([a]) : base, r = resumen(x), r0 = resumen(base), nb = cB.valor();
+    var rg = r.max - r.min, x0 = r.min - 0.05 * rg, x1 = r.max + 0.03 * rg, bw = (x1 - x0) / nb;
+    var cuentas = []; for (i = 0; i < nb; i++) cuentas.push(0);
+    r.s.forEach(function (v) { var j = Math.min(nb - 1, Math.floor((v - x0) / bw)); cuentas[j]++; });
+    var top = Math.max.apply(null, cuentas) * 1.1, jm = cuentas.indexOf(Math.max.apply(null, cuentas)), moda = x0 + (jm + 0.5) * bw;
+    L1.nuevo([x0, x1], [0, top], {xl: 'valor', yl: 'frecuencia', ny: 3}); var capa = L1.capa();
+    cuentas.forEach(function (c, j) { var p0 = L1.sx(x0 + j * bw), p1 = L1.sx(x0 + (j + 1) * bw);
+      sv('rect', {x: p0, y: L1.sy(c), width: Math.max(p1 - p0 - 1, 0.5), height: Math.max(L1.sy(0) - L1.sy(c), 0), 'class': 'dm-f1 dm-op45'}, capa); });
+    L1.vline(r.m, 'dm-l1'); L1.vline(r.med, 'dm-l2');
+    L2.nuevo([x0, x1], [0, 1], {y: false, nx: 6}); var cp = L2.capa(), yc = L2.sy(0.55), alto = (L2.sy(0.15) - L2.sy(0.85));
+    sv('line', {x1: L2.sx(r.wlo), x2: L2.sx(r.q1), y1: yc, y2: yc, 'class': 'dm-eje'}, cp); sv('line', {x1: L2.sx(r.q3), x2: L2.sx(r.whi), y1: yc, y2: yc, 'class': 'dm-eje'}, cp);
+    sv('rect', {x: L2.sx(r.q1), y: yc - alto / 2, width: Math.max(L2.sx(r.q3) - L2.sx(r.q1), 1), height: alto, 'class': 'dm-f1 dm-op30', stroke: 'currentColor', 'stroke-width': 1}, cp);
+    sv('line', {x1: L2.sx(r.med), x2: L2.sx(r.med), y1: yc - alto / 2, y2: yc + alto / 2, 'class': 'dm-l2'}, cp);
+    r.atip.forEach(function (v) { sv('circle', {cx: L2.sx(v), cy: yc, r: 3, 'class': 'dm-f2 dm-anillo'}, cp); });
+    var difs = a ? ['Con el atípico: la media pasa de ' + f(r0.m, 2) + ' a ' + f(r.m, 2) + ' (' + (r.m >= r0.m ? '+' : '') + f(r.m - r0.m, 2) + '), la mediana de ' + f(r0.med, 2) + ' a ' + f(r.med, 2) + ', la desviación típica de ' + f(r0.sd, 2) + ' a ' + f(r.sd, 2) + ' y el IQR de ' + f(r0.iqr, 2) + ' a ' + f(r.iqr, 2) + '. La media y la desviación típica se dejan arrastrar; la mediana y el IQR apenas se mueven.'] : [];
+    escribir(lec, [['Media ', [f(r.m, 2)], ' · mediana ', [f(r.med, 2)], ' · moda (centro de la barra más alta) ≈ ', [f(moda, 1)]],
+      ['Desv. típica ', [f(r.sd, 2)], ' · IQR ', [f(r.iqr, 2)], ' (de ' + f(r.q1, 2) + ' a ' + f(r.q3, 2) + ') · MAD ', [f(r.mad, 2)]],
+      ['Asimetría ', [f(r.asim, 2)], ' · atípicos según la regla de 1,5·IQR: ', [String(r.atip.length)]]].concat(difs.map(function (t) { return [t]; })).concat([
+      [Math.abs(r.m - r.med) > 0.15 * r.sd ? 'La media se separa de la mediana: hay asimetría o atípicos, y entonces la mediana describe mejor el valor «típico».' : 'Media y mediana casi coinciden: la distribución es aproximadamente simétrica.'],
+      ['Prueba con pocas o muchas barras: con 3 se pierde la forma y con 40 aparece ruido. No hay un número «correcto», pero la forma general no debe depender de él.']]));
+  }
+  pintar();
+};
+
+/* ================= 23. Cuarteto de Anscombe ================= */
+D.demo_anscombe = function (cont) {
+  var X = [10, 8, 13, 9, 11, 14, 6, 4, 12, 7, 5];
+  var DS = {
+    I: {x: X, y: [8.04, 6.95, 7.58, 8.81, 8.33, 9.96, 7.24, 4.26, 10.84, 4.82, 5.68], t: 'Conjunto I: relación lineal con ruido. Aquí el resumen numérico y la recta describen bien los datos.'},
+    II: {x: X, y: [9.14, 8.14, 8.74, 8.77, 9.26, 8.10, 6.13, 3.10, 9.13, 7.26, 4.74], t: 'Conjunto II: la relación es una curva, no una recta. La correlación sale igual de «alta», pero la recta es un mal modelo.'},
+    III: {x: X, y: [7.46, 6.77, 12.74, 7.11, 7.81, 8.84, 6.08, 5.39, 8.15, 6.42, 5.73], t: 'Conjunto III: casi todos los puntos están en una recta perfecta y un único atípico arrastra la recta ajustada.'},
+    IV: {x: [8, 8, 8, 8, 8, 8, 8, 19, 8, 8, 8], y: [6.58, 5.76, 7.71, 8.84, 8.47, 7.04, 5.25, 12.50, 5.56, 7.91, 6.89], t: 'Conjunto IV: todos los valores de x son iguales salvo uno. Un solo punto de alto apalancamiento decide toda la recta y la correlación.'}
+  };
+  var ctr = ht('div', {'class': 'dm-ctrls'}, cont);
+  var sD = selector(ctr, 'Conjunto de datos', [{v: 'I', t: 'I'}, {v: 'II', t: 'II'}, {v: 'III', t: 'III'}, {v: 'IV', t: 'IV'}], 'I', function () { pintar(); });
+  var L1 = Lienzo(cont, {h: 220, aria: 'Diagrama de dispersión con la recta de regresión'});
+  var lec = lectura(cont);
+  function pintar() {
+    var d = DS[sD.valor()], n = d.x.length, mx = 0, my = 0, i;
+    for (i = 0; i < n; i++) { mx += d.x[i]; my += d.y[i]; } mx /= n; my /= n;
+    var sxx = 0, syy = 0, sxy = 0; for (i = 0; i < n; i++) { sxx += (d.x[i] - mx) * (d.x[i] - mx); syy += (d.y[i] - my) * (d.y[i] - my); sxy += (d.x[i] - mx) * (d.y[i] - my); }
+    var b = sxy / sxx, a = my - b * mx, r = sxy / Math.sqrt(sxx * syy);
+    L1.nuevo([2, 20], [2, 14], {xl: 'x', yl: 'y', ny: 4, nx: 5}); var cp = L1.capa();
+    L1.linea([3, 19], [a + b * 3, a + b * 19], 'dm-l2');
+    for (i = 0; i < n; i++) sv('circle', {cx: L1.sx(d.x[i]), cy: L1.sy(d.y[i]), r: 4, 'class': 'dm-f1 dm-anillo'}, cp);
+    escribir(lec, [['Media de x ', [f(mx, 2)], ' · media de y ', [f(my, 2)], ' · varianza de x ', [f(sxx / (n - 1), 2)], ' · varianza de y ', [f(syy / (n - 1), 2)]],
+      ['Correlación ', [f(r, 3)], ' · recta: y = ', [f(a, 2) + ' + ' + f(b, 3) + ' x']],
+      ['Los cuatro conjuntos tienen prácticamente los mismos números (cambia de conjunto y míralos), y sin embargo son muy distintos.'], [d.t],
+      ['Moraleja: dibuja siempre los datos antes de fiarte de un resumen numérico.']]);
+  }
+  pintar();
+};
+
+/* ================= 24. Paradoja de Simpson ================= */
+D.demo_simpson = function (cont) {
+  var NL = 357, NG = 343, TASA = {A: {leve: 0.93, grave: 0.73}, B: {leve: 0.87, grave: 0.69}}, ctr = ht('div', {'class': 'dm-ctrls'}, cont);
+  var cG = control(ctr, {etq: '% de los casos graves que recibe el tratamiento A', min: 0, max: 100, paso: 1, valor: 77, fmt: function (v) { return v + ' %'; }}, pintar);
+  var cL = control(ctr, {etq: '% de los casos leves que recibe el tratamiento A', min: 0, max: 100, paso: 1, valor: 24, fmt: function (v) { return v + ' %'; }}, pintar);
+  var L1 = Lienzo(cont, {h: 200, m: {b: 44}, aria: 'Tasa de éxito por tratamiento en casos leves, graves y en total'});
+  leyenda(cont, [['dm-k1', 'tratamiento A'], ['dm-k2', 'tratamiento B']]);
+  var lec = lectura(cont);
+  function pintar() {
+    var pg = cG.valor() / 100, pl = cL.valor() / 100;
+    var aL = NL * pl, bL = NL * (1 - pl), aG = NG * pg, bG = NG * (1 - pg);
+    var tA = aL + aG, tB = bL + bG, eA = (aL * TASA.A.leve + aG * TASA.A.grave) / (tA || 1), eB = (bL * TASA.B.leve + bG * TASA.B.grave) / (tB || 1);
+    var grupos = [['Casos leves', TASA.A.leve, TASA.B.leve, aL, bL], ['Casos graves', TASA.A.grave, TASA.B.grave, aG, bG], ['Total', eA, eB, tA, tB]];
+    L1.nuevo([-0.6, 2.6], [0, 1.05], {x: false, ny: 4}); var cp = L1.capa();
+    grupos.forEach(function (g, j) {
+      [[g[1], -0.32, 'dm-f1'], [g[2], 0.02, 'dm-f2']].forEach(function (b) { var x0 = L1.sx(j + b[1]), x1 = L1.sx(j + b[1] + 0.3);
+        sv('rect', {x: x0, y: L1.sy(b[0]), width: x1 - x0, height: Math.max(L1.sy(0) - L1.sy(b[0]), 0), 'class': b[2]}, cp);
+        L1.texto((x0 + x1) / 2, L1.sy(b[0]) - 3, pct(b[0], 0), {'class': 'dm-txt', 'text-anchor': 'middle'}, cp); });
+      L1.texto(L1.sx(j), L1.H - L1.m.b + 13, g[0], {'class': 'dm-tick', 'text-anchor': 'middle'}, cp);
+      L1.texto(L1.sx(j), L1.H - L1.m.b + 26, 'A: ' + Math.round(g[3]) + ' · B: ' + Math.round(g[4]) + ' casos', {'class': 'dm-tick', 'text-anchor': 'middle'}, cp); });
+    var paradoja = TASA.A.leve > TASA.B.leve && TASA.A.grave > TASA.B.grave && eB > eA;
+    escribir(lec, [['A es mejor en los casos leves (' + pct(TASA.A.leve, 0) + ' frente a ' + pct(TASA.B.leve, 0) + ') y en los graves (' + pct(TASA.A.grave, 0) + ' frente a ' + pct(TASA.B.grave, 0) + ').'],
+      ['En total: A ', [pct(eA, 1)], ' · B ', [pct(eB, 1)]],
+      [paradoja ? '¡Paradoja de Simpson! A gana en cada tipo de caso, pero B gana en el total, porque a A le tocan muchos más casos graves (que tienen menor tasa de éxito).'
+        : eA > eB ? 'Sin paradoja: A gana en cada grupo y también en total.' : 'Los dos tratamientos se reparten los casos de forma parecida y el total ya no contradice a los subgrupos.'],
+      ['Para evitarla hay que comparar dentro de cada grupo (o ajustar por la gravedad), no mezclar grupos con composiciones distintas. Lleva los dos deslizadores a 50 % y la paradoja desaparece.']]);
+  }
+  pintar();
+};
+
+/* ================= 25. Gráficos que engañan ================= */
+D.demo_eje_enganoso = function (cont) {
+  var ctr = ht('div', {'class': 'dm-ctrls'}, cont);
+  var cO = control(ctr, {etq: 'Origen del eje vertical', min: 0, max: 50, paso: 1, valor: 50, fmt: function (v) { return String(v); }}, pintar);
+  var cB = control(ctr, {etq: 'Valor de B (A vale 52)', min: 52, max: 60, paso: 0.5, valor: 55, fmt: function (v) { return v.toFixed(1); }}, pintar);
+  var L1 = Lienzo(cont, {h: 190, aria: 'Dos barras con un eje vertical que puede empezar fuera de cero'});
+  var lec = lectura(cont);
+  function pintar() {
+    var o = cO.valor(), a = 52, b = cB.valor(), top = 62;
+    L1.nuevo([-0.6, 1.6], [o, top], {x: false, ny: 4}); var cp = L1.capa();
+    [[a, 0, 'A', 'dm-f1'], [b, 1, 'B', 'dm-f2']].forEach(function (g) { var x0 = L1.sx(g[1] - 0.3), x1 = L1.sx(g[1] + 0.3);
+      sv('rect', {x: x0, y: L1.sy(g[0]), width: x1 - x0, height: Math.max(L1.sy(o) - L1.sy(g[0]), 0), 'class': g[3]}, cp);
+      L1.texto((x0 + x1) / 2, L1.sy(g[0]) - 4, String(g[0]), {'class': 'dm-txt', 'text-anchor': 'middle'}, cp); L1.texto((x0 + x1) / 2, L1.H - L1.m.b + 13, g[2], {'class': 'dm-tick', 'text-anchor': 'middle'}, cp); });
+    var visual = (b - o) / Math.max(a - o, 0.001);
+    escribir(lec, [['La barra de B parece ', [f(visual, 2) + ' veces'], ' la de A; en realidad B vale ', [f(b / a, 2) + ' veces'], ' A (' + pct(b / a - 1, 1) + ' más).'],
+      [o > 0 ? 'Con el eje empezando en ' + o + ' la diferencia parece enorme. Un eje que no parte de cero en un gráfico de barras exagera: la longitud de la barra debería ser proporcional al valor.' : 'Con el eje desde cero la comparación es honesta: la altura de cada barra es proporcional a su valor.'],
+      ['En un gráfico de líneas sí es habitual no empezar en cero, pero conviene indicarlo y valorar si la diferencia es relevante además de visible.']]);
+  }
+  pintar();
+};
+
 /* utilidades expuestas para las pruebas automáticas */
 D._estad = {tcdf: tcdf, tinv: tinv, Phi: Phi, colaNormal: colaNormal, potenciaT: potenciaT, nPara: nPara};
 return D;

@@ -94,6 +94,28 @@ DEMOS = [
          "funciones": ["ajustar_p_valores", "grafico_fdr"],
          "conceptos": ["c_tasa_de_falsos_descubrimientos_fdr", "c_significacion_estadistica_y_p_valor"]},
     ]),
+    ("Descriptiva", "Describir y mirar los datos antes de modelar", [
+        {"id": "demo_descriptiva", "nombre": "Describir una variable: resumen y gráficos",
+         "desc": "Elige la forma de los datos (simétrica, sesgada, bimodal, uniforme), añade un atípico y cambia el número de barras: mira a la vez media, mediana, dispersión, histograma y diagrama de caja.",
+         "aprender": "La media y la desviación típica se dejan arrastrar por la cola o por un atípico; la mediana y el IQR resisten. El histograma depende del número de barras: pocas ocultan la forma y muchas añaden ruido. El diagrama de caja resume cinco números y marca atípicos, que no siempre son errores.",
+         "funciones": ["resumen_descriptivo", "detectar_atipicos", "grafico_distribucion", "estimar_densidad"],
+         "conceptos": ["c_tipos_de_variables_y_escalas", "c_medidas_de_posicion_media_mediana_media_truncada", "c_medidas_de_variabilidad_desviacion_mad_rango_intercuartilico", "c_percentiles_y_diagramas_de_caja", "c_histogramas_y_estimacion_de_densidad", "c_asimetria_y_curtosis", "c_valores_atipicos_outliers", "c_graficos_para_una_variable"]},
+        {"id": "demo_anscombe", "nombre": "Cuarteto de Anscombe: dibuja antes de resumir",
+         "desc": "Cuatro conjuntos de datos con las mismas medias, varianzas, correlación y recta de regresión pero formas muy distintas.",
+         "aprender": "Los resúmenes numéricos pueden coincidir exactamente con datos que son una recta, una curva, una recta con un atípico o un único punto influyente. Dibujar los datos revela lo que los números ocultan.",
+         "funciones": ["resumen_descriptivo", "correlacion_con_ic", "grafico_regresion_simple"],
+         "conceptos": ["c_visualizar_antes_de_resumir_cuarteto_de_anscombe", "c_correlacion_pearson_spearman_kendall", "c_graficos_para_dos_variables"]},
+        {"id": "demo_simpson", "nombre": "Paradoja de Simpson",
+         "desc": "Un tratamiento mejor en cada tipo de caso pero peor en el total: reparte los casos graves y leves entre A y B y mira cuándo se invierte la comparación.",
+         "aprender": "Al mezclar grupos con composiciones distintas, el total puede contradecir a cada subgrupo. Se evita comparando dentro de cada grupo o ajustando por la variable de confusión.",
+         "funciones": ["tabla_contingencia", "medidas_riesgo_2x2"],
+         "conceptos": ["c_paradoja_de_simpson", "c_tablas_de_contingencia_y_datos_categoricos", "c_probabilidad_condicionada_e_independencia"]},
+        {"id": "demo_eje_enganoso", "nombre": "Gráficos que engañan: el eje truncado",
+         "desc": "Dos barras casi iguales con un eje vertical que puedes cortar: compara la diferencia que ves con la real.",
+         "aprender": "Si el eje de un gráfico de barras no empieza en cero, la altura deja de ser proporcional al valor y una diferencia pequeña parece enorme. Un gráfico honesto representa magnitudes proporcionales.",
+         "funciones": ["grafico_distribucion", "grafico_comparar_grupos"],
+         "conceptos": ["c_graficos_enganosos_y_buenas_practicas", "c_graficos_para_una_variable"]},
+    ]),
     ("Probabilidad", "Distribuciones: forma, media, varianza y probabilidades", [
         {"id": "demo_distribuciones", "nombre": "Explorador de distribuciones",
          "desc": "Elige una distribución (normal, t, lognormal, gamma, inversa gaussiana, Poisson, binomial negativa, Pareto…), mueve sus parámetros y mira la densidad, la acumulada y P(X ≤ x).",
@@ -206,7 +228,7 @@ DOCS = {
 }
 CATALOGO = RAIZ / "conceptos" / "catalogo.json"
 PROPIEDADES = CODIGO / "propiedades"
-RUTAS = CODIGO / "aprender" / "rutas.json"
+RUTAS = CODIGO / "aprender"      # una ruta (o varias) por fichero: 01_fundamentos.json, 02_descriptiva.json…
 FICHAS_MIAS = RAIZ / "conceptos" / "fichas_mias.json"
 EJEMPLOS = None   # se carga en construir()
 AVISO_RE = re.compile(r"OJO|ATENCI[ÓO]N|CORRECCI[ÓO]N|IMPORTANTE|Gauss", re.I)
@@ -306,7 +328,7 @@ def ramas_conceptos(funciones: set[str]) -> list[dict]:
             print(f"AVISO: el concepto «{k['nombre']}» cita funciones que no están en py/: {desconocidas} "
                   "(¿falta ejecutar el actualizador?)")
             k = dict(k, funciones=[f for f in k["funciones"] if f in funciones])
-        origen = "; ".join({"very_normal": "Very Normal: ", "master": "Máster: ", "manual": "Manual: "}.get(f["tipo"], "Árbol (consultoría): ") + f["ref"] + (f" ({f['base']})" if f.get("base") else "")
+        origen = "; ".join({"very_normal": "Very Normal: ", "master": "Máster: ", "manual": "Manual: ", "curso": "Curso: "}.get(f["tipo"], "Árbol (consultoría): ") + f["ref"] + (f" ({f['base']})" if f.get("base") else "")
                            for f in k["fuentes"])
         return {
             "id": k["id"], "nombre": k["nombre"], "tipo": "concepto", "firma": "", "doc": " ".join(k["sinonimos"] + k["funciones"]),
@@ -399,9 +421,7 @@ def cargar_propiedades(nombres_fn: set[str]) -> tuple[dict, dict]:
 
 def cargar_rutas(funciones: set[str], conceptos: set[str], demos: set[str]) -> list[dict]:
     """Rutas de la pestaña «Aprender» (py/aprender/rutas.json). Los enlaces rotos se quitan y se avisan; una pregunta mal formada es un error."""
-    if not RUTAS.exists():
-        return []
-    rutas = json.loads(RUTAS.read_text(encoding="utf-8"))["rutas"]
+    rutas = [r for f in sorted(RUTAS.glob("*.json")) for r in json.loads(f.read_text(encoding="utf-8"))["rutas"]]
     for r in rutas:
         for p in r["pasos"]:
             q = p["pregunta"]

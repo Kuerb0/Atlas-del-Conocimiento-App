@@ -1,0 +1,276 @@
+{
+ "rutas": [
+  {
+   "id": "descriptiva",
+   "titulo": "Estadística descriptiva: mirar y resumir los datos",
+   "para": "Desde cero. Es el primer paso de cualquier análisis y la mejor forma de no equivocarse después.",
+   "nivel": "Principiante",
+   "duracion": "alrededor de 1,5 horas",
+   "desc": "Tipos de variables, medidas de posición y dispersión, histogramas y diagramas de caja, relación entre dos variables y los errores clásicos: resúmenes que engañan, paradoja de Simpson y gráficos manipulados.",
+   "pasos": [
+    {
+     "id": "tipos-variables",
+     "titulo": "Qué estás midiendo: tipos de variables",
+     "idea": [
+      "Antes de resumir nada hay que saber **qué tipo de variable** tienes, porque de eso depende qué resumen y qué gráfico tienen sentido.",
+      "Las **cuantitativas** son números con los que tiene sentido operar: discretas (número de siniestros, de hijos) o continuas (un importe, una altura). Las **cualitativas** son categorías: nominales (color, provincia, código postal) u ordinales, con orden (leve, moderado, grave).",
+      "Un error frecuente es tratar como número algo que solo es una etiqueta: la media de los códigos postales no significa nada."
+     ],
+     "prueba": [
+      "Clasifica mentalmente: edad, código postal, nivel de estudios, número de partes en el año, importe de una factura.",
+      "Piensa qué resumen usarías para cada una: una media, una tabla de frecuencias, una mediana…"
+     ],
+     "claves": [
+      ["cuantitativa", "Variable numérica con la que se puede operar (media, suma…)."],
+      ["cualitativa", "Variable en categorías; solo se cuentan frecuencias."],
+      ["ordinal", "Categorías con un orden natural pero sin distancia medible entre ellas."]
+     ],
+     "conceptos": ["c_tipos_de_variables_y_escalas", "c_diccionario_de_datos_y_catalogos"],
+     "funciones": ["diccionario_datos", "resumen_descriptivo"],
+     "pregunta": {
+      "texto": "El código postal de un cliente es una variable…",
+      "opciones": ["numérica continua", "categórica nominal", "numérica discreta"],
+      "correcta": 1,
+      "pista": "¿Tiene sentido sumar o promediar códigos postales?",
+      "explicacion": "Es una etiqueta: aunque se escriba con dígitos no se puede operar con ella, así que es categórica nominal."
+     }
+    },
+    {
+     "id": "media-mediana",
+     "titulo": "Un solo número: media, mediana y moda",
+     "idea": [
+      "La **media** es el promedio; la **mediana** es el valor que deja la mitad de los datos por debajo y la mitad por encima; la **moda** es el valor más frecuente.",
+      "Si los datos son simétricos, las tres se parecen. Si hay asimetría o valores extremos, la media se desplaza hacia la cola y la mediana describe mejor el valor «típico»."
+     ],
+     "prueba": [
+      "Con la forma «Simétrica (campana)», comprueba que media y mediana casi coinciden.",
+      "Cambia a «Sesgada a la derecha (importes)»: la media queda a la derecha de la mediana.",
+      "Prueba «Dos grupos mezclados»: la media cae en un valle donde casi no hay datos, así que no describe a nadie."
+     ],
+     "demo": "demo_descriptiva",
+     "claves": [
+      ["media", "Suma de los valores dividida entre n; sensible a los extremos."],
+      ["mediana", "Valor central: resiste a los atípicos."],
+      ["moda", "Valor (o tramo) más frecuente."]
+     ],
+     "conceptos": ["c_medidas_de_posicion_media_mediana_media_truncada"],
+     "funciones": ["resumen_descriptivo"],
+     "pregunta": {
+      "texto": "En una variable con cola larga a la derecha (importes de siniestros), la media suele ser…",
+      "opciones": ["mayor que la mediana", "menor que la mediana", "igual a la mediana"],
+      "correcta": 0,
+      "pista": "Los valores muy grandes tiran de la media hacia la derecha, pero no de la mediana.",
+      "explicacion": "Los valores extremos altos elevan la media pero apenas mueven la mediana, así que la media queda por encima."
+     }
+    },
+    {
+     "id": "dispersion",
+     "titulo": "Cuánto se dispersan: desviación típica, IQR y MAD",
+     "idea": [
+      "Dos conjuntos con la misma media pueden ser muy distintos si uno está muy concentrado y otro muy disperso. Por eso se añade una medida de **dispersión**.",
+      "La **desviación típica** es la más usada pero se deja arrastrar por los atípicos. El **rango intercuartílico (IQR)** —la distancia entre el primer y el tercer cuartil— y el **MAD** (desviación mediana absoluta) son **robustos**."
+     ],
+     "prueba": [
+      "Con datos «Simétrica», anota la desviación típica y el IQR.",
+      "Mueve el deslizador del atípico a 60 y mira la lectura: ¿cuánto cambian la desviación típica y el IQR?"
+     ],
+     "demo": "demo_descriptiva",
+     "claves": [
+      ["desviación típica", "Raíz de la varianza; distancia típica a la media."],
+      ["IQR", "Tercer cuartil menos primer cuartil: la anchura del 50 % central."],
+      ["robusto", "Que cambia poco aunque haya valores extremos."]
+     ],
+     "conceptos": ["c_medidas_de_variabilidad_desviacion_mad_rango_intercuartilico"],
+     "funciones": ["resumen_descriptivo", "detectar_atipicos"],
+     "pregunta": {
+      "texto": "¿Qué medida de dispersión resiste mejor a un valor extremo?",
+      "opciones": ["La desviación típica", "El rango intercuartílico (IQR)", "El rango (máximo menos mínimo)"],
+      "correcta": 1,
+      "pista": "Piensa en cuál depende solo de la parte central de los datos.",
+      "explicacion": "El IQR solo usa el 50 % central, así que un atípico no lo cambia; la desviación típica y el rango sí se ven afectados."
+     }
+    },
+    {
+     "id": "histograma",
+     "titulo": "El histograma: cuántas barras",
+     "idea": [
+      "El **histograma** reparte los valores en tramos y cuenta cuántos caen en cada uno. Enseña la **forma** de los datos: simetría, colas, una o varias jorobas.",
+      "El número de barras es una decisión tuya: pocas barras ocultan la forma y muchas añaden ruido. Prueba varias."
+     ],
+     "prueba": [
+      "Elige «Dos grupos mezclados» y pon 3 barras: parece una sola joroba.",
+      "Sube a 12 y a 25 barras: aparecen las dos jorobas.",
+      "Con 40 barras la forma se rompe en picos sueltos: es ruido de muestreo."
+     ],
+     "demo": "demo_descriptiva",
+     "claves": [
+      ["bimodal", "Con dos jorobas: suele indicar dos subpoblaciones mezcladas."],
+      ["asimetría", "Cola más larga a un lado."]
+     ],
+     "conceptos": ["c_histogramas_y_estimacion_de_densidad", "c_asimetria_y_curtosis", "c_graficos_para_una_variable"],
+     "funciones": ["grafico_distribucion", "estimar_densidad"],
+     "pregunta": {
+      "texto": "Con 3 barras ves una sola joroba y con 12 ves dos. ¿Qué concluyes?",
+      "opciones": ["Que los datos cambian al cambiar las barras", "Que pocas barras ocultaban la bimodalidad y conviene probar varios anchos", "Que el histograma está mal hecho"],
+      "correcta": 1,
+      "pista": "Los datos son los mismos; lo que cambia es la resolución del dibujo.",
+      "explicacion": "Con pocas barras se promedian dos grupos en uno. Por eso conviene mirar varios anchos antes de dar una forma por cierta."
+     }
+    },
+    {
+     "id": "caja",
+     "titulo": "El diagrama de caja y los atípicos",
+     "idea": [
+      "El **diagrama de caja** resume cinco números: mínimo (sin atípicos), primer cuartil, mediana, tercer cuartil y máximo. La caja contiene el 50 % central de los datos.",
+      "Los **atípicos** son valores que quedan a más de 1,5·IQR de los cuartiles (regla de Tukey). No son errores por sí mismos: pueden ser casos reales importantes o fallos de registro; hay que mirarlos antes de borrarlos."
+     ],
+     "prueba": [
+      "Añade un atípico de 40: aparece como un punto fuera de los bigotes.",
+      "Mira cómo la mediana (línea naranja de la caja) casi no se mueve, mientras que la media sí.",
+      "Con «Sesgada a la derecha», los puntos marcados como atípicos pueden deberse solo a la cola larga: no siempre son anomalías."
+     ],
+     "demo": "demo_descriptiva",
+     "claves": [
+      ["cuartiles", "Valores que dividen los datos ordenados en cuatro partes iguales."],
+      ["regla de Tukey", "Atípico: por debajo de Q1 − 1,5·IQR o por encima de Q3 + 1,5·IQR."]
+     ],
+     "conceptos": ["c_percentiles_y_diagramas_de_caja", "c_valores_atipicos_outliers"],
+     "funciones": ["resumen_descriptivo", "detectar_atipicos"],
+     "pregunta": {
+      "texto": "En un diagrama de caja, la caja abarca…",
+      "opciones": ["del mínimo al máximo", "del primer al tercer cuartil (el 50 % central)", "la media más/menos una desviación típica"],
+      "correcta": 1,
+      "pista": "Los extremos de la caja son cuartiles.",
+      "explicacion": "La caja va del primer cuartil (25 %) al tercero (75 %), así que contiene el 50 % central de los datos."
+     }
+    },
+    {
+     "id": "dos-variables",
+     "titulo": "Dos variables: dispersión y correlación",
+     "idea": [
+      "Para dos variables numéricas el gráfico natural es el **diagrama de dispersión**: cada punto es una observación. La **correlación** (de −1 a 1) mide cuánto se parece la nube a una recta.",
+      "Correlación no es causalidad: dos variables pueden moverse juntas porque una causa la otra, porque hay una tercera detrás o por casualidad."
+     ],
+     "prueba": [
+      "Sube el ruido: la nube se ensancha y la recta se vuelve menos fiable aunque la pendiente real sea la misma.",
+      "Activa «Añadir un punto atípico con mucho apalancamiento»: mira cómo arrastra la recta."
+     ],
+     "demo": "demo_regresion",
+     "claves": [
+      ["correlación", "Medida de asociación lineal entre −1 y 1."],
+      ["apalancamiento", "Influencia de un punto con un valor de x muy alejado del resto."]
+     ],
+     "conceptos": ["c_correlacion_pearson_spearman_kendall", "c_graficos_para_dos_variables"],
+     "funciones": ["correlacion_con_ic", "grafico_regresion_simple"],
+     "pregunta": {
+      "texto": "Una correlación de 0,9 entre dos variables significa que…",
+      "opciones": ["una causa a la otra", "la relación lineal es fuerte, pero no dice nada sobre causa y efecto", "el 90 % de los puntos están sobre la recta"],
+      "correcta": 1,
+      "pista": "La correlación solo mide cuánto se parecen los datos a una recta.",
+      "explicacion": "Mide la fuerza de la relación lineal; para hablar de causa hace falta un diseño (experimento) o supuestos adicionales."
+     }
+    },
+    {
+     "id": "anscombe",
+     "titulo": "Los números pueden engañar: el cuarteto de Anscombe",
+     "idea": [
+      "En 1973 Francis Anscombe construyó cuatro conjuntos de datos con la **misma media, varianza, correlación y recta de regresión**… y formas completamente distintas.",
+      "La lección: un resumen numérico es una compresión con pérdida. **Dibuja siempre los datos antes de fiarte de un resumen.**"
+     ],
+     "prueba": [
+      "Con el conjunto I, anota las medias, varianzas, la correlación y la recta.",
+      "Cambia a II, III y IV: los números no cambian, pero el dibujo sí. ¿Qué pasa en cada uno?"
+     ],
+     "demo": "demo_anscombe",
+     "claves": [
+      ["punto influyente", "Observación que por sí sola cambia mucho el ajuste."],
+      ["resumen numérico", "Medias, varianzas, correlación: útil pero no sustituye a mirar los datos."]
+     ],
+     "conceptos": ["c_visualizar_antes_de_resumir_cuarteto_de_anscombe", "c_correlacion_pearson_spearman_kendall"],
+     "funciones": ["resumen_descriptivo", "correlacion_con_ic", "grafico_regresion_simple"],
+     "pregunta": {
+      "texto": "Dos conjuntos de datos tienen la misma media, varianza y correlación. ¿Son equivalentes?",
+      "opciones": ["Sí, el resumen lo dice todo", "No: pueden tener formas muy distintas, así que hay que dibujarlos", "Solo si tienen el mismo número de datos"],
+      "correcta": 1,
+      "pista": "Fíjate en el conjunto II y en el IV.",
+      "explicacion": "El cuarteto de Anscombe tiene los mismos resúmenes con una recta, una curva, un atípico y un punto de apalancamiento: solo el dibujo lo muestra."
+     }
+    },
+    {
+     "id": "simpson",
+     "titulo": "La paradoja de Simpson",
+     "idea": [
+      "Un tratamiento puede ser mejor que otro **en cada subgrupo** y peor **en el total**. Es la paradoja de Simpson, y ocurre cuando los grupos no están repartidos de forma equilibrada entre los tratamientos.",
+      "Aquí, el tratamiento A recibe muchos más casos graves, que tienen peor pronóstico, así que su tasa global baja aunque A sea mejor en cada tipo de caso."
+     ],
+     "prueba": [
+      "Con los valores iniciales, observa que A gana en leves y en graves, pero pierde en el total.",
+      "Lleva los dos deslizadores a 50 %: la paradoja desaparece al repartir los casos por igual.",
+      "Prueba otras combinaciones y busca cuándo se invierte la comparación."
+     ],
+     "demo": "demo_simpson",
+     "claves": [
+      ["variable de confusión", "Variable (aquí la gravedad) que afecta a la vez al grupo asignado y al resultado."],
+      ["estratificar", "Comparar dentro de cada grupo en vez de mezclar todos los datos."]
+     ],
+     "conceptos": ["c_paradoja_de_simpson", "c_tablas_de_contingencia_y_datos_categoricos", "c_probabilidad_condicionada_e_independencia"],
+     "funciones": ["tabla_contingencia", "medidas_riesgo_2x2"],
+     "pregunta": {
+      "texto": "¿Cómo se evita sacar una conclusión equivocada por la paradoja de Simpson?",
+      "opciones": ["Usando siempre el total", "Comparando dentro de cada subgrupo o ajustando por la variable de confusión", "Quitando los casos graves"],
+      "correcta": 1,
+      "pista": "El problema es mezclar grupos con composición distinta.",
+      "explicacion": "Hay que comparar a igualdad de gravedad (estratificar o ajustar); el total mezcla grupos con composiciones distintas."
+     }
+    },
+    {
+     "id": "graficos-enganosos",
+     "titulo": "Gráficos que engañan",
+     "idea": [
+      "Un gráfico puede ser exacto y aun así engañar. El truco más común es **cortar el eje vertical**: en un gráfico de barras la altura debe ser proporcional al valor, y si el eje no empieza en cero, una diferencia pequeña parece enorme.",
+      "Otros trucos: escalas distintas en gráficos que se comparan, áreas o volúmenes en vez de longitudes, elegir el periodo que conviene. Una buena regla: ¿entendería cualquiera la diferencia real viendo solo el dibujo?"
+     ],
+     "prueba": [
+      "Con el origen del eje en 50, B parece 2,5 veces A. Baja el origen hasta 0 y mira cómo cambia la impresión.",
+      "Cambia el valor de B: ¿a partir de qué diferencia real te parece que la barra es «de verdad» más alta?"
+     ],
+     "demo": "demo_eje_enganoso",
+     "claves": [
+      ["eje truncado", "Eje que no empieza en cero y exagera las diferencias en un gráfico de barras."],
+      ["proporcionalidad visual", "La altura o longitud debe ser proporcional al valor que representa."]
+     ],
+     "conceptos": ["c_graficos_enganosos_y_buenas_practicas", "c_graficos_para_una_variable"],
+     "funciones": ["grafico_distribucion", "grafico_comparar_grupos"],
+     "pregunta": {
+      "texto": "En un gráfico de barras, ¿qué problema tiene un eje vertical que empieza en 50?",
+      "opciones": ["Ninguno, es más claro", "Exagera visualmente las diferencias porque la altura ya no es proporcional al valor", "Hace las barras más estrechas"],
+      "correcta": 1,
+      "pista": "Compara la razón entre las alturas dibujadas y la razón entre los valores.",
+      "explicacion": "Con el eje cortado, la altura de cada barra es valor − 50, así que la razón visual no coincide con la real."
+     }
+    },
+    {
+     "id": "informe",
+     "titulo": "Tu primer informe descriptivo",
+     "idea": [
+      "Con todo lo anterior, un buen análisis descriptivo sigue siempre el mismo orden: **1)** tipos de variable, **2)** resumen numérico, **3)** forma (histograma y caja), **4)** atípicos y datos raros, **5)** relaciones entre variables, **6)** gráficos honestos.",
+      "En Python, `resumen_descriptivo` da el resumen de todas las columnas, `detectar_atipicos` los valores extremos, `correlacion_con_ic` la correlación con su intervalo y `grafico_distribucion` el histograma con la caja."
+     ],
+     "prueba": [
+      "Abre `resumen_descriptivo` en el mapa (botón de abajo) y ejecuta su ejemplo con datos simulados.",
+      "Haz lo mismo con `grafico_distribucion` y compara con lo que viste en las demos."
+     ],
+     "conceptos": ["c_medidas_de_posicion_media_mediana_media_truncada", "c_graficos_para_una_variable"],
+     "funciones": ["resumen_descriptivo", "detectar_atipicos", "correlacion_con_ic", "grafico_distribucion", "tabla_contingencia"],
+     "pregunta": {
+      "texto": "¿Cuál es el primer paso de un análisis descriptivo?",
+      "opciones": ["Calcular la correlación entre todas las variables", "Mirar los datos: tipos de variable y gráficos", "Ajustar un modelo"],
+      "correcta": 1,
+      "pista": "Los resúmenes y los modelos dependen de que hayas entendido antes qué tienes delante.",
+      "explicacion": "Primero se entiende qué se ha medido y cómo se ve; después se resume y se modela."
+     }
+    }
+   ]
+  }
+ ]
+}

@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 0.14.0 - Instalador
+title Arbol de la estadistica 0.15.0 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
 set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=0.14.0"
+set "ARBOL_VERSION=0.15.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -482,8 +482,14 @@ if ($Modo -eq 'actualizar') {
 Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
+:::BEGIN py/0|text
+
+:::END
+:::BEGIN py/TASA.B.leve|text
+
+:::END
 :::BEGIN py/VERSION.txt|text
-0.14.0
+0.15.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -709,6 +715,28 @@ DEMOS = [
          "funciones": ["ajustar_p_valores", "grafico_fdr"],
          "conceptos": ["c_tasa_de_falsos_descubrimientos_fdr", "c_significacion_estadistica_y_p_valor"]},
     ]),
+    ("Descriptiva", "Describir y mirar los datos antes de modelar", [
+        {"id": "demo_descriptiva", "nombre": "Describir una variable: resumen y gráficos",
+         "desc": "Elige la forma de los datos (simétrica, sesgada, bimodal, uniforme), añade un atípico y cambia el número de barras: mira a la vez media, mediana, dispersión, histograma y diagrama de caja.",
+         "aprender": "La media y la desviación típica se dejan arrastrar por la cola o por un atípico; la mediana y el IQR resisten. El histograma depende del número de barras: pocas ocultan la forma y muchas añaden ruido. El diagrama de caja resume cinco números y marca atípicos, que no siempre son errores.",
+         "funciones": ["resumen_descriptivo", "detectar_atipicos", "grafico_distribucion", "estimar_densidad"],
+         "conceptos": ["c_tipos_de_variables_y_escalas", "c_medidas_de_posicion_media_mediana_media_truncada", "c_medidas_de_variabilidad_desviacion_mad_rango_intercuartilico", "c_percentiles_y_diagramas_de_caja", "c_histogramas_y_estimacion_de_densidad", "c_asimetria_y_curtosis", "c_valores_atipicos_outliers", "c_graficos_para_una_variable"]},
+        {"id": "demo_anscombe", "nombre": "Cuarteto de Anscombe: dibuja antes de resumir",
+         "desc": "Cuatro conjuntos de datos con las mismas medias, varianzas, correlación y recta de regresión pero formas muy distintas.",
+         "aprender": "Los resúmenes numéricos pueden coincidir exactamente con datos que son una recta, una curva, una recta con un atípico o un único punto influyente. Dibujar los datos revela lo que los números ocultan.",
+         "funciones": ["resumen_descriptivo", "correlacion_con_ic", "grafico_regresion_simple"],
+         "conceptos": ["c_visualizar_antes_de_resumir_cuarteto_de_anscombe", "c_correlacion_pearson_spearman_kendall", "c_graficos_para_dos_variables"]},
+        {"id": "demo_simpson", "nombre": "Paradoja de Simpson",
+         "desc": "Un tratamiento mejor en cada tipo de caso pero peor en el total: reparte los casos graves y leves entre A y B y mira cuándo se invierte la comparación.",
+         "aprender": "Al mezclar grupos con composiciones distintas, el total puede contradecir a cada subgrupo. Se evita comparando dentro de cada grupo o ajustando por la variable de confusión.",
+         "funciones": ["tabla_contingencia", "medidas_riesgo_2x2"],
+         "conceptos": ["c_paradoja_de_simpson", "c_tablas_de_contingencia_y_datos_categoricos", "c_probabilidad_condicionada_e_independencia"]},
+        {"id": "demo_eje_enganoso", "nombre": "Gráficos que engañan: el eje truncado",
+         "desc": "Dos barras casi iguales con un eje vertical que puedes cortar: compara la diferencia que ves con la real.",
+         "aprender": "Si el eje de un gráfico de barras no empieza en cero, la altura deja de ser proporcional al valor y una diferencia pequeña parece enorme. Un gráfico honesto representa magnitudes proporcionales.",
+         "funciones": ["grafico_distribucion", "grafico_comparar_grupos"],
+         "conceptos": ["c_graficos_enganosos_y_buenas_practicas", "c_graficos_para_una_variable"]},
+    ]),
     ("Probabilidad", "Distribuciones: forma, media, varianza y probabilidades", [
         {"id": "demo_distribuciones", "nombre": "Explorador de distribuciones",
          "desc": "Elige una distribución (normal, t, lognormal, gamma, inversa gaussiana, Poisson, binomial negativa, Pareto…), mueve sus parámetros y mira la densidad, la acumulada y P(X ≤ x).",
@@ -821,7 +849,7 @@ DOCS = {
 }
 CATALOGO = RAIZ / "conceptos" / "catalogo.json"
 PROPIEDADES = CODIGO / "propiedades"
-RUTAS = CODIGO / "aprender" / "rutas.json"
+RUTAS = CODIGO / "aprender"      # una ruta (o varias) por fichero: 01_fundamentos.json, 02_descriptiva.json…
 FICHAS_MIAS = RAIZ / "conceptos" / "fichas_mias.json"
 EJEMPLOS = None   # se carga en construir()
 AVISO_RE = re.compile(r"OJO|ATENCI[ÓO]N|CORRECCI[ÓO]N|IMPORTANTE|Gauss", re.I)
@@ -921,7 +949,7 @@ def ramas_conceptos(funciones: set[str]) -> list[dict]:
             print(f"AVISO: el concepto «{k['nombre']}» cita funciones que no están en py/: {desconocidas} "
                   "(¿falta ejecutar el actualizador?)")
             k = dict(k, funciones=[f for f in k["funciones"] if f in funciones])
-        origen = "; ".join({"very_normal": "Very Normal: ", "master": "Máster: ", "manual": "Manual: "}.get(f["tipo"], "Árbol (consultoría): ") + f["ref"] + (f" ({f['base']})" if f.get("base") else "")
+        origen = "; ".join({"very_normal": "Very Normal: ", "master": "Máster: ", "manual": "Manual: ", "curso": "Curso: "}.get(f["tipo"], "Árbol (consultoría): ") + f["ref"] + (f" ({f['base']})" if f.get("base") else "")
                            for f in k["fuentes"])
         return {
             "id": k["id"], "nombre": k["nombre"], "tipo": "concepto", "firma": "", "doc": " ".join(k["sinonimos"] + k["funciones"]),
@@ -1014,9 +1042,7 @@ def cargar_propiedades(nombres_fn: set[str]) -> tuple[dict, dict]:
 
 def cargar_rutas(funciones: set[str], conceptos: set[str], demos: set[str]) -> list[dict]:
     """Rutas de la pestaña «Aprender» (py/aprender/rutas.json). Los enlaces rotos se quitan y se avisan; una pregunta mal formada es un error."""
-    if not RUTAS.exists():
-        return []
-    rutas = json.loads(RUTAS.read_text(encoding="utf-8"))["rutas"]
+    rutas = [r for f in sorted(RUTAS.glob("*.json")) for r in json.loads(f.read_text(encoding="utf-8"))["rutas"]]
     for r in rutas:
         for p in r["pasos"]:
             q = p["pregunta"]
@@ -2462,7 +2488,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "0.14.0"
+version = "0.15.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -2510,7 +2536,7 @@ patsy
 matplotlib>=3.7
 pytest
 :::END
-:::BEGIN py/aprender/rutas.json|text
+:::BEGIN py/aprender/01_fundamentos.json|text
 {
  "rutas": [
   {
@@ -2851,6 +2877,284 @@ pytest
  ]
 }
 :::END
+:::BEGIN py/aprender/02_descriptiva.json|text
+{
+ "rutas": [
+  {
+   "id": "descriptiva",
+   "titulo": "Estadística descriptiva: mirar y resumir los datos",
+   "para": "Desde cero. Es el primer paso de cualquier análisis y la mejor forma de no equivocarse después.",
+   "nivel": "Principiante",
+   "duracion": "alrededor de 1,5 horas",
+   "desc": "Tipos de variables, medidas de posición y dispersión, histogramas y diagramas de caja, relación entre dos variables y los errores clásicos: resúmenes que engañan, paradoja de Simpson y gráficos manipulados.",
+   "pasos": [
+    {
+     "id": "tipos-variables",
+     "titulo": "Qué estás midiendo: tipos de variables",
+     "idea": [
+      "Antes de resumir nada hay que saber **qué tipo de variable** tienes, porque de eso depende qué resumen y qué gráfico tienen sentido.",
+      "Las **cuantitativas** son números con los que tiene sentido operar: discretas (número de siniestros, de hijos) o continuas (un importe, una altura). Las **cualitativas** son categorías: nominales (color, provincia, código postal) u ordinales, con orden (leve, moderado, grave).",
+      "Un error frecuente es tratar como número algo que solo es una etiqueta: la media de los códigos postales no significa nada."
+     ],
+     "prueba": [
+      "Clasifica mentalmente: edad, código postal, nivel de estudios, número de partes en el año, importe de una factura.",
+      "Piensa qué resumen usarías para cada una: una media, una tabla de frecuencias, una mediana…"
+     ],
+     "claves": [
+      ["cuantitativa", "Variable numérica con la que se puede operar (media, suma…)."],
+      ["cualitativa", "Variable en categorías; solo se cuentan frecuencias."],
+      ["ordinal", "Categorías con un orden natural pero sin distancia medible entre ellas."]
+     ],
+     "conceptos": ["c_tipos_de_variables_y_escalas", "c_diccionario_de_datos_y_catalogos"],
+     "funciones": ["diccionario_datos", "resumen_descriptivo"],
+     "pregunta": {
+      "texto": "El código postal de un cliente es una variable…",
+      "opciones": ["numérica continua", "categórica nominal", "numérica discreta"],
+      "correcta": 1,
+      "pista": "¿Tiene sentido sumar o promediar códigos postales?",
+      "explicacion": "Es una etiqueta: aunque se escriba con dígitos no se puede operar con ella, así que es categórica nominal."
+     }
+    },
+    {
+     "id": "media-mediana",
+     "titulo": "Un solo número: media, mediana y moda",
+     "idea": [
+      "La **media** es el promedio; la **mediana** es el valor que deja la mitad de los datos por debajo y la mitad por encima; la **moda** es el valor más frecuente.",
+      "Si los datos son simétricos, las tres se parecen. Si hay asimetría o valores extremos, la media se desplaza hacia la cola y la mediana describe mejor el valor «típico»."
+     ],
+     "prueba": [
+      "Con la forma «Simétrica (campana)», comprueba que media y mediana casi coinciden.",
+      "Cambia a «Sesgada a la derecha (importes)»: la media queda a la derecha de la mediana.",
+      "Prueba «Dos grupos mezclados»: la media cae en un valle donde casi no hay datos, así que no describe a nadie."
+     ],
+     "demo": "demo_descriptiva",
+     "claves": [
+      ["media", "Suma de los valores dividida entre n; sensible a los extremos."],
+      ["mediana", "Valor central: resiste a los atípicos."],
+      ["moda", "Valor (o tramo) más frecuente."]
+     ],
+     "conceptos": ["c_medidas_de_posicion_media_mediana_media_truncada"],
+     "funciones": ["resumen_descriptivo"],
+     "pregunta": {
+      "texto": "En una variable con cola larga a la derecha (importes de siniestros), la media suele ser…",
+      "opciones": ["mayor que la mediana", "menor que la mediana", "igual a la mediana"],
+      "correcta": 0,
+      "pista": "Los valores muy grandes tiran de la media hacia la derecha, pero no de la mediana.",
+      "explicacion": "Los valores extremos altos elevan la media pero apenas mueven la mediana, así que la media queda por encima."
+     }
+    },
+    {
+     "id": "dispersion",
+     "titulo": "Cuánto se dispersan: desviación típica, IQR y MAD",
+     "idea": [
+      "Dos conjuntos con la misma media pueden ser muy distintos si uno está muy concentrado y otro muy disperso. Por eso se añade una medida de **dispersión**.",
+      "La **desviación típica** es la más usada pero se deja arrastrar por los atípicos. El **rango intercuartílico (IQR)** —la distancia entre el primer y el tercer cuartil— y el **MAD** (desviación mediana absoluta) son **robustos**."
+     ],
+     "prueba": [
+      "Con datos «Simétrica», anota la desviación típica y el IQR.",
+      "Mueve el deslizador del atípico a 60 y mira la lectura: ¿cuánto cambian la desviación típica y el IQR?"
+     ],
+     "demo": "demo_descriptiva",
+     "claves": [
+      ["desviación típica", "Raíz de la varianza; distancia típica a la media."],
+      ["IQR", "Tercer cuartil menos primer cuartil: la anchura del 50 % central."],
+      ["robusto", "Que cambia poco aunque haya valores extremos."]
+     ],
+     "conceptos": ["c_medidas_de_variabilidad_desviacion_mad_rango_intercuartilico"],
+     "funciones": ["resumen_descriptivo", "detectar_atipicos"],
+     "pregunta": {
+      "texto": "¿Qué medida de dispersión resiste mejor a un valor extremo?",
+      "opciones": ["La desviación típica", "El rango intercuartílico (IQR)", "El rango (máximo menos mínimo)"],
+      "correcta": 1,
+      "pista": "Piensa en cuál depende solo de la parte central de los datos.",
+      "explicacion": "El IQR solo usa el 50 % central, así que un atípico no lo cambia; la desviación típica y el rango sí se ven afectados."
+     }
+    },
+    {
+     "id": "histograma",
+     "titulo": "El histograma: cuántas barras",
+     "idea": [
+      "El **histograma** reparte los valores en tramos y cuenta cuántos caen en cada uno. Enseña la **forma** de los datos: simetría, colas, una o varias jorobas.",
+      "El número de barras es una decisión tuya: pocas barras ocultan la forma y muchas añaden ruido. Prueba varias."
+     ],
+     "prueba": [
+      "Elige «Dos grupos mezclados» y pon 3 barras: parece una sola joroba.",
+      "Sube a 12 y a 25 barras: aparecen las dos jorobas.",
+      "Con 40 barras la forma se rompe en picos sueltos: es ruido de muestreo."
+     ],
+     "demo": "demo_descriptiva",
+     "claves": [
+      ["bimodal", "Con dos jorobas: suele indicar dos subpoblaciones mezcladas."],
+      ["asimetría", "Cola más larga a un lado."]
+     ],
+     "conceptos": ["c_histogramas_y_estimacion_de_densidad", "c_asimetria_y_curtosis", "c_graficos_para_una_variable"],
+     "funciones": ["grafico_distribucion", "estimar_densidad"],
+     "pregunta": {
+      "texto": "Con 3 barras ves una sola joroba y con 12 ves dos. ¿Qué concluyes?",
+      "opciones": ["Que los datos cambian al cambiar las barras", "Que pocas barras ocultaban la bimodalidad y conviene probar varios anchos", "Que el histograma está mal hecho"],
+      "correcta": 1,
+      "pista": "Los datos son los mismos; lo que cambia es la resolución del dibujo.",
+      "explicacion": "Con pocas barras se promedian dos grupos en uno. Por eso conviene mirar varios anchos antes de dar una forma por cierta."
+     }
+    },
+    {
+     "id": "caja",
+     "titulo": "El diagrama de caja y los atípicos",
+     "idea": [
+      "El **diagrama de caja** resume cinco números: mínimo (sin atípicos), primer cuartil, mediana, tercer cuartil y máximo. La caja contiene el 50 % central de los datos.",
+      "Los **atípicos** son valores que quedan a más de 1,5·IQR de los cuartiles (regla de Tukey). No son errores por sí mismos: pueden ser casos reales importantes o fallos de registro; hay que mirarlos antes de borrarlos."
+     ],
+     "prueba": [
+      "Añade un atípico de 40: aparece como un punto fuera de los bigotes.",
+      "Mira cómo la mediana (línea naranja de la caja) casi no se mueve, mientras que la media sí.",
+      "Con «Sesgada a la derecha», los puntos marcados como atípicos pueden deberse solo a la cola larga: no siempre son anomalías."
+     ],
+     "demo": "demo_descriptiva",
+     "claves": [
+      ["cuartiles", "Valores que dividen los datos ordenados en cuatro partes iguales."],
+      ["regla de Tukey", "Atípico: por debajo de Q1 − 1,5·IQR o por encima de Q3 + 1,5·IQR."]
+     ],
+     "conceptos": ["c_percentiles_y_diagramas_de_caja", "c_valores_atipicos_outliers"],
+     "funciones": ["resumen_descriptivo", "detectar_atipicos"],
+     "pregunta": {
+      "texto": "En un diagrama de caja, la caja abarca…",
+      "opciones": ["del mínimo al máximo", "del primer al tercer cuartil (el 50 % central)", "la media más/menos una desviación típica"],
+      "correcta": 1,
+      "pista": "Los extremos de la caja son cuartiles.",
+      "explicacion": "La caja va del primer cuartil (25 %) al tercero (75 %), así que contiene el 50 % central de los datos."
+     }
+    },
+    {
+     "id": "dos-variables",
+     "titulo": "Dos variables: dispersión y correlación",
+     "idea": [
+      "Para dos variables numéricas el gráfico natural es el **diagrama de dispersión**: cada punto es una observación. La **correlación** (de −1 a 1) mide cuánto se parece la nube a una recta.",
+      "Correlación no es causalidad: dos variables pueden moverse juntas porque una causa la otra, porque hay una tercera detrás o por casualidad."
+     ],
+     "prueba": [
+      "Sube el ruido: la nube se ensancha y la recta se vuelve menos fiable aunque la pendiente real sea la misma.",
+      "Activa «Añadir un punto atípico con mucho apalancamiento»: mira cómo arrastra la recta."
+     ],
+     "demo": "demo_regresion",
+     "claves": [
+      ["correlación", "Medida de asociación lineal entre −1 y 1."],
+      ["apalancamiento", "Influencia de un punto con un valor de x muy alejado del resto."]
+     ],
+     "conceptos": ["c_correlacion_pearson_spearman_kendall", "c_graficos_para_dos_variables"],
+     "funciones": ["correlacion_con_ic", "grafico_regresion_simple"],
+     "pregunta": {
+      "texto": "Una correlación de 0,9 entre dos variables significa que…",
+      "opciones": ["una causa a la otra", "la relación lineal es fuerte, pero no dice nada sobre causa y efecto", "el 90 % de los puntos están sobre la recta"],
+      "correcta": 1,
+      "pista": "La correlación solo mide cuánto se parecen los datos a una recta.",
+      "explicacion": "Mide la fuerza de la relación lineal; para hablar de causa hace falta un diseño (experimento) o supuestos adicionales."
+     }
+    },
+    {
+     "id": "anscombe",
+     "titulo": "Los números pueden engañar: el cuarteto de Anscombe",
+     "idea": [
+      "En 1973 Francis Anscombe construyó cuatro conjuntos de datos con la **misma media, varianza, correlación y recta de regresión**… y formas completamente distintas.",
+      "La lección: un resumen numérico es una compresión con pérdida. **Dibuja siempre los datos antes de fiarte de un resumen.**"
+     ],
+     "prueba": [
+      "Con el conjunto I, anota las medias, varianzas, la correlación y la recta.",
+      "Cambia a II, III y IV: los números no cambian, pero el dibujo sí. ¿Qué pasa en cada uno?"
+     ],
+     "demo": "demo_anscombe",
+     "claves": [
+      ["punto influyente", "Observación que por sí sola cambia mucho el ajuste."],
+      ["resumen numérico", "Medias, varianzas, correlación: útil pero no sustituye a mirar los datos."]
+     ],
+     "conceptos": ["c_visualizar_antes_de_resumir_cuarteto_de_anscombe", "c_correlacion_pearson_spearman_kendall"],
+     "funciones": ["resumen_descriptivo", "correlacion_con_ic", "grafico_regresion_simple"],
+     "pregunta": {
+      "texto": "Dos conjuntos de datos tienen la misma media, varianza y correlación. ¿Son equivalentes?",
+      "opciones": ["Sí, el resumen lo dice todo", "No: pueden tener formas muy distintas, así que hay que dibujarlos", "Solo si tienen el mismo número de datos"],
+      "correcta": 1,
+      "pista": "Fíjate en el conjunto II y en el IV.",
+      "explicacion": "El cuarteto de Anscombe tiene los mismos resúmenes con una recta, una curva, un atípico y un punto de apalancamiento: solo el dibujo lo muestra."
+     }
+    },
+    {
+     "id": "simpson",
+     "titulo": "La paradoja de Simpson",
+     "idea": [
+      "Un tratamiento puede ser mejor que otro **en cada subgrupo** y peor **en el total**. Es la paradoja de Simpson, y ocurre cuando los grupos no están repartidos de forma equilibrada entre los tratamientos.",
+      "Aquí, el tratamiento A recibe muchos más casos graves, que tienen peor pronóstico, así que su tasa global baja aunque A sea mejor en cada tipo de caso."
+     ],
+     "prueba": [
+      "Con los valores iniciales, observa que A gana en leves y en graves, pero pierde en el total.",
+      "Lleva los dos deslizadores a 50 %: la paradoja desaparece al repartir los casos por igual.",
+      "Prueba otras combinaciones y busca cuándo se invierte la comparación."
+     ],
+     "demo": "demo_simpson",
+     "claves": [
+      ["variable de confusión", "Variable (aquí la gravedad) que afecta a la vez al grupo asignado y al resultado."],
+      ["estratificar", "Comparar dentro de cada grupo en vez de mezclar todos los datos."]
+     ],
+     "conceptos": ["c_paradoja_de_simpson", "c_tablas_de_contingencia_y_datos_categoricos", "c_probabilidad_condicionada_e_independencia"],
+     "funciones": ["tabla_contingencia", "medidas_riesgo_2x2"],
+     "pregunta": {
+      "texto": "¿Cómo se evita sacar una conclusión equivocada por la paradoja de Simpson?",
+      "opciones": ["Usando siempre el total", "Comparando dentro de cada subgrupo o ajustando por la variable de confusión", "Quitando los casos graves"],
+      "correcta": 1,
+      "pista": "El problema es mezclar grupos con composición distinta.",
+      "explicacion": "Hay que comparar a igualdad de gravedad (estratificar o ajustar); el total mezcla grupos con composiciones distintas."
+     }
+    },
+    {
+     "id": "graficos-enganosos",
+     "titulo": "Gráficos que engañan",
+     "idea": [
+      "Un gráfico puede ser exacto y aun así engañar. El truco más común es **cortar el eje vertical**: en un gráfico de barras la altura debe ser proporcional al valor, y si el eje no empieza en cero, una diferencia pequeña parece enorme.",
+      "Otros trucos: escalas distintas en gráficos que se comparan, áreas o volúmenes en vez de longitudes, elegir el periodo que conviene. Una buena regla: ¿entendería cualquiera la diferencia real viendo solo el dibujo?"
+     ],
+     "prueba": [
+      "Con el origen del eje en 50, B parece 2,5 veces A. Baja el origen hasta 0 y mira cómo cambia la impresión.",
+      "Cambia el valor de B: ¿a partir de qué diferencia real te parece que la barra es «de verdad» más alta?"
+     ],
+     "demo": "demo_eje_enganoso",
+     "claves": [
+      ["eje truncado", "Eje que no empieza en cero y exagera las diferencias en un gráfico de barras."],
+      ["proporcionalidad visual", "La altura o longitud debe ser proporcional al valor que representa."]
+     ],
+     "conceptos": ["c_graficos_enganosos_y_buenas_practicas", "c_graficos_para_una_variable"],
+     "funciones": ["grafico_distribucion", "grafico_comparar_grupos"],
+     "pregunta": {
+      "texto": "En un gráfico de barras, ¿qué problema tiene un eje vertical que empieza en 50?",
+      "opciones": ["Ninguno, es más claro", "Exagera visualmente las diferencias porque la altura ya no es proporcional al valor", "Hace las barras más estrechas"],
+      "correcta": 1,
+      "pista": "Compara la razón entre las alturas dibujadas y la razón entre los valores.",
+      "explicacion": "Con el eje cortado, la altura de cada barra es valor − 50, así que la razón visual no coincide con la real."
+     }
+    },
+    {
+     "id": "informe",
+     "titulo": "Tu primer informe descriptivo",
+     "idea": [
+      "Con todo lo anterior, un buen análisis descriptivo sigue siempre el mismo orden: **1)** tipos de variable, **2)** resumen numérico, **3)** forma (histograma y caja), **4)** atípicos y datos raros, **5)** relaciones entre variables, **6)** gráficos honestos.",
+      "En Python, `resumen_descriptivo` da el resumen de todas las columnas, `detectar_atipicos` los valores extremos, `correlacion_con_ic` la correlación con su intervalo y `grafico_distribucion` el histograma con la caja."
+     ],
+     "prueba": [
+      "Abre `resumen_descriptivo` en el mapa (botón de abajo) y ejecuta su ejemplo con datos simulados.",
+      "Haz lo mismo con `grafico_distribucion` y compara con lo que viste en las demos."
+     ],
+     "conceptos": ["c_medidas_de_posicion_media_mediana_media_truncada", "c_graficos_para_una_variable"],
+     "funciones": ["resumen_descriptivo", "detectar_atipicos", "correlacion_con_ic", "grafico_distribucion", "tabla_contingencia"],
+     "pregunta": {
+      "texto": "¿Cuál es el primer paso de un análisis descriptivo?",
+      "opciones": ["Calcular la correlación entre todas las variables", "Mirar los datos: tipos de variable y gráficos", "Ajustar un modelo"],
+      "correcta": 1,
+      "pista": "Los resúmenes y los modelos dependen de que hayas entendido antes qué tienes delante.",
+      "explicacion": "Primero se entiende qué se ha medido y cómo se ve; después se resume y se modela."
+     }
+    }
+   ]
+  }
+ ]
+}
+:::END
 :::BEGIN py/arbol_estadistica/__init__.py|text
 """Arbol de la estadística: funciones estadísticas reutilizables (origen en trabajos de consultoría; máster).
 
@@ -2863,7 +3167,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "0.14.0"
+__version__ = "0.15.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -29272,7 +29576,7 @@ def test_demografia():
     assert np.allclose(ult / ult.sum(), l["estructura_estable"], atol=1e-3)
 :::END
 :::BEGIN py/tests/test_aprender.py|text
-"""Guía de aprendizaje (py/aprender/rutas.json): estructura y enlaces válidos. El visor la muestra en la pestaña «Aprender»."""
+"""Guía de aprendizaje (py/aprender/*.json): estructura y enlaces válidos. El visor la muestra en la pestaña «Aprender»."""
 import importlib
 import json
 import sys
@@ -29281,7 +29585,7 @@ from pathlib import Path
 CODIGO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(CODIGO))
 construir_visor = importlib.import_module("construir_visor")
-RUTAS = json.loads((CODIGO / "aprender" / "rutas.json").read_text(encoding="utf-8"))["rutas"]
+RUTAS = [r for f in sorted((CODIGO / "aprender").glob("*.json")) for r in json.loads(f.read_text(encoding="utf-8"))["rutas"]]
 PASO = {"id", "titulo", "idea", "prueba", "pregunta"}
 PREGUNTA = {"texto", "opciones", "correcta", "pista", "explicacion"}
 
@@ -31976,7 +32280,9 @@ def test_catalogo_de_conceptos_es_coherente():
         assert k["area"] in areas, k["nombre"]
         assert k["desc"] and k["fuentes"], f"«{k['nombre']}» necesita descripción y al menos una fuente"
         for f in k["fuentes"]:
-            assert f["tipo"] in ("master", "very_normal", "arbol", "manual") and f["ref"]
+            assert f["tipo"] in ("master", "very_normal", "arbol", "manual", "curso") and f["ref"]
+            if f["tipo"] == "curso":
+                assert f["url"].startswith("https://") and f["base"], f
             if f["tipo"] == "very_normal":
                 assert f["url"].startswith(("https://verynormal.substack.com/", "https://www.youtube.com/watch?v=")), f["url"]
 
@@ -33167,6 +33473,136 @@ D.demo_sobreajuste = function (cont) {
     escribir(lec, [['Grado ', [String(g)], ': error de entrenamiento ', [f(tr[g - 1], 3)], ' · error de prueba ', [f(te[g - 1], 3)], ' · mejor grado según la prueba: ', [String(mejor)]],
       [g < mejor ? 'Infraajuste: el modelo es demasiado simple y falla tanto en entrenamiento como en prueba.' : g > mejor + 1 ? 'Sobreajuste: el error de entrenamiento sigue bajando pero el de prueba sube, porque el polinomio persigue el ruido.' : 'Zona razonable: complejidad parecida a la que tienen los datos.'],
       ['El error de entrenamiento baja siempre al añadir complejidad; solo el error en datos nuevos revela el sobreajuste (por eso se usa validación cruzada). Con más observaciones el mejor grado sube; con más ruido, baja.']]);
+  }
+  pintar();
+};
+
+
+/* ================= 22. Describir una variable: resumen y gráficos ================= */
+D.demo_descriptiva = function (cont) {
+  var N = 150, ctr = ht('div', {'class': 'dm-ctrls'}, cont);
+  var sF = selector(ctr, 'Forma de los datos', [{v: 'normal', t: 'Simétrica (campana)'}, {v: 'sesgo', t: 'Sesgada a la derecha (importes)'}, {v: 'bimodal', t: 'Dos grupos mezclados (bimodal)'}, {v: 'uniforme', t: 'Uniforme'}], 'normal', function () { pintar(); });
+  var cA = control(ctr, {etq: 'Valor del atípico añadido (0 = ninguno)', min: 0, max: 80, paso: 1, valor: 0, fmt: function (v) { return v ? String(v) : 'sin atípico'; }}, pintar);
+  var cB = control(ctr, {etq: 'Nº de barras del histograma', min: 3, max: 40, paso: 1, valor: 12, fmt: function (v) { return String(v); }}, pintar);
+  var L1 = Lienzo(cont, {h: 170, aria: 'Histograma con la media y la mediana'});
+  var L2 = Lienzo(cont, {h: 70, m: {t: 6, b: 22}, aria: 'Diagrama de caja'});
+  leyenda(cont, [['dm-k1', 'media'], ['dm-k2', 'mediana']]);
+  var lec = lectura(cont), rnd = semilla(42), Z = [], U = [], i;
+  for (i = 0; i < N; i++) { Z.push(normal(rnd)); U.push(rnd()); }
+  function datos(forma) {
+    return Z.map(function (z, q) { return forma === 'normal' ? 10 + 2 * z : forma === 'sesgo' ? Math.exp(2.2 + 0.5 * z) : forma === 'bimodal' ? (q % 2 ? 14 + 1.2 * z : 7 + 1.2 * z) : 4 + 12 * U[q]; });
+  }
+  function cuantil(s, p) { var h = (s.length - 1) * p, lo = Math.floor(h), hi = Math.ceil(h); return s[lo] + (s[hi] - s[lo]) * (h - lo); }
+  function resumen(x) {
+    var s = x.slice().sort(function (a, b) { return a - b; }), n = s.length, m = s.reduce(function (a, b) { return a + b; }, 0) / n;
+    var sd = Math.sqrt(s.reduce(function (a, b) { return a + (b - m) * (b - m); }, 0) / (n - 1)), q1 = cuantil(s, 0.25), med = cuantil(s, 0.5), q3 = cuantil(s, 0.75);
+    var mad = cuantil(s.map(function (v) { return Math.abs(v - med); }).sort(function (a, b) { return a - b; }), 0.5);
+    var asim = s.reduce(function (a, b) { return a + Math.pow((b - m) / sd, 3); }, 0) * n / ((n - 1) * (n - 2));
+    var lo = q1 - 1.5 * (q3 - q1), hi = q3 + 1.5 * (q3 - q1), dentro = s.filter(function (v) { return v >= lo && v <= hi; });
+    return {s: s, n: n, m: m, sd: sd, q1: q1, med: med, q3: q3, iqr: q3 - q1, mad: mad, asim: asim, min: s[0], max: s[n - 1],
+            atip: s.filter(function (v) { return v < lo || v > hi; }), wlo: dentro[0], whi: dentro[dentro.length - 1]};
+  }
+  function pintar() {
+    var base = datos(sF.valor()), a = cA.valor(), x = a ? base.concat([a]) : base, r = resumen(x), r0 = resumen(base), nb = cB.valor();
+    var rg = r.max - r.min, x0 = r.min - 0.05 * rg, x1 = r.max + 0.03 * rg, bw = (x1 - x0) / nb;
+    var cuentas = []; for (i = 0; i < nb; i++) cuentas.push(0);
+    r.s.forEach(function (v) { var j = Math.min(nb - 1, Math.floor((v - x0) / bw)); cuentas[j]++; });
+    var top = Math.max.apply(null, cuentas) * 1.1, jm = cuentas.indexOf(Math.max.apply(null, cuentas)), moda = x0 + (jm + 0.5) * bw;
+    L1.nuevo([x0, x1], [0, top], {xl: 'valor', yl: 'frecuencia', ny: 3}); var capa = L1.capa();
+    cuentas.forEach(function (c, j) { var p0 = L1.sx(x0 + j * bw), p1 = L1.sx(x0 + (j + 1) * bw);
+      sv('rect', {x: p0, y: L1.sy(c), width: Math.max(p1 - p0 - 1, 0.5), height: Math.max(L1.sy(0) - L1.sy(c), 0), 'class': 'dm-f1 dm-op45'}, capa); });
+    L1.vline(r.m, 'dm-l1'); L1.vline(r.med, 'dm-l2');
+    L2.nuevo([x0, x1], [0, 1], {y: false, nx: 6}); var cp = L2.capa(), yc = L2.sy(0.55), alto = (L2.sy(0.15) - L2.sy(0.85));
+    sv('line', {x1: L2.sx(r.wlo), x2: L2.sx(r.q1), y1: yc, y2: yc, 'class': 'dm-eje'}, cp); sv('line', {x1: L2.sx(r.q3), x2: L2.sx(r.whi), y1: yc, y2: yc, 'class': 'dm-eje'}, cp);
+    sv('rect', {x: L2.sx(r.q1), y: yc - alto / 2, width: Math.max(L2.sx(r.q3) - L2.sx(r.q1), 1), height: alto, 'class': 'dm-f1 dm-op30', stroke: 'currentColor', 'stroke-width': 1}, cp);
+    sv('line', {x1: L2.sx(r.med), x2: L2.sx(r.med), y1: yc - alto / 2, y2: yc + alto / 2, 'class': 'dm-l2'}, cp);
+    r.atip.forEach(function (v) { sv('circle', {cx: L2.sx(v), cy: yc, r: 3, 'class': 'dm-f2 dm-anillo'}, cp); });
+    var difs = a ? ['Con el atípico: la media pasa de ' + f(r0.m, 2) + ' a ' + f(r.m, 2) + ' (' + (r.m >= r0.m ? '+' : '') + f(r.m - r0.m, 2) + '), la mediana de ' + f(r0.med, 2) + ' a ' + f(r.med, 2) + ', la desviación típica de ' + f(r0.sd, 2) + ' a ' + f(r.sd, 2) + ' y el IQR de ' + f(r0.iqr, 2) + ' a ' + f(r.iqr, 2) + '. La media y la desviación típica se dejan arrastrar; la mediana y el IQR apenas se mueven.'] : [];
+    escribir(lec, [['Media ', [f(r.m, 2)], ' · mediana ', [f(r.med, 2)], ' · moda (centro de la barra más alta) ≈ ', [f(moda, 1)]],
+      ['Desv. típica ', [f(r.sd, 2)], ' · IQR ', [f(r.iqr, 2)], ' (de ' + f(r.q1, 2) + ' a ' + f(r.q3, 2) + ') · MAD ', [f(r.mad, 2)]],
+      ['Asimetría ', [f(r.asim, 2)], ' · atípicos según la regla de 1,5·IQR: ', [String(r.atip.length)]]].concat(difs.map(function (t) { return [t]; })).concat([
+      [Math.abs(r.m - r.med) > 0.15 * r.sd ? 'La media se separa de la mediana: hay asimetría o atípicos, y entonces la mediana describe mejor el valor «típico».' : 'Media y mediana casi coinciden: la distribución es aproximadamente simétrica.'],
+      ['Prueba con pocas o muchas barras: con 3 se pierde la forma y con 40 aparece ruido. No hay un número «correcto», pero la forma general no debe depender de él.']]));
+  }
+  pintar();
+};
+
+/* ================= 23. Cuarteto de Anscombe ================= */
+D.demo_anscombe = function (cont) {
+  var X = [10, 8, 13, 9, 11, 14, 6, 4, 12, 7, 5];
+  var DS = {
+    I: {x: X, y: [8.04, 6.95, 7.58, 8.81, 8.33, 9.96, 7.24, 4.26, 10.84, 4.82, 5.68], t: 'Conjunto I: relación lineal con ruido. Aquí el resumen numérico y la recta describen bien los datos.'},
+    II: {x: X, y: [9.14, 8.14, 8.74, 8.77, 9.26, 8.10, 6.13, 3.10, 9.13, 7.26, 4.74], t: 'Conjunto II: la relación es una curva, no una recta. La correlación sale igual de «alta», pero la recta es un mal modelo.'},
+    III: {x: X, y: [7.46, 6.77, 12.74, 7.11, 7.81, 8.84, 6.08, 5.39, 8.15, 6.42, 5.73], t: 'Conjunto III: casi todos los puntos están en una recta perfecta y un único atípico arrastra la recta ajustada.'},
+    IV: {x: [8, 8, 8, 8, 8, 8, 8, 19, 8, 8, 8], y: [6.58, 5.76, 7.71, 8.84, 8.47, 7.04, 5.25, 12.50, 5.56, 7.91, 6.89], t: 'Conjunto IV: todos los valores de x son iguales salvo uno. Un solo punto de alto apalancamiento decide toda la recta y la correlación.'}
+  };
+  var ctr = ht('div', {'class': 'dm-ctrls'}, cont);
+  var sD = selector(ctr, 'Conjunto de datos', [{v: 'I', t: 'I'}, {v: 'II', t: 'II'}, {v: 'III', t: 'III'}, {v: 'IV', t: 'IV'}], 'I', function () { pintar(); });
+  var L1 = Lienzo(cont, {h: 220, aria: 'Diagrama de dispersión con la recta de regresión'});
+  var lec = lectura(cont);
+  function pintar() {
+    var d = DS[sD.valor()], n = d.x.length, mx = 0, my = 0, i;
+    for (i = 0; i < n; i++) { mx += d.x[i]; my += d.y[i]; } mx /= n; my /= n;
+    var sxx = 0, syy = 0, sxy = 0; for (i = 0; i < n; i++) { sxx += (d.x[i] - mx) * (d.x[i] - mx); syy += (d.y[i] - my) * (d.y[i] - my); sxy += (d.x[i] - mx) * (d.y[i] - my); }
+    var b = sxy / sxx, a = my - b * mx, r = sxy / Math.sqrt(sxx * syy);
+    L1.nuevo([2, 20], [2, 14], {xl: 'x', yl: 'y', ny: 4, nx: 5}); var cp = L1.capa();
+    L1.linea([3, 19], [a + b * 3, a + b * 19], 'dm-l2');
+    for (i = 0; i < n; i++) sv('circle', {cx: L1.sx(d.x[i]), cy: L1.sy(d.y[i]), r: 4, 'class': 'dm-f1 dm-anillo'}, cp);
+    escribir(lec, [['Media de x ', [f(mx, 2)], ' · media de y ', [f(my, 2)], ' · varianza de x ', [f(sxx / (n - 1), 2)], ' · varianza de y ', [f(syy / (n - 1), 2)]],
+      ['Correlación ', [f(r, 3)], ' · recta: y = ', [f(a, 2) + ' + ' + f(b, 3) + ' x']],
+      ['Los cuatro conjuntos tienen prácticamente los mismos números (cambia de conjunto y míralos), y sin embargo son muy distintos.'], [d.t],
+      ['Moraleja: dibuja siempre los datos antes de fiarte de un resumen numérico.']]);
+  }
+  pintar();
+};
+
+/* ================= 24. Paradoja de Simpson ================= */
+D.demo_simpson = function (cont) {
+  var NL = 357, NG = 343, TASA = {A: {leve: 0.93, grave: 0.73}, B: {leve: 0.87, grave: 0.69}}, ctr = ht('div', {'class': 'dm-ctrls'}, cont);
+  var cG = control(ctr, {etq: '% de los casos graves que recibe el tratamiento A', min: 0, max: 100, paso: 1, valor: 77, fmt: function (v) { return v + ' %'; }}, pintar);
+  var cL = control(ctr, {etq: '% de los casos leves que recibe el tratamiento A', min: 0, max: 100, paso: 1, valor: 24, fmt: function (v) { return v + ' %'; }}, pintar);
+  var L1 = Lienzo(cont, {h: 200, m: {b: 44}, aria: 'Tasa de éxito por tratamiento en casos leves, graves y en total'});
+  leyenda(cont, [['dm-k1', 'tratamiento A'], ['dm-k2', 'tratamiento B']]);
+  var lec = lectura(cont);
+  function pintar() {
+    var pg = cG.valor() / 100, pl = cL.valor() / 100;
+    var aL = NL * pl, bL = NL * (1 - pl), aG = NG * pg, bG = NG * (1 - pg);
+    var tA = aL + aG, tB = bL + bG, eA = (aL * TASA.A.leve + aG * TASA.A.grave) / (tA || 1), eB = (bL * TASA.B.leve + bG * TASA.B.grave) / (tB || 1);
+    var grupos = [['Casos leves', TASA.A.leve, TASA.B.leve, aL, bL], ['Casos graves', TASA.A.grave, TASA.B.grave, aG, bG], ['Total', eA, eB, tA, tB]];
+    L1.nuevo([-0.6, 2.6], [0, 1.05], {x: false, ny: 4}); var cp = L1.capa();
+    grupos.forEach(function (g, j) {
+      [[g[1], -0.32, 'dm-f1'], [g[2], 0.02, 'dm-f2']].forEach(function (b) { var x0 = L1.sx(j + b[1]), x1 = L1.sx(j + b[1] + 0.3);
+        sv('rect', {x: x0, y: L1.sy(b[0]), width: x1 - x0, height: Math.max(L1.sy(0) - L1.sy(b[0]), 0), 'class': b[2]}, cp);
+        L1.texto((x0 + x1) / 2, L1.sy(b[0]) - 3, pct(b[0], 0), {'class': 'dm-txt', 'text-anchor': 'middle'}, cp); });
+      L1.texto(L1.sx(j), L1.H - L1.m.b + 13, g[0], {'class': 'dm-tick', 'text-anchor': 'middle'}, cp);
+      L1.texto(L1.sx(j), L1.H - L1.m.b + 26, 'A: ' + Math.round(g[3]) + ' · B: ' + Math.round(g[4]) + ' casos', {'class': 'dm-tick', 'text-anchor': 'middle'}, cp); });
+    var paradoja = TASA.A.leve > TASA.B.leve && TASA.A.grave > TASA.B.grave && eB > eA;
+    escribir(lec, [['A es mejor en los casos leves (' + pct(TASA.A.leve, 0) + ' frente a ' + pct(TASA.B.leve, 0) + ') y en los graves (' + pct(TASA.A.grave, 0) + ' frente a ' + pct(TASA.B.grave, 0) + ').'],
+      ['En total: A ', [pct(eA, 1)], ' · B ', [pct(eB, 1)]],
+      [paradoja ? '¡Paradoja de Simpson! A gana en cada tipo de caso, pero B gana en el total, porque a A le tocan muchos más casos graves (que tienen menor tasa de éxito).'
+        : eA > eB ? 'Sin paradoja: A gana en cada grupo y también en total.' : 'Los dos tratamientos se reparten los casos de forma parecida y el total ya no contradice a los subgrupos.'],
+      ['Para evitarla hay que comparar dentro de cada grupo (o ajustar por la gravedad), no mezclar grupos con composiciones distintas. Lleva los dos deslizadores a 50 % y la paradoja desaparece.']]);
+  }
+  pintar();
+};
+
+/* ================= 25. Gráficos que engañan ================= */
+D.demo_eje_enganoso = function (cont) {
+  var ctr = ht('div', {'class': 'dm-ctrls'}, cont);
+  var cO = control(ctr, {etq: 'Origen del eje vertical', min: 0, max: 50, paso: 1, valor: 50, fmt: function (v) { return String(v); }}, pintar);
+  var cB = control(ctr, {etq: 'Valor de B (A vale 52)', min: 52, max: 60, paso: 0.5, valor: 55, fmt: function (v) { return v.toFixed(1); }}, pintar);
+  var L1 = Lienzo(cont, {h: 190, aria: 'Dos barras con un eje vertical que puede empezar fuera de cero'});
+  var lec = lectura(cont);
+  function pintar() {
+    var o = cO.valor(), a = 52, b = cB.valor(), top = 62;
+    L1.nuevo([-0.6, 1.6], [o, top], {x: false, ny: 4}); var cp = L1.capa();
+    [[a, 0, 'A', 'dm-f1'], [b, 1, 'B', 'dm-f2']].forEach(function (g) { var x0 = L1.sx(g[1] - 0.3), x1 = L1.sx(g[1] + 0.3);
+      sv('rect', {x: x0, y: L1.sy(g[0]), width: x1 - x0, height: Math.max(L1.sy(o) - L1.sy(g[0]), 0), 'class': g[3]}, cp);
+      L1.texto((x0 + x1) / 2, L1.sy(g[0]) - 4, String(g[0]), {'class': 'dm-txt', 'text-anchor': 'middle'}, cp); L1.texto((x0 + x1) / 2, L1.H - L1.m.b + 13, g[2], {'class': 'dm-tick', 'text-anchor': 'middle'}, cp); });
+    var visual = (b - o) / Math.max(a - o, 0.001);
+    escribir(lec, [['La barra de B parece ', [f(visual, 2) + ' veces'], ' la de A; en realidad B vale ', [f(b / a, 2) + ' veces'], ' A (' + pct(b / a - 1, 1) + ' más).'],
+      [o > 0 ? 'Con el eje empezando en ' + o + ' la diferencia parece enorme. Un eje que no parte de cero en un gráfico de barras exagera: la longitud de la barra debería ser proporcional al valor.' : 'Con el eje desde cero la comparación es honesta: la altura de cada barra es proporcional a su valor.'],
+      ['En un gráfico de líneas sí es habitual no empezar en cero, pero conviene indicarlo y valorar si la diferencia es relevante además de visible.']]);
   }
   pintar();
 };
@@ -34460,7 +34896,7 @@ function detalleConcepto(n, d) {
   h += botonesDemo(n.rid);
   h += '<h3>Dónde aparece</h3><ul class="fuentes">' + (n.fuentes || []).map(function (f) {
     var vn = f.tipo === 'very_normal';
-    return '<li><span class="tag' + (vn ? ' vn' : '') + '">' + (vn ? 'Very Normal' : f.tipo === 'master' ? 'Máster' : f.tipo === 'manual' ? 'Manual' : 'Árbol (consultoría)') + '</span>' +
+    return '<li><span class="tag' + (vn ? ' vn' : '') + '">' + (vn ? 'Very Normal' : f.tipo === 'master' ? 'Máster' : f.tipo === 'manual' ? 'Manual' : f.tipo === 'curso' ? 'Curso' : 'Árbol (consultoría)') + '</span>' +
       (f.url ? '<a href="' + esc(f.url) + '" target="_blank" rel="noopener noreferrer">' + esc(f.ref) + '</a>' : '<span>' + esc(f.ref) + '</span>') +
       (f.base ? '<span class="base">' + esc(f.base) + '</span>' : '') + '</li>'; }).join('') + '</ul>';
   h += '<div class="acciones"><button class="btn primario" data-a="nota" type="button">Copiar nota para Claude</button>' +
@@ -35229,8 +35665,8 @@ arbol_estadistica
 (visor) mapa 3D: núcleo + ramas en órbita; arrastrar = girar, rueda = acercar, clic en una rama = entrar (py/visor/mapa3d.js)
 (visor) «Probar»: cada función con su ejemplo ejecutable por celdas (py/cuaderno/ejemplos.py; se ejecuta desde la app)
 (visor) fichas de propiedades: barras 0-10 por función y por módulo, perfil de proyecto (arriba) que pondera y ordena las alternativas, comparador
-(visor) «🎓 Aprender»: guía paso a paso desde cero (py/aprender/rutas.json) con demos, preguntas y código; progreso guardado en el navegador
-(visor) «Cómo funciona»: 21 demos interactivas (distribuciones básicas animadas y en galería, t-test, potencia, FDR, IC, TCL, regresión, logística, censura, MCMC, Markov, bandidos, PCA, K-means, VaR, diversificación, ruina, diferencias en diferencias, sobreajuste)
+(visor) «🎓 Aprender»: guía paso a paso desde cero (py/aprender/*.json) con demos, preguntas y código; progreso guardado en el navegador
+(visor) «Cómo funciona»: 25 demos interactivas (distribuciones básicas animadas y en galería, t-test, potencia, FDR, IC, TCL, regresión, logística, censura, MCMC, Markov, bandidos, PCA, K-means, VaR, diversificación, ruina, diferencias en diferencias, sobreajuste, descripción de una variable, Anscombe, Simpson, gráficos engañosos)
 ```
 
 ## Estructura de carpetas
@@ -35775,7 +36211,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 4. Si falta algo, escríbelo siguiendo las convenciones de abajo y **añádelo al árbol** (módulo + test + línea en `INDEX.md`), y regenera el visor con `python py/construir_visor.py`. Si cambias `py/`, `assets/` o los `.bat`, sube `py/VERSION.txt` (y `pyproject.toml`) y ejecuta `python herramientas/generar_instaladores.py`. **Al terminar cualquier tarea que cambie el programa, genera siempre los instaladores, publícalos con `python herramientas/publicar.py "qué cambió"` (regenera, revisa que no haya datos privados, commit y push a GitHub; en `instaladores/` solo queda la versión actual) y dile a Mario la ruta de `Arbol X.Y.Z - Instalador.bat` y `- Actualizar.bat` para que los pruebe.**
 5. `visor_arbol.html` (doble clic, `abrir_arbol.bat` o el acceso directo del Escritorio): mapa 3D (núcleo = el árbol, ramas orbitando con sus funciones y conceptos como puntos; motor en `py/visor/mapa3d.js`, canvas sin librerías), buscador y botones para copiar código; lo genera `py/construir_visor.py` leyendo el propio código y `INDEX.md`, sin depender de nada más. Los instaladores autoextraíbles están en `instaladores/` (Instalador = Python + librerías + visor + accesos; Actualizar = solo programa, con copia en `anteriores/`); `regenerar_visor.bat` vuelve a generar el visor.
 5c. **Probar (cuaderno):** cada función tiene un ejemplo ejecutable por celdas con datos simulados en `py/cuaderno/ejemplos.py` (escenarios + celdas, con gráfico cuando lo hay). La app (`py/arbol_app.pyw`, pywebview) lo ejecuta en Python desde el visor. Al añadir una función, añade su ejemplo: un test exige que exista y que se ejecute sin errores.
-5e. **Guía de aprendizaje:** la pestaña «🎓 Aprender» del visor muestra rutas paso a paso (`py/aprender/rutas.json`): cada paso tiene idea, instrucciones, una demo, palabras clave, una pregunta y las funciones en Python. Los enlaces (demos, funciones, conceptos) se validan al construir el visor y en `tests/test_aprender.py`; el progreso se guarda en el navegador. Al añadir una demo o un concepto importante, plantéate si encaja en una ruta.
+5e. **Guía de aprendizaje:** la pestaña «🎓 Aprender» del visor muestra rutas paso a paso (`py/aprender/*.json`, una ruta por fichero): cada paso tiene idea, instrucciones, una demo, palabras clave, una pregunta y las funciones en Python. Los enlaces (demos, funciones, conceptos) se validan al construir el visor y en `tests/test_aprender.py`; el progreso se guarda en el navegador. Al añadir una demo o un concepto importante, plantéate si encaja en una ruta.
 5b. **Demos:** la rama «Cómo funciona» del visor tiene demos interactivas (`py/visor/demos.js`, metadatos en `DEMOS` de `construir_visor.py`); al añadir una, registra ambas cosas.
 5d. **Propiedades (fichas 0-10):** cada función tiene una ficha con barras de 0 a 10 en ~33 propiedades agrupadas en 5 bloques
    (Estimación: insesgadez, consistencia, eficiencia, ECM, normalidad asintótica, identificabilidad · Inferencia: tamaño α, potencia,
@@ -35884,8 +36320,8 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 
 ## Conceptos y fuentes (estado)
 
-374 conceptos en 38 áreas y 8 temas (348 con código; los 26 sin código son de ámbito normativo y no se programan). Fuentes: guías docentes de 2º, nueve manuales de estadística de `Manuales Estadística` (`fuentes[].tipo` = `manual`), índices de temas de 1º y Very Normal: los **73 vídeos largos** del canal `@very-normal` (lista completa en `teoria/very_normal.md`, enlazados por título y descripción) y varios posts de su Substack. **Pendiente:** Shorts de Very Normal (no revisados) y el temario real de Derivados,
-Fiscalidad, Economía y SS y Derecho Bancario. Para ampliar el catálogo, editar el JSON (un objeto por concepto; `fuentes[].tipo` ∈ `master`, `very_normal`, `manual`, `arbol`; Very Normal exige `url`).
+383 conceptos en 38 áreas y 8 temas (348 con código; los 26 sin código son de ámbito normativo y no se programan). Fuentes: guías docentes de 2º, nueve manuales de estadística de `Manuales Estadística` (`fuentes[].tipo` = `manual`), índices de temas de 1º y Very Normal: los **73 vídeos largos** del canal `@very-normal` (lista completa en `teoria/very_normal.md`, enlazados por título y descripción) y varios posts de su Substack. **Pendiente:** Shorts de Very Normal (no revisados) y el temario real de Derivados,
+Fiscalidad, Economía y SS y Derecho Bancario. Para ampliar el catálogo, editar el JSON (un objeto por concepto; `fuentes[].tipo` ∈ `master`, `very_normal`, `manual`, `curso`, `arbol`; Very Normal y los cursos en vídeo (Harvard Stat 110, MIT 18.650, 3Blue1Brown) exigen `url`).
 
 ## Qué hay y qué no hay (estado)
 
@@ -36405,6 +36841,42 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Probability",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 1: Espacios muestrales, definición ingenua de probabilidad, conteo",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-1"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 2: Bose-Einstein, pruebas con historias, axiomas de la probabilidad",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-2"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 3: Problema del cumpleaños, inclusión-exclusión",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-3"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 4: Independencia, probabilidad condicionada, regla de Bayes",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-4"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Bayes' theorem",
+     "base": "3Blue1Brown",
+     "url": "https://www.3blue1brown.com/?topic=probability#bayes"
+    },
+    {
+     "tipo": "curso",
+     "ref": "The medical test paradox, and redesigning Bayes' rule",
+     "base": "3Blue1Brown",
+     "url": "https://www.3blue1brown.com/?topic=probability#medical-test"
     }
    ]
   },
@@ -36442,6 +36914,12 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Limit Theorems",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "But what is the Central Limit Theorem?",
+     "base": "3Blue1Brown",
+     "url": "https://www.youtube.com/watch?v=zeJD6dqJ5lo"
     }
    ]
   },
@@ -36484,6 +36962,30 @@ exit 1
      "tipo": "manual",
      "ref": "PSDS · Data and Sampling Distributions",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 13: Normal estándar y su constante de normalización",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-13"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 14: Distribución normal, tipificación y LOTUS",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-14"
+    },
+    {
+     "tipo": "curso",
+     "ref": "But what is the Central Limit Theorem?",
+     "base": "3Blue1Brown",
+     "url": "https://www.youtube.com/watch?v=zeJD6dqJ5lo"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Why π is in the normal distribution (beyond integral tricks)",
+     "base": "3Blue1Brown",
+     "url": "https://www.3blue1brown.com/?topic=probability#why-pi-normal"
     }
    ]
   },
@@ -36506,6 +37008,18 @@ exit 1
      "tipo": "manual",
      "ref": "PSDS · Data and Sampling Distributions",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 7: Ruina del jugador, variables aleatorias, Bernoulli y binomial",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-7"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Binomial distributions | Probabilities of probabilities, part 1",
+     "base": "3Blue1Brown",
+     "url": "https://www.youtube.com/watch?v=8idr1WZ1A7Q"
     }
    ]
   },
@@ -36536,6 +37050,12 @@ exit 1
      "tipo": "manual",
      "ref": "PSDS · Data and Sampling Distributions",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 11: Distribución de Poisson y aproximación de Poisson",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-11"
     }
    ]
   },
@@ -36560,6 +37080,12 @@ exit 1
      "tipo": "master",
      "ref": "Simulación y modelos (2º) · Tema 7 · GLM de conteo",
      "base": "guía docente"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 10: Linealidad de la esperanza, binomial negativa",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-10"
     }
    ]
   },
@@ -36577,6 +37103,12 @@ exit 1
      "tipo": "master",
      "ref": "Mate No Vida (1º) · Tema 1 · distribuciones de la cuantía",
      "base": "temario del curso"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 22: Transformaciones, lognormal y convoluciones",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-22"
     }
    ]
   },
@@ -36601,6 +37133,12 @@ exit 1
      "tipo": "master",
      "ref": "Simulación y modelos (2º) · Tema 8 · modelos de variable continua",
      "base": "guía docente"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 24: Distribución gamma y procesos de Poisson",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-24"
     }
    ]
   },
@@ -36759,6 +37297,12 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Expected Values",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 25: Beta-gamma, estadísticos de orden y esperanza condicionada",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-25"
     }
    ]
   },
@@ -36803,6 +37347,30 @@ exit 1
      "tipo": "manual",
      "ref": "PSDS · Statistical Experiments and Significance Testing",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 7: Contrastes de hipótesis paramétricos",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-7-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 8: Contrastes de hipótesis paramétricos (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-8-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 9: Contrastes de hipótesis paramétricos (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-9-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 11: Contrastes de hipótesis y bondad de ajuste",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-11-video/"
     }
    ],
    "prioridad": "alta"
@@ -37120,6 +37688,18 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · The Analysis of Categorical Data",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 11: Contrastes de hipótesis y bondad de ajuste",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-11-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 12: Bondad de ajuste (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-12-video/"
     }
    ]
   },
@@ -37191,6 +37771,30 @@ exit 1
      "tipo": "manual",
      "ref": "RMS · Overview of Maximum Likelihood Estimation",
      "base": "Regression Modeling Strategies (Harrell)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 3: Inferencia paramétrica",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-3-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 4: Inferencia paramétrica y máxima verosimilitud",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-4-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 5: Máxima verosimilitud (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-5-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 6: Máxima verosimilitud y método de los momentos",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-6-video/"
     }
    ],
    "prioridad": "alta"
@@ -37491,6 +38095,24 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Linear Least Squares",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 13: Regresión",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-13-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 14: Regresión (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-14-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 15: Regresión (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-15-video/"
     }
    ],
    "prioridad": "alta"
@@ -37567,6 +38189,30 @@ exit 1
      "tipo": "manual",
      "ref": "ALSM · Logistic Regression, Poisson Regression, and Generalized Linear Models",
      "base": "Applied Linear Statistical Models (Kutner, Nachtsheim, Neter, Li)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 21: Modelos lineales generalizados",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-21-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 22: Modelos lineales generalizados (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-22-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 23: Modelos lineales generalizados (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-23-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 24: Modelos lineales generalizados (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-24-video/"
     }
    ]
   },
@@ -38517,6 +39163,18 @@ exit 1
      "tipo": "manual",
      "ref": "HS · Principal Components Analysis",
      "base": "Applied Multivariate Statistical Analysis (Härdle, Simar)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 19: Análisis de componentes principales",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-19-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 20: Análisis de componentes principales (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-20-video/"
     }
    ]
   },
@@ -38912,6 +39570,24 @@ exit 1
      "tipo": "manual",
      "ref": "ESL · Model Inference and Averaging",
      "base": "The Elements of Statistical Learning (Hastie, Tibshirani, Friedman)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 17: Estadística bayesiana",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-17-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 18: Estadística bayesiana (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-18-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Binomial distributions | Probabilities of probabilities, part 1",
+     "base": "3Blue1Brown",
+     "url": "https://www.youtube.com/watch?v=8idr1WZ1A7Q"
     }
    ]
   },
@@ -39680,6 +40356,12 @@ exit 1
      "tipo": "master",
      "ref": "Procesos Estocásticos (1º) · Tema 1",
      "base": "temario del curso"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 7: Ruina del jugador, variables aleatorias, Bernoulli y binomial",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-7"
     }
    ]
   },
@@ -39774,6 +40456,12 @@ exit 1
      "tipo": "master",
      "ref": "Procesos Estocásticos (1º) · Tema 5",
      "base": "temario del curso"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 24: Distribución gamma y procesos de Poisson",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-24"
     }
    ]
   },
@@ -40881,6 +41569,24 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Random Variables",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 8: Variables aleatorias, funciones de distribución y de masa, hipergeométrica",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-8"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 9: Geométrica, valores esperados, indicadoras y linealidad",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-9"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 12: Discretas frente a continuas, densidades, varianza, uniforme",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-12"
     }
    ]
   },
@@ -40958,6 +41664,18 @@ exit 1
      "ref": "What is a statistic?",
      "url": "https://www.youtube.com/watch?v=mX8qg0TXoPA",
      "base": "título y descripción del vídeo"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 1: Introducción a la estadística",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-1-introduction-to-statistics/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 2: Introducción a la estadística (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-2-video/"
     }
    ]
   },
@@ -42682,6 +43400,12 @@ exit 1
      "tipo": "manual",
      "ref": "PSDS · Data and Sampling Distributions",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 16: Distribución exponencial y falta de memoria",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-16"
     }
    ]
   },
@@ -43779,6 +44503,24 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Probability",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 4: Independencia, probabilidad condicionada, regla de Bayes",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-4"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 5: Ley de la probabilidad total e independencia condicional",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-5"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 6: Problema de Monty Hall y paradoja de Simpson",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-6"
     }
    ]
   },
@@ -43800,6 +44542,18 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Joint Distributions",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 18: Funciones generadoras de momentos y distribuciones conjuntas",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-18"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 19: Distribuciones conjuntas, marginales y condicionadas",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-19"
     }
    ]
   },
@@ -43819,6 +44573,12 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Expected Values",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 21: Covarianza, correlación y varianza de una suma",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-21"
     }
    ]
   },
@@ -43844,6 +44604,18 @@ exit 1
      "tipo": "manual",
      "ref": "HS · Multivariate Distributions",
      "base": "Applied Multivariate Statistical Analysis (Härdle, Simar)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 17: Funciones generadoras de momentos, regla de Bayes híbrida",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-17"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 18: Funciones generadoras de momentos y distribuciones conjuntas",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-18"
     }
    ]
   },
@@ -43889,6 +44661,18 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Joint Distributions",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 22: Transformaciones, lognormal y convoluciones",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-22"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 25: Beta-gamma, estadísticos de orden y esperanza condicionada",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-25"
     }
    ]
   },
@@ -43927,6 +44711,12 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Estimation of Parameters and Fitting of Probability Distributions",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 6: Máxima verosimilitud y método de los momentos",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-6-video/"
     }
    ]
   },
@@ -45668,6 +46458,12 @@ exit 1
      "tipo": "arbol",
      "ref": "Distribuciones básicas (demos Fundamentos del visor)",
      "base": "Árbol de la estadística"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 12: Discretas frente a continuas, densidades, varianza, uniforme",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-12"
     }
    ]
   },
@@ -45688,6 +46484,12 @@ exit 1
      "tipo": "arbol",
      "ref": "Distribuciones básicas (demos Fundamentos del visor)",
      "base": "Árbol de la estadística"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 7: Ruina del jugador, variables aleatorias, Bernoulli y binomial",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-7"
     }
    ]
   },
@@ -45707,6 +46509,149 @@ exit 1
      "tipo": "arbol",
      "ref": "Distribuciones básicas (demos Fundamentos del visor)",
      "base": "Árbol de la estadística"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 9: Geométrica, valores esperados, indicadoras y linealidad",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-9"
+    }
+   ]
+  },
+  {
+   "id": "c_tipos_de_variables_y_escalas",
+   "nombre": "Tipos de variables y escalas de medida",
+   "area": "descriptiva",
+   "desc": "Cualitativas (nominal, ordinal) y cuantitativas (discretas, continuas): qué resumen y qué gráfico admite cada una.",
+   "funciones": [
+    "diccionario_datos",
+    "resumen_descriptivo"
+   ],
+   "sinonimos": [
+    "nominal",
+    "ordinal",
+    "escalas de medida",
+    "variables categóricas"
+   ],
+   "fuentes": [
+    {
+     "tipo": "arbol",
+     "base": "Árbol de la estadística",
+     "ref": "Ruta «Estadística descriptiva» de la pestaña Aprender"
+    }
+   ]
+  },
+  {
+   "id": "c_graficos_para_una_variable",
+   "nombre": "Gráficos para una variable (barras, histograma, caja, densidad)",
+   "area": "descriptiva",
+   "desc": "Qué gráfico usar según el tipo de variable y qué muestra cada uno: frecuencias, forma, centro, dispersión y atípicos.",
+   "funciones": [
+    "grafico_distribucion"
+   ],
+   "sinonimos": [
+    "histograma",
+    "diagrama de barras",
+    "boxplot",
+    "densidad"
+   ],
+   "fuentes": [
+    {
+     "tipo": "arbol",
+     "base": "Árbol de la estadística",
+     "ref": "Demo «Describir una variable»"
+    }
+   ]
+  },
+  {
+   "id": "c_graficos_para_dos_variables",
+   "nombre": "Gráficos para dos variables (dispersión y comparación de grupos)",
+   "area": "descriptiva",
+   "desc": "Diagrama de dispersión con tendencia para dos numéricas; cajas o violines para una numérica por grupos.",
+   "funciones": [
+    "grafico_regresion_simple",
+    "grafico_comparar_grupos"
+   ],
+   "sinonimos": [
+    "diagrama de dispersión",
+    "scatter plot"
+   ],
+   "fuentes": [
+    {
+     "tipo": "arbol",
+     "base": "Árbol de la estadística",
+     "ref": "Demo «Cuarteto de Anscombe»"
+    }
+   ]
+  },
+  {
+   "id": "c_visualizar_antes_de_resumir_cuarteto_de_anscombe",
+   "nombre": "Visualizar antes de resumir (cuarteto de Anscombe)",
+   "area": "descriptiva",
+   "desc": "Conjuntos de datos con la misma media, varianza, correlación y recta de regresión pero formas completamente distintas: los resúmenes numéricos no bastan.",
+   "funciones": [
+    "resumen_descriptivo",
+    "correlacion_con_ic",
+    "grafico_regresion_simple"
+   ],
+   "sinonimos": [
+    "Anscombe",
+    "datasaurus"
+   ],
+   "fuentes": [
+    {
+     "tipo": "arbol",
+     "base": "Árbol de la estadística",
+     "ref": "Anscombe (1973), «Graphs in Statistical Analysis»; demo del visor"
+    }
+   ]
+  },
+  {
+   "id": "c_paradoja_de_simpson",
+   "nombre": "Paradoja de Simpson y variables de confusión",
+   "area": "descriptiva",
+   "desc": "Una tendencia que aparece en cada subgrupo puede invertirse al juntar los datos si el reparto de los grupos no es equilibrado.",
+   "funciones": [
+    "tabla_contingencia",
+    "medidas_riesgo_2x2"
+   ],
+   "sinonimos": [
+    "Simpson",
+    "confusión",
+    "agregación"
+   ],
+   "fuentes": [
+    {
+     "tipo": "arbol",
+     "base": "Árbol de la estadística",
+     "ref": "Demo «Paradoja de Simpson»"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 6: Problema de Monty Hall y paradoja de Simpson",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-6"
+    }
+   ]
+  },
+  {
+   "id": "c_graficos_enganosos_y_buenas_practicas",
+   "nombre": "Gráficos engañosos y buenas prácticas",
+   "area": "descriptiva",
+   "desc": "Ejes truncados, escalas y áreas que exageran diferencias: cómo leer y cómo hacer gráficos honestos.",
+   "funciones": [
+    "grafico_distribucion",
+    "grafico_comparar_grupos"
+   ],
+   "sinonimos": [
+    "eje truncado",
+    "gráficos engañosos"
+   ],
+   "fuentes": [
+    {
+     "tipo": "arbol",
+     "base": "Árbol de la estadística",
+     "ref": "Demo «Gráficos que engañan»"
     }
    ]
   }
@@ -46090,6 +47035,42 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Probability",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 1: Espacios muestrales, definición ingenua de probabilidad, conteo",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-1"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 2: Bose-Einstein, pruebas con historias, axiomas de la probabilidad",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-2"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 3: Problema del cumpleaños, inclusión-exclusión",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-3"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 4: Independencia, probabilidad condicionada, regla de Bayes",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-4"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Bayes' theorem",
+     "base": "3Blue1Brown",
+     "url": "https://www.3blue1brown.com/?topic=probability#bayes"
+    },
+    {
+     "tipo": "curso",
+     "ref": "The medical test paradox, and redesigning Bayes' rule",
+     "base": "3Blue1Brown",
+     "url": "https://www.3blue1brown.com/?topic=probability#medical-test"
     }
    ]
   },
@@ -46127,6 +47108,12 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Limit Theorems",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "But what is the Central Limit Theorem?",
+     "base": "3Blue1Brown",
+     "url": "https://www.youtube.com/watch?v=zeJD6dqJ5lo"
     }
    ]
   },
@@ -46169,6 +47156,30 @@ exit 1
      "tipo": "manual",
      "ref": "PSDS · Data and Sampling Distributions",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 13: Normal estándar y su constante de normalización",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-13"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 14: Distribución normal, tipificación y LOTUS",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-14"
+    },
+    {
+     "tipo": "curso",
+     "ref": "But what is the Central Limit Theorem?",
+     "base": "3Blue1Brown",
+     "url": "https://www.youtube.com/watch?v=zeJD6dqJ5lo"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Why π is in the normal distribution (beyond integral tricks)",
+     "base": "3Blue1Brown",
+     "url": "https://www.3blue1brown.com/?topic=probability#why-pi-normal"
     }
    ]
   },
@@ -46191,6 +47202,18 @@ exit 1
      "tipo": "manual",
      "ref": "PSDS · Data and Sampling Distributions",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 7: Ruina del jugador, variables aleatorias, Bernoulli y binomial",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-7"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Binomial distributions | Probabilities of probabilities, part 1",
+     "base": "3Blue1Brown",
+     "url": "https://www.youtube.com/watch?v=8idr1WZ1A7Q"
     }
    ]
   },
@@ -46221,6 +47244,12 @@ exit 1
      "tipo": "manual",
      "ref": "PSDS · Data and Sampling Distributions",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 11: Distribución de Poisson y aproximación de Poisson",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-11"
     }
    ]
   },
@@ -46245,6 +47274,12 @@ exit 1
      "tipo": "master",
      "ref": "Simulación y modelos (2º) · Tema 7 · GLM de conteo",
      "base": "guía docente"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 10: Linealidad de la esperanza, binomial negativa",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-10"
     }
    ]
   },
@@ -46262,6 +47297,12 @@ exit 1
      "tipo": "master",
      "ref": "Mate No Vida (1º) · Tema 1 · distribuciones de la cuantía",
      "base": "temario del curso"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 22: Transformaciones, lognormal y convoluciones",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-22"
     }
    ]
   },
@@ -46286,6 +47327,12 @@ exit 1
      "tipo": "master",
      "ref": "Simulación y modelos (2º) · Tema 8 · modelos de variable continua",
      "base": "guía docente"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 24: Distribución gamma y procesos de Poisson",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-24"
     }
    ]
   },
@@ -46444,6 +47491,12 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Expected Values",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 25: Beta-gamma, estadísticos de orden y esperanza condicionada",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-25"
     }
    ]
   },
@@ -46488,6 +47541,30 @@ exit 1
      "tipo": "manual",
      "ref": "PSDS · Statistical Experiments and Significance Testing",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 7: Contrastes de hipótesis paramétricos",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-7-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 8: Contrastes de hipótesis paramétricos (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-8-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 9: Contrastes de hipótesis paramétricos (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-9-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 11: Contrastes de hipótesis y bondad de ajuste",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-11-video/"
     }
    ],
    "prioridad": "alta"
@@ -46805,6 +47882,18 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · The Analysis of Categorical Data",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 11: Contrastes de hipótesis y bondad de ajuste",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-11-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 12: Bondad de ajuste (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-12-video/"
     }
    ]
   },
@@ -46876,6 +47965,30 @@ exit 1
      "tipo": "manual",
      "ref": "RMS · Overview of Maximum Likelihood Estimation",
      "base": "Regression Modeling Strategies (Harrell)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 3: Inferencia paramétrica",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-3-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 4: Inferencia paramétrica y máxima verosimilitud",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-4-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 5: Máxima verosimilitud (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-5-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 6: Máxima verosimilitud y método de los momentos",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-6-video/"
     }
    ],
    "prioridad": "alta"
@@ -47176,6 +48289,24 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Linear Least Squares",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 13: Regresión",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-13-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 14: Regresión (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-14-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 15: Regresión (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-15-video/"
     }
    ],
    "prioridad": "alta"
@@ -47252,6 +48383,30 @@ exit 1
      "tipo": "manual",
      "ref": "ALSM · Logistic Regression, Poisson Regression, and Generalized Linear Models",
      "base": "Applied Linear Statistical Models (Kutner, Nachtsheim, Neter, Li)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 21: Modelos lineales generalizados",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-21-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 22: Modelos lineales generalizados (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-22-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 23: Modelos lineales generalizados (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-23-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 24: Modelos lineales generalizados (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-24-video/"
     }
    ]
   },
@@ -48202,6 +49357,18 @@ exit 1
      "tipo": "manual",
      "ref": "HS · Principal Components Analysis",
      "base": "Applied Multivariate Statistical Analysis (Härdle, Simar)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 19: Análisis de componentes principales",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-19-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 20: Análisis de componentes principales (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-20-video/"
     }
    ]
   },
@@ -48597,6 +49764,24 @@ exit 1
      "tipo": "manual",
      "ref": "ESL · Model Inference and Averaging",
      "base": "The Elements of Statistical Learning (Hastie, Tibshirani, Friedman)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 17: Estadística bayesiana",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-17-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 18: Estadística bayesiana (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-18-video/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Binomial distributions | Probabilities of probabilities, part 1",
+     "base": "3Blue1Brown",
+     "url": "https://www.youtube.com/watch?v=8idr1WZ1A7Q"
     }
    ]
   },
@@ -49365,6 +50550,12 @@ exit 1
      "tipo": "master",
      "ref": "Procesos Estocásticos (1º) · Tema 1",
      "base": "temario del curso"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 7: Ruina del jugador, variables aleatorias, Bernoulli y binomial",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-7"
     }
    ]
   },
@@ -49459,6 +50650,12 @@ exit 1
      "tipo": "master",
      "ref": "Procesos Estocásticos (1º) · Tema 5",
      "base": "temario del curso"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 24: Distribución gamma y procesos de Poisson",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-24"
     }
    ]
   },
@@ -50566,6 +51763,24 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Random Variables",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 8: Variables aleatorias, funciones de distribución y de masa, hipergeométrica",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-8"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 9: Geométrica, valores esperados, indicadoras y linealidad",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-9"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 12: Discretas frente a continuas, densidades, varianza, uniforme",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-12"
     }
    ]
   },
@@ -50643,6 +51858,18 @@ exit 1
      "ref": "What is a statistic?",
      "url": "https://www.youtube.com/watch?v=mX8qg0TXoPA",
      "base": "título y descripción del vídeo"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 1: Introducción a la estadística",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-1-introduction-to-statistics/"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 2: Introducción a la estadística (cont.)",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-2-video/"
     }
    ]
   },
@@ -52367,6 +53594,12 @@ exit 1
      "tipo": "manual",
      "ref": "PSDS · Data and Sampling Distributions",
      "base": "Practical Statistics for Data Scientists (Bruce, Bruce, Gedeck)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 16: Distribución exponencial y falta de memoria",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-16"
     }
    ]
   },
@@ -53464,6 +54697,24 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Probability",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 4: Independencia, probabilidad condicionada, regla de Bayes",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-4"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 5: Ley de la probabilidad total e independencia condicional",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-5"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 6: Problema de Monty Hall y paradoja de Simpson",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-6"
     }
    ]
   },
@@ -53485,6 +54736,18 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Joint Distributions",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 18: Funciones generadoras de momentos y distribuciones conjuntas",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-18"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 19: Distribuciones conjuntas, marginales y condicionadas",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-19"
     }
    ]
   },
@@ -53504,6 +54767,12 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Expected Values",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 21: Covarianza, correlación y varianza de una suma",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-21"
     }
    ]
   },
@@ -53529,6 +54798,18 @@ exit 1
      "tipo": "manual",
      "ref": "HS · Multivariate Distributions",
      "base": "Applied Multivariate Statistical Analysis (Härdle, Simar)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 17: Funciones generadoras de momentos, regla de Bayes híbrida",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-17"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 18: Funciones generadoras de momentos y distribuciones conjuntas",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-18"
     }
    ]
   },
@@ -53574,6 +54855,18 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Joint Distributions",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 22: Transformaciones, lognormal y convoluciones",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-22"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 25: Beta-gamma, estadísticos de orden y esperanza condicionada",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-25"
     }
    ]
   },
@@ -53612,6 +54905,12 @@ exit 1
      "tipo": "manual",
      "ref": "MSDA · Estimation of Parameters and Fitting of Probability Distributions",
      "base": "Mathematical Statistics and Data Analysis (Rice)"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 6: Máxima verosimilitud y método de los momentos",
+     "base": "MIT 18.650 Fundamentals of Statistics (OCW, 2016)",
+     "url": "https://ocw.mit.edu/courses/18-650-statistics-for-applications-fall-2016/resources/lecture-6-video/"
     }
    ]
   },
@@ -55353,6 +56652,12 @@ exit 1
      "tipo": "arbol",
      "ref": "Distribuciones básicas (demos Fundamentos del visor)",
      "base": "Árbol de la estadística"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 12: Discretas frente a continuas, densidades, varianza, uniforme",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-12"
     }
    ]
   },
@@ -55373,6 +56678,12 @@ exit 1
      "tipo": "arbol",
      "ref": "Distribuciones básicas (demos Fundamentos del visor)",
      "base": "Árbol de la estadística"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 7: Ruina del jugador, variables aleatorias, Bernoulli y binomial",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-7"
     }
    ]
   },
@@ -55392,6 +56703,149 @@ exit 1
      "tipo": "arbol",
      "ref": "Distribuciones básicas (demos Fundamentos del visor)",
      "base": "Árbol de la estadística"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 9: Geométrica, valores esperados, indicadoras y linealidad",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-9"
+    }
+   ]
+  },
+  {
+   "id": "c_tipos_de_variables_y_escalas",
+   "nombre": "Tipos de variables y escalas de medida",
+   "area": "descriptiva",
+   "desc": "Cualitativas (nominal, ordinal) y cuantitativas (discretas, continuas): qué resumen y qué gráfico admite cada una.",
+   "funciones": [
+    "diccionario_datos",
+    "resumen_descriptivo"
+   ],
+   "sinonimos": [
+    "nominal",
+    "ordinal",
+    "escalas de medida",
+    "variables categóricas"
+   ],
+   "fuentes": [
+    {
+     "tipo": "arbol",
+     "base": "Árbol de la estadística",
+     "ref": "Ruta «Estadística descriptiva» de la pestaña Aprender"
+    }
+   ]
+  },
+  {
+   "id": "c_graficos_para_una_variable",
+   "nombre": "Gráficos para una variable (barras, histograma, caja, densidad)",
+   "area": "descriptiva",
+   "desc": "Qué gráfico usar según el tipo de variable y qué muestra cada uno: frecuencias, forma, centro, dispersión y atípicos.",
+   "funciones": [
+    "grafico_distribucion"
+   ],
+   "sinonimos": [
+    "histograma",
+    "diagrama de barras",
+    "boxplot",
+    "densidad"
+   ],
+   "fuentes": [
+    {
+     "tipo": "arbol",
+     "base": "Árbol de la estadística",
+     "ref": "Demo «Describir una variable»"
+    }
+   ]
+  },
+  {
+   "id": "c_graficos_para_dos_variables",
+   "nombre": "Gráficos para dos variables (dispersión y comparación de grupos)",
+   "area": "descriptiva",
+   "desc": "Diagrama de dispersión con tendencia para dos numéricas; cajas o violines para una numérica por grupos.",
+   "funciones": [
+    "grafico_regresion_simple",
+    "grafico_comparar_grupos"
+   ],
+   "sinonimos": [
+    "diagrama de dispersión",
+    "scatter plot"
+   ],
+   "fuentes": [
+    {
+     "tipo": "arbol",
+     "base": "Árbol de la estadística",
+     "ref": "Demo «Cuarteto de Anscombe»"
+    }
+   ]
+  },
+  {
+   "id": "c_visualizar_antes_de_resumir_cuarteto_de_anscombe",
+   "nombre": "Visualizar antes de resumir (cuarteto de Anscombe)",
+   "area": "descriptiva",
+   "desc": "Conjuntos de datos con la misma media, varianza, correlación y recta de regresión pero formas completamente distintas: los resúmenes numéricos no bastan.",
+   "funciones": [
+    "resumen_descriptivo",
+    "correlacion_con_ic",
+    "grafico_regresion_simple"
+   ],
+   "sinonimos": [
+    "Anscombe",
+    "datasaurus"
+   ],
+   "fuentes": [
+    {
+     "tipo": "arbol",
+     "base": "Árbol de la estadística",
+     "ref": "Anscombe (1973), «Graphs in Statistical Analysis»; demo del visor"
+    }
+   ]
+  },
+  {
+   "id": "c_paradoja_de_simpson",
+   "nombre": "Paradoja de Simpson y variables de confusión",
+   "area": "descriptiva",
+   "desc": "Una tendencia que aparece en cada subgrupo puede invertirse al juntar los datos si el reparto de los grupos no es equilibrado.",
+   "funciones": [
+    "tabla_contingencia",
+    "medidas_riesgo_2x2"
+   ],
+   "sinonimos": [
+    "Simpson",
+    "confusión",
+    "agregación"
+   ],
+   "fuentes": [
+    {
+     "tipo": "arbol",
+     "base": "Árbol de la estadística",
+     "ref": "Demo «Paradoja de Simpson»"
+    },
+    {
+     "tipo": "curso",
+     "ref": "Lección 6: Problema de Monty Hall y paradoja de Simpson",
+     "base": "Harvard Stat 110 (Joe Blitzstein)",
+     "url": "https://stat110.hsites.harvard.edu/youtube#leccion-6"
+    }
+   ]
+  },
+  {
+   "id": "c_graficos_enganosos_y_buenas_practicas",
+   "nombre": "Gráficos engañosos y buenas prácticas",
+   "area": "descriptiva",
+   "desc": "Ejes truncados, escalas y áreas que exageran diferencias: cómo leer y cómo hacer gráficos honestos.",
+   "funciones": [
+    "grafico_distribucion",
+    "grafico_comparar_grupos"
+   ],
+   "sinonimos": [
+    "eje truncado",
+    "gráficos engañosos"
+   ],
+   "fuentes": [
+    {
+     "tipo": "arbol",
+     "base": "Árbol de la estadística",
+     "ref": "Demo «Gráficos que engañan»"
     }
    ]
   }

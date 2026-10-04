@@ -1,4 +1,4 @@
-"""Guía de aprendizaje (py/aprender/rutas.json): estructura y enlaces válidos. El visor la muestra en la pestaña «Aprender»."""
+"""Guía de aprendizaje (py/aprender/*.json): estructura y enlaces válidos. El visor la muestra en la pestaña «Aprender»."""
 import importlib
 import json
 import sys
@@ -7,7 +7,7 @@ from pathlib import Path
 CODIGO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(CODIGO))
 construir_visor = importlib.import_module("construir_visor")
-RUTAS = json.loads((CODIGO / "aprender" / "rutas.json").read_text(encoding="utf-8"))["rutas"]
+RUTAS = [r for f in sorted((CODIGO / "aprender").glob("*.json")) for r in json.loads(f.read_text(encoding="utf-8"))["rutas"]]
 PASO = {"id", "titulo", "idea", "prueba", "pregunta"}
 PREGUNTA = {"texto", "opciones", "correcta", "pista", "explicacion"}
 

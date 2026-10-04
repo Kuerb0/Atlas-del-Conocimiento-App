@@ -72,7 +72,9 @@ def test_catalogo_de_conceptos_es_coherente():
         assert k["area"] in areas, k["nombre"]
         assert k["desc"] and k["fuentes"], f"«{k['nombre']}» necesita descripción y al menos una fuente"
         for f in k["fuentes"]:
-            assert f["tipo"] in ("master", "very_normal", "arbol", "manual") and f["ref"]
+            assert f["tipo"] in ("master", "very_normal", "arbol", "manual", "curso") and f["ref"]
+            if f["tipo"] == "curso":
+                assert f["url"].startswith("https://") and f["base"], f
             if f["tipo"] == "very_normal":
                 assert f["url"].startswith(("https://verynormal.substack.com/", "https://www.youtube.com/watch?v=")), f["url"]
 

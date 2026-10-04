@@ -716,7 +716,7 @@ function detalleConcepto(n, d) {
   h += botonesDemo(n.rid);
   h += '<h3>Dónde aparece</h3><ul class="fuentes">' + (n.fuentes || []).map(function (f) {
     var vn = f.tipo === 'very_normal';
-    return '<li><span class="tag' + (vn ? ' vn' : '') + '">' + (vn ? 'Very Normal' : f.tipo === 'master' ? 'Máster' : f.tipo === 'manual' ? 'Manual' : 'Árbol (consultoría)') + '</span>' +
+    return '<li><span class="tag' + (vn ? ' vn' : '') + '">' + (vn ? 'Very Normal' : f.tipo === 'master' ? 'Máster' : f.tipo === 'manual' ? 'Manual' : f.tipo === 'curso' ? 'Curso' : 'Árbol (consultoría)') + '</span>' +
       (f.url ? '<a href="' + esc(f.url) + '" target="_blank" rel="noopener noreferrer">' + esc(f.ref) + '</a>' : '<span>' + esc(f.ref) + '</span>') +
       (f.base ? '<span class="base">' + esc(f.base) + '</span>' : '') + '</li>'; }).join('') + '</ul>';
   h += '<div class="acciones"><button class="btn primario" data-a="nota" type="button">Copiar nota para Claude</button>' +
