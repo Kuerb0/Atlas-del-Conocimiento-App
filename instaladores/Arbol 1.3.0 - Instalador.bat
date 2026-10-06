@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.2.0 - Instalador
+title Arbol de la estadistica 1.3.0 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
 set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=1.2.0"
+set "ARBOL_VERSION=1.3.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -494,7 +494,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.2.0
+1.3.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -2782,7 +2782,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.2.0"
+version = "1.3.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3462,7 +3462,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -14687,8 +14687,10 @@ def _sha1(f: Path) -> str:
 
 
 def leer_metadatos(carpeta: Path = CARPETA) -> dict:
-    f = Path(carpeta) / "biblioteca" / "metadatos.json"
-    return json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+    """Metadatos de la biblioteca: los de este equipo (metadatos.json) más las referencias que llegaron por GitHub (referencias.json) de libros que aquí aún no están."""
+    b = Path(carpeta) / "biblioteca"
+    leer = lambda n: json.loads((b / n).read_text(encoding="utf-8")) if (b / n).exists() else {}
+    return {**leer("referencias.json"), **leer("metadatos.json")}
 
 
 def resumen(carpeta: Path = CARPETA) -> dict:
@@ -14718,6 +14720,12 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
                 raise ValueError(f"formato no admitido ({f.suffix or 'sin extensión'}); sirven {', '.join(sorted(EXT))}")
             _prog(f"Analizando «{f.name[:40]}»", .02)
             h = _sha1(f)
+            if h in hashes and not (base / hashes[h]).exists() and (base / hashes[h]).suffix.lower() == f.suffix.lower():     # la referencia llegó por GitHub y ahora tienes el libro: se restaura en su sitio
+                rel0 = hashes[h]; (base / rel0).parent.mkdir(parents=True, exist_ok=True); shutil.copy2(f, base / rel0)
+                m0 = meta[rel0]
+                salida.append({**r, "movido": False, "estado": "ok", "titulo": m0.get("titulo", ""), "galaxia": m0.get("galaxia", ""), "subtema": m0.get("subtema", ""), "genero": m0.get("genero", "otro"),
+                               "tipo": m0.get("tipo", ""), "destino": str(base / rel0), "mensaje": "restaurado: ya estaba en tus referencias"})
+                continue
             if h in hashes:
                 salida.append({**r, "estado": "duplicado", "mensaje": f"ya estaba importado ({hashes[h]})"})
                 continue
@@ -14756,7 +14764,7 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
             salida.append({**r, "estado": "error", "mensaje": str(e)})
     if any(s["estado"] == "ok" for s in salida):
         base.mkdir(parents=True, exist_ok=True)
-        (base / "metadatos.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+        _guardar(carpeta, meta)
         if indexar_ahora:
             _prog("Indexando el texto…", .1)
             ind = indexar(db or carpeta / "indice.db", {}, carpeta=carpeta)
@@ -14785,7 +14793,7 @@ def enriquecer(carpeta: Path | None = None) -> int:
         if "genero" not in m:
             m["genero"] = clasificar(f, carpeta)["genero"]; n += 1
     if n:
-        (carpeta / "biblioteca" / "metadatos.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+        _guardar(carpeta, meta)
     return n
 
 
@@ -14802,7 +14810,7 @@ def reclasificar(carpeta: Path | None = None) -> list[tuple]:
             cambios.append((m.get("titulo", rel)[:40], m.get("subtema"), c["subtema"], m.get("genero"), c["genero"]))
             m["subtema"], m["genero"] = c["subtema"], c["genero"]
     if cambios:
-        (carpeta / "biblioteca" / "metadatos.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+        _guardar(carpeta, meta)
     return cambios
 
 
@@ -14811,9 +14819,12 @@ CAMPOS = ("titulo", "galaxia", "genero", "subtema", "tipo", "etiquetas")
 
 
 def _guardar(carpeta: Path, meta: dict) -> None:
+    """Escribe metadatos.json (lo de este equipo) y referencias.json (lo mismo sin rutas del equipo: es lo que viaja por GitHub, aunque los PDF/EPUB no)."""
     base = Path(carpeta) / "biblioteca"
     base.mkdir(parents=True, exist_ok=True)
-    (base / "metadatos.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+    esc = lambda d: json.dumps(d, ensure_ascii=False, indent=1)
+    (base / "metadatos.json").write_text(esc(meta), encoding="utf-8")
+    (base / "referencias.json").write_text(esc({rel: {k: v for k, v in m.items() if k != "origen"} for rel, m in sorted(meta.items())}), encoding="utf-8")
 
 
 def _ficha(carpeta: Path, rel: str, m: dict, con_portada: bool = True) -> dict:
@@ -14932,7 +14943,7 @@ def comprimir(rel: str, carpeta: Path | None = None) -> dict:
 def comprimir_todo(carpeta: Path | None = None) -> dict:
     """Comprime sin pérdida todos los PDF/EPUB de la biblioteca: {n, ahorrado, antes, despues, errores:[…]}."""
     carpeta = Path(carpeta or carpeta_datos())
-    rs = [comprimir(rel, carpeta) for rel in leer_metadatos(carpeta) if rel.lower().endswith((".pdf", ".epub"))]
+    rs = [comprimir(rel, carpeta) for rel in leer_metadatos(carpeta) if rel.lower().endswith((".pdf", ".epub")) and (carpeta / "biblioteca" / rel).is_file()]
     antes, despues = sum(x["antes"] for x in rs), sum(x["despues"] for x in rs)
     return {"n": len(rs), "comprimidos": sum(x["estado"] == "ok" for x in rs), "antes": antes, "despues": despues, "ahorrado": antes - despues,
             "errores": [f"{x['rel']}: {x['mensaje']}" for x in rs if x["estado"] == "error"]}
@@ -33728,6 +33739,45 @@ def test_tus_notas_en_fichas_mias_mandan(monkeypatch, tmp_path):
     assert "velocidad" not in f["notas"]                        # None = quitar la nota
     assert f["usar_si"] == "mi criterio" and f["pros"]
 :::END
+:::BEGIN py/tests/test_referencias.py|text
+"""Las referencias viajan por GitHub aunque los PDF/EPUB no: otro equipo ve el libro como referencia vacía y puede restaurarlo."""
+import json
+import sys
+import zipfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conocimiento import importar as im
+
+
+def _epub(ruta):
+    with zipfile.ZipFile(ruta, "w") as z:
+        z.writestr("mimetype", "application/epub+zip")
+        z.writestr("c.xhtml", "<p>" + "probabilidad de una variable aleatoria " * 400 + "</p>")
+
+
+def test_referencia_sin_archivo_y_restauracion(tmp_path):
+    orig = tmp_path / "Mi libro privado.epub"; _epub(orig)
+    k = tmp_path / "conocimiento"
+    r = im.importar([{"ruta": orig, "galaxia": "libros"}], k, db=tmp_path / "i.db")[0]
+    assert r["estado"] == "ok"
+    ref = k / "biblioteca" / "referencias.json"
+    assert "Mi libro privado" not in ref.read_text(encoding="utf-8") or str(tmp_path) not in ref.read_text(encoding="utf-8")   # sin rutas del equipo
+    assert "origen" not in next(iter(json.loads(ref.read_text(encoding="utf-8")).values()))
+
+    # «otro equipo»: llegan solo referencias.json (y no el epub ni metadatos.json)
+    Path(r["destino"]).unlink(); (k / "biblioteca" / "metadatos.json").unlink()
+    meta = im.leer_metadatos(k)
+    assert len(meta) == 1
+    ficha = im.listar(k)[0]
+    assert ficha["existe"] is False and ficha["galaxia"] == "libros"
+    assert im.comprimir_todo(k)["n"] == 0                                    # lo que no está no se comprime ni da error
+
+    # al importar el mismo archivo se restaura en su sitio, sin duplicado
+    r2 = im.importar([orig], k, db=tmp_path / "i.db")[0]
+    assert r2["estado"] == "ok" and "restaurado" in r2["mensaje"] and Path(r2["destino"]).is_file()
+    assert len(im.leer_metadatos(k)) == 1 and im.listar(k)[0]["existe"] is True
+:::END
 :::BEGIN py/tests/test_seleccion.py|text
 import numpy as np
 import pandas as pd
@@ -35925,45 +35975,36 @@ return D;
 })();
 :::END
 :::BEGIN py/visor/eclipses.js|text
-/* eclipses.js — pestaña «Eclipses»: el Sol es el límite de GitHub y cada galaxia / tipo de archivo es una luna que lo eclipsa.
-   El área de cada luna es proporcional a lo que ocupa (radio = R·√(bytes/límite)), así que el Sol queda tapado en la misma proporción que el repositorio está lleno.
-   Canvas 2D sin librerías. API: crearEclipses({canvas, alPasar(id|null)}) -> {medir, mostrar, ocultar, datos(items, limite), resaltar(id|null)}
+/* eclipses.js — pestaña «Eclipses»: el Sol es el límite de GitHub y cada galaxia / tipo de archivo es una luna de su color que lo tapa.
+   Todo es estático: el área de cada luna es proporcional a lo que ocupa (radio = R·√(bytes/límite)), así que el Sol queda tapado en la misma proporción que el repositorio está lleno.
+   Las lunas se reparten alrededor del Sol, cada una en su ángulo, para que cada eclipse se vea por separado. Canvas 2D sin librerías.
+   API: crearEclipses({canvas, alPasar(id|null)}) -> {medir, mostrar, ocultar, datos(items, limite), resaltar(id|null)}
    items = [{id, nombre, bytes, color:[r,g,b]}] */
 (function () {
 'use strict';
 window.crearEclipses = function (o) {
-  var cv = o.canvas, ctx = cv.getContext('2d'), W = 800, H = 460, DPR = 1, vivo = false, raf = 0, tPrev = 0, t = 0;
-  var lunas = [], limite = 1, resal = null, mx = -1, my = -1, estrellas = [];
+  var cv = o.canvas, ctx = cv.getContext('2d'), W = 800, H = 460, DPR = 1, lunas = [], resal = null, estrellas = [];
   for (var i = 0, a = 7; i < 220; i++) { a = (a * 16807) % 2147483647; var x = a / 2147483647; a = (a * 16807) % 2147483647; var y = a / 2147483647; estrellas.push([x, y, .5 + 1.4 * x * y]); }
 
   function geom() { return {cx: W * .5, cy: H * .5, R: Math.min(W * .24, H * .36)}; }
-  function posicion(l, g) {                     /* cada luna cruza el Sol por su propio carril, con su propia velocidad y fase */
-    var rr = g.R * l.k, amp = g.R + rr * .9;
-    return {x: g.cx + Math.sin(t * l.w + l.fase) * amp, y: g.cy + l.carril * g.R * 1.05, r: rr};
-  }
   function dibujar() {
-    var g = geom(), cx = g.cx, cy = g.cy, R = g.R;
+    var g = geom(), cx = g.cx, cy = g.cy, R = g.R, n = lunas.length;
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.fillStyle = '#02030a'; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = '#fff'; estrellas.forEach(function (e) { ctx.globalAlpha = .12 + .5 * e[2] / 2; ctx.fillRect(e[0] * W, e[1] * H, e[2], e[2]); }); ctx.globalAlpha = 1;
-    var lleno = lunas.reduce(function (s, l) { return s + l.k * l.k; }, 0), brillo = Math.max(.25, 1 - Math.min(1, lleno) * .55);   /* el Sol se apaga un poco cuanto más lleno */
     ctx.globalCompositeOperation = 'lighter';                                                             /* corona */
-    var co = ctx.createRadialGradient(cx, cy, R * .9, cx, cy, R * 2.1); co.addColorStop(0, 'rgba(255,170,70,' + (.45 * brillo) + ')'); co.addColorStop(.4, 'rgba(255,120,40,' + (.12 * brillo) + ')'); co.addColorStop(1, 'rgba(255,100,30,0)');
+    var co = ctx.createRadialGradient(cx, cy, R * .9, cx, cy, R * 2.1); co.addColorStop(0, 'rgba(255,170,70,.45)'); co.addColorStop(.4, 'rgba(255,120,40,.12)'); co.addColorStop(1, 'rgba(255,100,30,0)');
     ctx.fillStyle = co; ctx.fillRect(0, 0, W, H);
     ctx.globalCompositeOperation = 'source-over';
     var so = ctx.createRadialGradient(cx, cy, 0, cx, cy, R); so.addColorStop(0, '#fff6d8'); so.addColorStop(.7, '#ffc864'); so.addColorStop(1, '#ff9a3c');
-    ctx.globalAlpha = .55 + .45 * brillo; ctx.fillStyle = so; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 6.2832); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.fillStyle = so; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 6.2832); ctx.fill();
     ctx.strokeStyle = 'rgba(255,220,150,.55)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 6.2832); ctx.stroke();
-    lunas.forEach(function (l) {                                                                                 /* pequeñas debajo, grandes encima no: las pequeñas arriba para verlas */
-      var p = posicion(l, g), c = l.color.join(','), hot = resal === l.id;
-      l.px = p.x; l.py = p.y; l.pr = p.r;
-      ctx.fillStyle = hot ? 'rgba(18,16,26,.97)' : 'rgba(6,7,14,.94)'; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.2832); ctx.fill();
-      ctx.fillStyle = 'rgba(' + c + ',' + (hot ? .3 : .14) + ')'; ctx.fill();
-      ctx.strokeStyle = 'rgba(' + c + ',' + (hot ? 1 : .8) + ')'; ctx.lineWidth = hot ? 2.6 : 1.5; ctx.stroke();
-      if (p.r > 22 || hot) { ctx.fillStyle = 'rgba(235,240,255,.95)'; ctx.font = (hot ? 13 : 11) + 'px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(l.nombre, p.x, p.y + 4); }
+    lunas.slice().sort(function (p, q) { return q.k - p.k; }).forEach(function (l) {                         /* las grandes debajo, las pequeñas encima: ninguna queda escondida */
+      var rr = R * l.k, ang = -Math.PI / 2 + 2 * Math.PI * l.pos / n, d = R * .72, c = l.color.join(','), hot = resal === l.id;
+      l.px = cx + Math.cos(ang) * d; l.py = cy + Math.sin(ang) * d; l.pr = rr;
+      ctx.fillStyle = 'rgba(' + c + ',' + (hot ? .98 : .88) + ')'; ctx.beginPath(); ctx.arc(l.px, l.py, rr, 0, 6.2832); ctx.fill();
+      ctx.strokeStyle = hot ? '#fff' : 'rgba(255,255,255,.55)'; ctx.lineWidth = hot ? 2.6 : 1.2; ctx.stroke();
+      if (rr > 22 || hot) { ctx.fillStyle = '#fff'; ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = 4; ctx.font = (hot ? 13 : 11) + 'px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(l.nombre, l.px, l.py + 4); ctx.shadowBlur = 0; }
     });
-  }
-  function bucle(ts) {
-    if (!vivo) return; t += Math.min(.05, (ts - tPrev) / 1000 || 0); tPrev = ts; dibujar(); raf = requestAnimationFrame(bucle);
   }
   function medir() {
     var r = cv.getBoundingClientRect(); if (!r.width) return; DPR = Math.min(2, window.devicePixelRatio || 1);
@@ -35974,19 +36015,15 @@ window.crearEclipses = function (o) {
     lunas.forEach(function (l) { if (Math.hypot(x - l.px, y - l.py) <= l.pr && (!mejor || l.pr < mejor.pr)) mejor = l; });
     return mejor;
   }
-  cv.addEventListener('mousemove', function (e) { var l = bajo(e), id = l ? l.id : null; if (id !== resal) { resal = id; if (o.alPasar) o.alPasar(id); } });
-  cv.addEventListener('mouseleave', function () { if (resal !== null) { resal = null; if (o.alPasar) o.alPasar(null); } });
+  cv.addEventListener('mousemove', function (e) { var l = bajo(e), id = l ? l.id : null; if (id !== resal) { resal = id; dibujar(); if (o.alPasar) o.alPasar(id); } });
+  cv.addEventListener('mouseleave', function () { if (resal !== null) { resal = null; dibujar(); if (o.alPasar) o.alPasar(null); } });
   return {
     medir: medir,
-    mostrar: function () { medir(); if (!vivo) { vivo = true; tPrev = performance.now(); raf = requestAnimationFrame(bucle); } },
-    ocultar: function () { vivo = false; cancelAnimationFrame(raf); },
-    resaltar: function (id) { resal = id; },
+    mostrar: medir,
+    ocultar: function () {},
+    resaltar: function (id) { if (id !== resal) { resal = id; dibujar(); } },
     datos: function (items, lim) {
-      limite = lim || 1; var n = items.length;
-      lunas = items.map(function (it, i) {
-        var k = Math.min(1.5, Math.sqrt(it.bytes / limite));
-        return {id: it.id, nombre: it.nombre, color: it.color, k: Math.max(.035, k), w: .35 + .5 * ((i * 37) % 11) / 11, fase: i * 2.399, carril: n > 1 ? (i / (n - 1) - .5) * 1.5 : 0};
-      });
+      lunas = items.map(function (it, i) { return {id: it.id, nombre: it.nombre, color: it.color, k: Math.max(.035, Math.min(1.5, Math.sqrt(it.bytes / (lim || 1)))), pos: i}; });
       dibujar();
     }
   };
@@ -38026,7 +38063,7 @@ function bibTarjeta(x) {
     '<div class="bib-acc"><button class="btn primario" data-a="abrir" type="button"' + (x.existe ? '' : ' disabled') + '>Abrir</button>' +
     '<button class="btn" data-a="recl" type="button" title="Vuelve a decidir galaxia, género y subtema según el contenido y tus correcciones anteriores">Reclasificar</button>' +
     '<button class="btn" data-a="borrar" type="button" style="' + (bib.borrando === x.rel ? 'background:#8a3a2c;color:#fff' : '') + '">' + (bib.borrando === x.rel ? '¿Seguro? Pulsa otra vez' : 'Borrar') + '</button><span class="bib-ok"></span></div>' +
-    '<div class="bib-info">' + esc((x.extension || '').toUpperCase()) + ' · ' + fmtTam(x.tamano) + (x.paginas ? ' · ' + x.paginas + ' págs.' : '') + (x.capitulos ? ' · ' + x.capitulos + ' capítulos' : '') + (x.fecha ? ' · importado ' + esc(x.fecha) : '') + esc(nuevo) + (x.existe ? '' : ' · ⚠ el fichero ya no está') + '</div></div>';
+    '<div class="bib-info">' + esc((x.extension || '').toUpperCase()) + ' · ' + (x.existe ? fmtTam(x.tamano) : 'sin el archivo en este equipo (solo la referencia)') + (x.paginas ? ' · ' + x.paginas + ' págs.' : '') + (x.capitulos ? ' · ' + x.capitulos + ' capítulos' : '') + (x.fecha ? ' · importado ' + esc(x.fecha) : '') + esc(nuevo) + (x.existe ? '' : ' · ⚠ el fichero ya no está') + '</div></div>';
 }
 function bibRender() {
   var v = bibVista(), cont = $('#bibLista');
@@ -39306,7 +39343,8 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 5h. **Modo vivo (para ver los cambios mientras se trabaja):** el acceso directo con `--vivo` (`powershell -ExecutionPolicy Bypass -File herramientascceso_vivo.ps1 on|off` lo apunta a esta carpeta o lo restaura) recarga la app solo cuando se regenera `visor_arbol.html` y la coloca donde indique `.foco`. Para enseñar un cambio: `python herramientas/ver.py [destino]` regenera el visor y escribe el foco (`cerebro`, `galaxia:codigo|conceptos|demos|finanzas` o el nombre de una función/concepto/demo; el visor también lo admite como `#destino`).
 5i. **Pestañas e importador:** el visor tiene pestañas **🌌 Universo** (el mapa) y **⚫ Importar** (además de 🎓 Aprender). «Importar» es un agujero negro (`py/visor/agujero.js`): clic o soltar archivos abre el explorador de Windows (`Api.elegir_archivos`); `py/conocimiento/importar.py` analiza cada fichero (`clasificar`: galaxia finanzas/libros/notas, **género** —historia, economía, ensayo, estadística, ciencia, novela…—, subtema = tema del catálogo (palabras clave en inglés y español, peso del título) y solo para estadística/economía/tecnología —un libro de historia queda en «General»—, tipo, capítulos, vista previa, idioma, duplicado) y el panel muestra una tarjeta desplegable por archivo (barras con lo detectado: pulsar una fija el género o el subtema; desplegables de galaxia/género/tipo, título editable —los nombres largos se recortan con `titulo_corto`—, etiquetas, «Para todos»). Se importa archivo a archivo con progreso: `importar()` copia a `conocimiento/biblioteca/<galaxia>/<subtema>/` con nombre corto, guarda `biblioteca/metadatos.json` (hash: no duplica) y lo indexa; después `Api.actualizar_visor` regenera `visor_arbol.html` y el visor se recarga. `enriquecer()` completa capítulos/género/títulos de lo importado con versiones anteriores. Al final de la pestaña hay un desplegable «¿Cómo funciona la importación?». **Mapas con tu biblioteca** (`ramas_biblioteca` en `construir_visor.py`): Libros = una rama por género › un módulo por libro › un punto por capítulo (PDF: marcadores o tramos de 25 págs.; EPUB: su índice) con «Abrir en la página N»; los capítulos NO se dibujan hasta que pulsas el libro (`nivel()` en `mapa3d.js`; el panel del libro, `detalleLibro`, los lista siempre); el recuento de una rama son sus libros; Notas = una rama por subtema con un punto por documento; las demás galaxias reciben una rama «Documentos importados». Una galaxia sin nada no tiene mapa ni líneas (solo búsqueda). **Conceptos con vídeo:** los conceptos con fuentes de vídeo (Very Normal, Harvard, MIT, 3Blue1Brown…; `es_video`) llevan un ▶ en el mapa y la lista de vídeos arriba del panel (la cabecera ya no tiene filtros ni chips de ramas: solo buscador y perfil). **Observatorio (pestaña 🔭; internamente «biblioteca»: carpeta `conocimiento/biblioteca`, `biblioteca_*` en la API):** lista lo importado y deja editar título, galaxia, género, subtema, tipo y etiquetas (se guarda al momento; `importar.editar`), reclasificar (`reclasificar_uno`) y borrar (`borrar`: quita la copia de `biblioteca/`, nunca el original); lo que fijas se recuerda (`biblioteca/correcciones.json`: obras de nombre parecido se clasifican igual). El universo se regenera al volver a él. **Importar:** «Original: copiar/mover» (mover quita el original de su carpeta tras importar) y progreso real por páginas (`conocimiento.PROGRESO`, trabajo en segundo plano `Api.importar_archivos` + `estado_trabajo`). **Búsqueda con ámbito:** prefijos `libros:`, `código:`, `conceptos:`, `demos:`, `notas:`, `finanzas:`, `vídeo:` y géneros (`historia:`, `economía:`…), combinables; con la barra vacía salen los atajos; flechas/Enter sirven también para los resultados de tus carpetas y hay indicador de «buscando…».
 **Buscador:** la barra ocupa todo el espacio libre de la cabecera y cada resultado lleva un icono (`iconoNodo`/`iconoRes` en la plantilla): portada del libro (la del EPUB, la primera página del PDF con Poppler si está, o una generada por género; `importar.portada`, `DATA.portadas`), logo de Python (funciones y ejemplos), ∑ (conceptos; con ▶ si tienen vídeo), f(x) (demos), documento (guías) y la etiqueta del formato (PDF, DOCX, MD…). Al buscar, el universo reacciona: la galaxia con más coincidencias late y la cámara se acerca un poco (`cerebro.enfocar`), el resto se atenúa; los capítulos de un mismo libro se agrupan en un resultado. Los `*.pdf` y `*.epub` están en `.gitignore`. Por consola: `cd py && python -m conocimiento importar f.pdf [-g libros] [-G historia] [-s "Inferencia y contrastes"] [-t libro]`.
-5j. **Eclipses (almacenaje):** pestaña «🌘 Eclipses» (`py/visor/eclipses.js`, medición en `py/conocimiento/almacenaje.py`, API `Api.almacenaje`): el Sol es el límite de GitHub (1 GB recomendado, 5 GB tope, 100 MB por archivo) y cada galaxia o tipo de archivo es una luna cuya área es proporcional a lo que ocupa. Dos escenarios: «En disco» (todo) y «En GitHub» (`git ls-files -co --exclude-standard`: respeta `.gitignore`), y dos vistas (por galaxia / por tipo). Avisa de archivos >100 MB. Test: `tests/test_almacenaje.py`.
+5j. **Eclipses (almacenaje):** pestaña «🌘 Eclipses» (`py/visor/eclipses.js`, medición en `py/conocimiento/almacenaje.py`, API `Api.almacenaje`): el Sol es el límite de GitHub (1 GB recomendado, 5 GB tope, 100 MB por archivo) y cada galaxia o tipo de archivo es una luna de su color, ESTÁTICA (sin órbitas ni animación: decisión de Mario), cuya área es proporcional a lo que ocupa y que tapa el Sol. Dos escenarios: «En disco» (todo) y «En GitHub» (`git ls-files -co --exclude-standard`: respeta `.gitignore`), y dos vistas (por galaxia / por tipo). Avisa de archivos >100 MB. Test: `tests/test_almacenaje.py`.
+5m. **Referencias que viajan:** los PDF/EPUB no suben a GitHub, pero `conocimiento/biblioteca/referencias.json` (los metadatos sin rutas del equipo: título, galaxia, género, capítulos, hash) y `biblioteca/portadas/` sí (`.gitignore`; `importar._guardar` los escribe junto a `metadatos.json`, que sigue siendo local). `leer_metadatos` fusiona ambos, así que en otro equipo el mapa y el Observatorio muestran los libros como referencias vacías («sin el archivo en este equipo»); al importar un archivo con el mismo hash se restaura en su sitio.
 5l. **Comprimir la biblioteca:** botón «Comprimir sin pérdida» del Observatorio y `python -m conocimiento comprimir` (`importar.comprimir`/`comprimir_todo`). Reescribe PDF (flujos de contenido recomprimidos, objetos idénticos fusionados) y EPUB (deflate 9) **sin tocar el contenido**; antes de sustituir comprueba mismas páginas y mismo texto y que la copia sea ≥ 2 % menor. No se recomprimen ni reducen imágenes (decisión de Mario: el libro debe quedar idéntico).
 5k. **Telescopio:** pestaña «📡 Telescopio» (`py/conocimiento/telescopio.py`, API `Api.telescopio_buscar/traer`, consola `python -m conocimiento telescopio <consulta> [--traer N]`). Busca **solo fuentes legales**: Project Gutenberg (Gutendex, dominio público), arXiv, OpenAlex (solo con PDF abierto) e Internet Archive (solo licencia CC/dominio público o publicado ≤ 1929). **No se añaden fuentes piratas (Anna's Archive, Z-Library, LibGen…) ni descargadores de ellas.** `traer` descarga (https, ≤ 200 MB, comprueba que es PDF/EPUB de verdad) y pasa por `importar.importar` con el género sacado de las materias de la obra (`genero_desde_materias`); `materias_de` consulta Open Library para clasificar un título que ya tienes. Tests sin red (`_get` se sustituye): `tests/test_telescopio.py`.
 6. **Conceptos:** `conceptos/catalogo.json` lista los conceptos del temario del máster y de Very Normal con las funciones que los implementan. Organización: `temas` (ramas del mapa, con color) > `areas` (módulos, con `ambito`) > conceptos (`area`, `prioridad` opcional, `area_fija` para que la actualización no lo mueva). La migración de 0.6.0 está en `herramientas/reorganizar_catalogo.py`.

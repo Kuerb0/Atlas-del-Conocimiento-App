@@ -1451,7 +1451,7 @@ function bibTarjeta(x) {
     '<div class="bib-acc"><button class="btn primario" data-a="abrir" type="button"' + (x.existe ? '' : ' disabled') + '>Abrir</button>' +
     '<button class="btn" data-a="recl" type="button" title="Vuelve a decidir galaxia, género y subtema según el contenido y tus correcciones anteriores">Reclasificar</button>' +
     '<button class="btn" data-a="borrar" type="button" style="' + (bib.borrando === x.rel ? 'background:#8a3a2c;color:#fff' : '') + '">' + (bib.borrando === x.rel ? '¿Seguro? Pulsa otra vez' : 'Borrar') + '</button><span class="bib-ok"></span></div>' +
-    '<div class="bib-info">' + esc((x.extension || '').toUpperCase()) + ' · ' + fmtTam(x.tamano) + (x.paginas ? ' · ' + x.paginas + ' págs.' : '') + (x.capitulos ? ' · ' + x.capitulos + ' capítulos' : '') + (x.fecha ? ' · importado ' + esc(x.fecha) : '') + esc(nuevo) + (x.existe ? '' : ' · ⚠ el fichero ya no está') + '</div></div>';
+    '<div class="bib-info">' + esc((x.extension || '').toUpperCase()) + ' · ' + (x.existe ? fmtTam(x.tamano) : 'sin el archivo en este equipo (solo la referencia)') + (x.paginas ? ' · ' + x.paginas + ' págs.' : '') + (x.capitulos ? ' · ' + x.capitulos + ' capítulos' : '') + (x.fecha ? ' · importado ' + esc(x.fecha) : '') + esc(nuevo) + (x.existe ? '' : ' · ⚠ el fichero ya no está') + '</div></div>';
 }
 function bibRender() {
   var v = bibVista(), cont = $('#bibLista');

@@ -15,7 +15,11 @@ x.tag
 mn
 
 # datos del gestor de conocimiento (índice, fuentes propias)
-/conocimiento/
+/conocimiento/*
+!/conocimiento/biblioteca/
+/conocimiento/biblioteca/*
+!/conocimiento/biblioteca/referencias.json
+!/conocimiento/biblioteca/portadas/
 .foco
 
 # libros y documentos pesados (las bibliotecas de cada usuario no se publican)

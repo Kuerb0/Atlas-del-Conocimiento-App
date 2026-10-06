@@ -391,8 +391,10 @@ def _sha1(f: Path) -> str:
 
 
 def leer_metadatos(carpeta: Path = CARPETA) -> dict:
-    f = Path(carpeta) / "biblioteca" / "metadatos.json"
-    return json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+    """Metadatos de la biblioteca: los de este equipo (metadatos.json) más las referencias que llegaron por GitHub (referencias.json) de libros que aquí aún no están."""
+    b = Path(carpeta) / "biblioteca"
+    leer = lambda n: json.loads((b / n).read_text(encoding="utf-8")) if (b / n).exists() else {}
+    return {**leer("referencias.json"), **leer("metadatos.json")}
 
 
 def resumen(carpeta: Path = CARPETA) -> dict:
@@ -422,6 +424,12 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
                 raise ValueError(f"formato no admitido ({f.suffix or 'sin extensión'}); sirven {', '.join(sorted(EXT))}")
             _prog(f"Analizando «{f.name[:40]}»", .02)
             h = _sha1(f)
+            if h in hashes and not (base / hashes[h]).exists() and (base / hashes[h]).suffix.lower() == f.suffix.lower():     # la referencia llegó por GitHub y ahora tienes el libro: se restaura en su sitio
+                rel0 = hashes[h]; (base / rel0).parent.mkdir(parents=True, exist_ok=True); shutil.copy2(f, base / rel0)
+                m0 = meta[rel0]
+                salida.append({**r, "movido": False, "estado": "ok", "titulo": m0.get("titulo", ""), "galaxia": m0.get("galaxia", ""), "subtema": m0.get("subtema", ""), "genero": m0.get("genero", "otro"),
+                               "tipo": m0.get("tipo", ""), "destino": str(base / rel0), "mensaje": "restaurado: ya estaba en tus referencias"})
+                continue
             if h in hashes:
                 salida.append({**r, "estado": "duplicado", "mensaje": f"ya estaba importado ({hashes[h]})"})
                 continue
@@ -460,7 +468,7 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
             salida.append({**r, "estado": "error", "mensaje": str(e)})
     if any(s["estado"] == "ok" for s in salida):
         base.mkdir(parents=True, exist_ok=True)
-        (base / "metadatos.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+        _guardar(carpeta, meta)
         if indexar_ahora:
             _prog("Indexando el texto…", .1)
             ind = indexar(db or carpeta / "indice.db", {}, carpeta=carpeta)
@@ -489,7 +497,7 @@ def enriquecer(carpeta: Path | None = None) -> int:
         if "genero" not in m:
             m["genero"] = clasificar(f, carpeta)["genero"]; n += 1
     if n:
-        (carpeta / "biblioteca" / "metadatos.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+        _guardar(carpeta, meta)
     return n
 
 
@@ -506,7 +514,7 @@ def reclasificar(carpeta: Path | None = None) -> list[tuple]:
             cambios.append((m.get("titulo", rel)[:40], m.get("subtema"), c["subtema"], m.get("genero"), c["genero"]))
             m["subtema"], m["genero"] = c["subtema"], c["genero"]
     if cambios:
-        (carpeta / "biblioteca" / "metadatos.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+        _guardar(carpeta, meta)
     return cambios
 
 
@@ -515,9 +523,12 @@ CAMPOS = ("titulo", "galaxia", "genero", "subtema", "tipo", "etiquetas")
 
 
 def _guardar(carpeta: Path, meta: dict) -> None:
+    """Escribe metadatos.json (lo de este equipo) y referencias.json (lo mismo sin rutas del equipo: es lo que viaja por GitHub, aunque los PDF/EPUB no)."""
     base = Path(carpeta) / "biblioteca"
     base.mkdir(parents=True, exist_ok=True)
-    (base / "metadatos.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+    esc = lambda d: json.dumps(d, ensure_ascii=False, indent=1)
+    (base / "metadatos.json").write_text(esc(meta), encoding="utf-8")
+    (base / "referencias.json").write_text(esc({rel: {k: v for k, v in m.items() if k != "origen"} for rel, m in sorted(meta.items())}), encoding="utf-8")
 
 
 def _ficha(carpeta: Path, rel: str, m: dict, con_portada: bool = True) -> dict:
@@ -636,7 +647,7 @@ def comprimir(rel: str, carpeta: Path | None = None) -> dict:
 def comprimir_todo(carpeta: Path | None = None) -> dict:
     """Comprime sin pérdida todos los PDF/EPUB de la biblioteca: {n, ahorrado, antes, despues, errores:[…]}."""
     carpeta = Path(carpeta or carpeta_datos())
-    rs = [comprimir(rel, carpeta) for rel in leer_metadatos(carpeta) if rel.lower().endswith((".pdf", ".epub"))]
+    rs = [comprimir(rel, carpeta) for rel in leer_metadatos(carpeta) if rel.lower().endswith((".pdf", ".epub")) and (carpeta / "biblioteca" / rel).is_file()]
     antes, despues = sum(x["antes"] for x in rs), sum(x["despues"] for x in rs)
     return {"n": len(rs), "comprimidos": sum(x["estado"] == "ok" for x in rs), "antes": antes, "despues": despues, "ahorrado": antes - despues,
             "errores": [f"{x['rel']}: {x['mensaje']}" for x in rs if x["estado"] == "error"]}
