@@ -104,8 +104,37 @@ def test_conceptos_con_video():
     assert any(c["videos"] for c in conceptos) and all(v["url"] for c in conceptos for v in c["videos"])
 
 
-def test_el_visor_tiene_el_desplegable_las_tarjetas_y_el_filtro_de_video():
+def test_el_visor_tiene_el_desplegable_y_las_tarjetas_del_importador():
     import construir_visor as cv
     html = cv.ensamblar(cv.construir())
-    for pieza in ("imp-ayuda", "¿Cómo funciona la importación?", "impTarjeta", "detalleDocumento", 'id="soloVideo"', "actualizar_visor", "esVideo"):
+    for pieza in ("imp-ayuda", "¿Cómo funciona la importación?", "impTarjeta", "detalleDocumento", "actualizar_visor", "esVideo"):
         assert pieza in html
+
+
+def test_solo_se_asignan_temas_de_estadistica_a_lo_que_lo_es(tmp_path):
+    historia = tmp_path / "Rise_of_Empire_a_history.txt"
+    historia.write_text("The history of the empire: the war, the republic, the dynasty. The generals tested every model of validation and cross-validation of their armies' prediction. " * 12, encoding="utf-8")
+    c = imp.clasificar(historia)
+    assert c["genero"] == "historia" and c["subtema"] == "General" and c["temas"] == []          # un libro de historia no recibe un tema de estadística
+    estad = tmp_path / "Regression_Modeling.txt"
+    estad.write_text("Linear regression, logistic regression, residuals, least squares and generalized linear models with covariates and predictors. " * 15, encoding="utf-8")
+    e = imp.clasificar(estad)
+    assert e["genero"] == "estadistica" and e["subtema"] == "Regresión y GLM"
+
+
+def test_importar_desde_la_interfaz_sigue_siendo_automatico_y_los_libros_van_por_genero(tmp_path):
+    f = tmp_path / "libro_de_roma.epub"
+    import zipfile
+    with zipfile.ZipFile(f, "w") as z:
+        z.writestr("OEBPS/c1.xhtml", "<html><body><h1>The Republic</h1><p>" + "The history of the Roman empire and its wars. " * 80 + "</p></body></html>")
+    auto = imp.clasificar(f)
+    r = imp.importar([{"ruta": f, "titulo": auto["titulo"]}], carpeta=tmp_path / "datos", db=tmp_path / "datos" / "i.db")[0]      # la interfaz siempre manda el título
+    assert r["estado"] == "ok" and r["galaxia"] == "libros" and r["genero"] == "historia" and "Historia" in r["destino"]
+    assert imp.leer_metadatos(tmp_path / "datos")[next(iter(imp.leer_metadatos(tmp_path / "datos")))]["automatico"] is True
+
+
+def test_el_visor_no_tiene_los_filtros_de_arriba_y_el_libro_muestra_sus_capitulos_al_pulsarlo():
+    import construir_visor as cv
+    html = cv.ensamblar(cv.construir())
+    assert 'id="chips"' not in html and 'class="filtros"' not in html and 'id="soloSas"' not in html
+    assert "detalleLibro" in html and "esLibro" in html and "n.tipo === 'capitulo'" in html     # capítulos ocultos hasta enfocar el libro (mapa3d.js)

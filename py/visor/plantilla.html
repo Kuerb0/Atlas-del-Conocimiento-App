@@ -58,10 +58,6 @@ code,pre{font-family:var(--mono)}
 .tools{display:flex;align-items:center;gap:4px;margin-left:auto;flex:none}
 .btn.ic{padding:5px 9px;font-size:13px;line-height:1.2}
 .btn[aria-pressed="true"]{background:var(--surface-2);border-color:var(--muted)}
-.filtros{position:relative} .filtros summary{list-style:none} .filtros summary::-webkit-details-marker{display:none}
-.filtros .pop{position:absolute;right:0;top:calc(100% + 4px);z-index:30;width:300px;display:grid;gap:8px;padding:10px 12px;
-  background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.18);font-size:12.5px}
-.filtros .pop p{margin:0;color:var(--muted);font-size:12px}
 .chk{display:flex;align-items:center;gap:6px;color:var(--muted);cursor:pointer;white-space:nowrap}
 .btn{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border:1px solid var(--line);border-radius:7px;background:var(--surface);cursor:pointer;text-decoration:none;color:var(--ink);white-space:nowrap}
 .btn:hover{background:var(--surface-2)}
@@ -284,6 +280,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 }
 @media (prefers-reduced-motion:reduce){ .toast{transition:none} }
 
+.caps{margin:0;padding:0;list-style:none;display:grid;gap:4px} .caps .btn{width:100%;text-align:left;white-space:normal;line-height:1.35}
 .enlaces a.btn{display:block;max-width:100%;white-space:normal;text-align:left;line-height:1.35;overflow-wrap:anywhere}
 /* pestañas (Universo / Importar) */
 .pestanas{display:flex;gap:2px;flex:none;padding:2px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}
@@ -346,17 +343,9 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
       <input id="q" type="search" placeholder="Buscar…  ( / )" autocomplete="off" spellcheck="false" aria-label="Buscar">
       <ul id="resultados" class="resultados" role="listbox" hidden></ul>
     </div>
-    <nav class="ramas" id="chips" aria-label="Ramas"></nav>
     <div class="tools">
       <button class="btn" id="aprenderBtn" type="button" title="Guía de aprendizaje paso a paso" aria-pressed="false">🎓 Aprender</button>
-            <details class="filtros"><summary class="btn ic" title="Filtros">Filtros</summary>
-        <div class="pop">
-          <label class="chk"><input type="checkbox" id="soloSas"> Solo con equivalente SAS</label>
-          <label class="chk" title="Conceptos de método (estadística, actuarial, finanzas) que todavía no tienen una función en el árbol. Los normativos no cuentan: no se programan"><input type="checkbox" id="soloHuecos"> Solo huecos (sin código)</label>
-          <label class="chk" title="Conceptos con algún vídeo (Very Normal, Harvard, MIT, 3Blue1Brown…): llevan un ▶ en el mapa"><input type="checkbox" id="soloVideo"> Solo conceptos con vídeo</label>
-          <label class="chk" title="Conceptos marcados como prioritarios en el catálogo"><input type="checkbox" id="soloAlta"> Solo prioridad alta</label>
-          <p id="resumen"></p><p id="pista"></p>
-        </div></details>
+
       <select class="perfil-sel" id="perfil" title="Perfil de proyecto: cuánto pesa cada propiedad al puntuar y ordenar las funciones" aria-label="Perfil de proyecto"></select>
       <button class="btn ic" id="tema" type="button" title="Cambiar tema (auto / claro / oscuro)">◐</button>
       <button class="btn ic" id="panelBtn" type="button" title="Plegar / desplegar el panel de la derecha (P)" aria-pressed="false">▤</button>
@@ -490,6 +479,7 @@ function clicNodo(n, ev) {
   if (ctrl && n.kind === 'rama') { var mp = moduloPrincipal(n); if (mp !== focus) ir(mp); return; }   /* Ctrl+clic: directo al módulo principal */
   if (n === focus) { ir(focus.parent || galAct.raiz); return; }
   ir(n);
+  if (esLibro(n)) { detalleLibro(n); return; }                  /* un libro: sus capítulos aparecen al pulsarlo */
   if ((n.kind === 'modulo' || n.kind === 'rama') && typeof detalleGrupoFunciones === 'function') detalleGrupoFunciones(n);
 }
 /* Un mapa 3D por galaxia, creado al entrar por primera vez; `mapa` es el de la galaxia en la que estamos. */
@@ -557,7 +547,7 @@ var coleccionK = '', resArbol = {}, resK = {};
   var nVideo = hojas.filter(function (h) { return h.video; }).length;
   GAL.codigo.base = (n.codigo || 0) + ' funciones'; GAL.conceptos.base = (n.conceptos || 0) + ' conceptos · ' + nVideo + ' con vídeo';
   GAL.demos.base = (n.demos || 0) + ' demos y guías'; GAL.finanzas.base = (n.finanzas || 0) + ' funciones y conceptos';
-  if (caps.libros) GAL.libros.base = GAL.libros.raiz.hijos.reduce(function (s, r) { return s + r.hijos.length; }, 0) + ' libros · ' + caps.libros + ' capítulos';
+  if (caps.libros) GAL.libros.base = GAL.libros.raiz.hijos.reduce(function (s, r) { return s + r.hijos.length; }, 0) + ' libros';
   if (docs.notas) GAL.notas.base = docs.notas + ' notas';
   ['codigo', 'conceptos', 'demos', 'finanzas'].forEach(function (c) { if (docs[c]) GAL[c].base += ' · +' + docs[c] + ' docs'; });
   GALAXIAS.forEach(function (g) { g.sub = g.base || 'vacía: importa algo'; });
@@ -642,18 +632,10 @@ function migas() {
     if (n === focus) { var a = document.createElement('span'); a.className = 'act'; a.textContent = n.nombre; m.appendChild(a); }
     else { var b = document.createElement('button'); b.type = 'button'; b.textContent = n.nombre; b.onclick = function () { ir(n); }; m.appendChild(b); }
   });
-  Array.prototype.forEach.call($('#chips').children, function (c) { c.setAttribute('aria-pressed', String(esDesc(focus, porId[c.dataset.id]) )); });
 }
 var nCon = hojas.filter(function (h) { return h.tipo === 'concepto'; }), nHuecos = nCon.filter(esHueco).length;
-$('#resumen').textContent = hojas.filter(function (h) { return h.tipo === 'funcion'; }).length + ' funciones · ' + nCon.length + ' conceptos (' + nHuecos + ' huecos) · ' + hojas.filter(function (h) { return h.tipo === 'demo'; }).length + ' demos · ' + DATA.pruebas + ' pruebas · generado ' + DATA.generado;
-root.hijos.forEach(function (rn) {
-  if (rn.biblioteca) return;
-  var b = document.createElement('button'); b.type = 'button'; b.className = 'chip b-' + rn.rama; b.dataset.id = rn.id;
-  b.innerHTML = '<i style="background:var(--c)"></i>' + esc(rn.nombre) + ' <b>' + cuenta(rn) + '</b>';
-  b.onclick = function () { var dst = focus === rn ? rn.parent : rn; ir(dst); if (dst === rn) detalleGrupoFunciones(rn); }; $('#chips').appendChild(b);
-});
-$('#pista').textContent = 'El núcleo es el árbol; los nodos con anillo son las ramas y orbitan a su alrededor. Arrastra para girar, rueda para acercar, clic en una rama para entrar y ver sus módulos (Ctrl+clic: salta directo a su módulo principal); clic en el vacío o en las migas para volver. Los arcos unen conceptos con las funciones que los implementan. Puntos sólidos = funciones o conceptos con código; punteados = conceptos aún sin código. Arrastra la barra de la derecha para agrandar el mapa (doble clic la oculta). «Cómo funciona» tiene demos interactivas.';
-$('#titulo').title = 'Árbol de la estadística · ' + $('#resumen').textContent;
+var RESUMEN = hojas.filter(function (h) { return h.tipo === 'funcion'; }).length + ' funciones · ' + nCon.length + ' conceptos (' + nHuecos + ' huecos) · ' + hojas.filter(function (h) { return h.tipo === 'demo'; }).length + ' demos · ' + DATA.pruebas + ' pruebas · generado ' + DATA.generado;
+$('#titulo').title = 'Árbol de la estadística · ' + RESUMEN;
 $('#panelBtn').addEventListener('click', function () { window.alternarDetalle(); });
 function pantallaCompleta() {
   var d = document, el = d.documentElement;
@@ -686,7 +668,7 @@ function puntuar(n, tokens) {
 }
 var resultados = [], idxRes = -1;
 function buscar() {
-  query = $('#q').value.trim(); soloSas = $('#soloSas').checked; soloHuecos = $('#soloHuecos').checked; soloAlta = $('#soloAlta').checked; soloVideo = $('#soloVideo').checked;
+  query = $('#q').value.trim();
   var tokens = norm(query).split(/\s+/).filter(Boolean);
   coincide = {}; conCoincidencia = {}; resultados = [];
   hojas.forEach(function (h) {
@@ -759,8 +741,7 @@ $('#q').addEventListener('keydown', function (ev) {
   else if (ev.key === 'Enter') { var r = resultados[idxRes >= 0 ? idxRes : 0]; if (r) { ev.preventDefault(); elegir(r.n); } }
   else if (ev.key === 'Escape') { this.value = ''; buscar(); this.blur(); }
 });
-$('#soloSas').addEventListener('change', buscar); $('#soloAlta').addEventListener('change', buscar); $('#soloVideo').addEventListener('change', buscar);
-$('#soloHuecos').addEventListener('change', buscar);
+
 document.addEventListener('keydown', function (ev) {
   var t = ev.target && ev.target.tagName;
   if (ev.key === '/' && t !== 'INPUT') { ev.preventDefault(); $('#q').focus(); $('#q').select(); }
@@ -980,6 +961,26 @@ function detalleDocumento(n, d) {         /* un capítulo de un libro o un docum
 }
 var GENEROS_NOM = {historia: 'Historia', economia: 'Economía y finanzas', ensayo: 'Ensayo y filosofía', estadistica: 'Estadística y matemáticas', ciencia: 'Ciencia y divulgación', novela: 'Novela y ficción',
                    biografia: 'Biografía y memorias', politica: 'Política y sociedad', tecnologia: 'Tecnología e informática', psicologia: 'Psicología y salud', arte: 'Arte, música y cultura', otro: 'Otros'};
+function esLibro(m) { return m.kind === 'modulo' && m.hijos.length > 0 && m.hijos[0].tipo === 'capitulo'; }
+function detalleLibro(m) {                  /* el panel de un libro: ficha y lista de capítulos (en el mapa solo se ven al pulsar el libro) */
+  var d = $('#detalle'), c0 = m.hijos[0], r = m.parent, gen = c0.genero && GENEROS_NOM[c0.genero] ? GENEROS_NOM[c0.genero] : '';
+  if (window.mostrarDetalle) window.mostrarDetalle();
+  vistaModulo = null; sel = null;
+  var h = '<div class="det-cab b-' + r.rama + '"><i></i><span>' + esc(r.nombre) + ' › libro</span></div><h2 class="sans">' + esc(m.nombre) + '</h2><p class="desc">' + esc(m.desc) + '</p><dl class="meta">' +
+    (gen ? '<dt>Género</dt><dd>' + esc(gen) + '</dd>' : '') + (c0.subtema ? '<dt>Subtema</dt><dd>' + esc(c0.subtema) + '</dd>' : '') + (c0.paginas ? '<dt>Páginas</dt><dd>' + c0.paginas + '</dd>' : '') +
+    (c0.etiquetas ? '<dt>Etiquetas</dt><dd>' + esc(c0.etiquetas) + '</dd>' : '') + (c0.fecha ? '<dt>Importado</dt><dd>' + esc(c0.fecha) + '</dd>' : '') +
+    (c0.titulo_largo && c0.titulo_largo !== m.nombre ? '<dt>Nombre completo</dt><dd>' + esc(c0.titulo_largo) + '</dd>' : '') + '</dl>' +
+    '<div class="acciones"><button class="btn primario" data-a="abrir" type="button">Abrir el libro</button><button class="btn" data-a="buscar" type="button" title="Busca en el texto de todo lo importado">Buscar en el libro</button></div>' +
+    '<h3>Capítulos (' + m.hijos.length + ')</h3><ol class="caps">' + m.hijos.map(function (c) {
+      return '<li><button class="btn" type="button" data-ir="' + esc(c.rid) + '">' + esc(c.nombre) + (c.pagina ? ' <small>· p. ' + c.pagina + '</small>' : '') + '</button></li>'; }).join('') + '</ol>';
+  d.innerHTML = h; d.scrollTop = 0; pintar();
+  d.onclick = function (ev) {
+    var go = ev.target.closest('button[data-ir]'); if (go && porNombre[go.dataset.ir]) { seleccionar(porNombre[go.dataset.ir], true); return; }
+    var b = ev.target.closest('button[data-a]'); if (!b) return;
+    if (b.dataset.a === 'abrir') { var a = window.pywebview && window.pywebview.api; if (a && a.abrir_fuente) a.abrir_fuente(c0.ruta, ''); else aviso('Abrir los ficheros funciona en la app'); }
+    else { $('#q').value = m.nombre; buscar(); $('#q').focus(); }
+  };
+}
 function detalleDemo(n, d) {
   var h = '<div class="det-cab b-' + n.rama + '"><i></i><span>' + esc(n.ramaNombre) + ' › ' + esc(n.modulo) + '</span></div>' +
     '<h2 class="sans">' + esc(n.nombre) + '</h2><p class="desc">' + esc(n.desc) + '</p><div class="dm"></div>' +

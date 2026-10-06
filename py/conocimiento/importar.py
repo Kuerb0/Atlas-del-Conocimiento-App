@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import math
 import os
 import re
 import shutil
@@ -41,6 +42,36 @@ _GEN_PALABRAS = {
 _GEN_RE = {g: re.compile(r"\b(?:" + p + r")\b") for g, p in _GEN_PALABRAS.items()}
 _ES = set("el la de que y en los las un una por con para es se del al lo como mas pero sus le ya o este si porque esta entre cuando muy sin sobre tambien me hasta hay donde quien desde todo nos durante".split())
 _EN = set("the of and to in is that for with as on by it this are was be at from or an which have has not but they their its been were all more can will one also".split())
+_TEMA_PALABRAS = {
+    "t_prob": r"probabilit\w*|probabilidad|random variables?|variables? aleatorias?|distributions?|distribuci\w+|expectation|expected value|esperanza|bayes\w*|markov|poisson|binomial|gaussian|central limit|limit theorem|moment generating",
+    "t_inf": r"estimat\w+|estimad\w+|hypothesis|hipotesis|confidence intervals?|intervalos? de confianza|p-?values?|significan\w+|likelihood|verosimilitud|t-?tests?|chi-?squared?|chi-?cuadrado|nonparametric|sampling distributions?|contrastes?",
+    "t_mod": r"regression|regresion|linear models?|modelos? lineales?|generalized linear|glm|logistic|logit|anova|residuals?|residuos|multicollinearity|colinealidad|least squares|minimos cuadrados|covariates?|predictors?",
+    "t_ml": r"machine learning|aprendizaje automatico|classification|clasificacion|cross-?validation|validacion cruzada|random forests?|boosting|neural networks?|redes neuronales|overfitting|sobreajuste|tuning|resampling|bootstrap|support vector|decision trees?|arboles de decision|predictive|lasso|ridge|regulariz\w+|supervised|unsupervised|clustering",
+    "t_sim": r"simulation|simulacion|monte carlo|mcmc|bayesian|bayesiano|posterior|prior|experimental design|diseno de experimentos|factorial|randomi[sz]ation|aleatorizacion",
+    "t_pob": r"survival analysis|analisis de supervivencia|kaplan|hazard|censoring|censura|demograph\w+|demografi\w+|mortality|mortalidad|life tables?|tablas de vida|cohort|epidemiolog\w+",
+    "t_seg": r"insurance|seguros?|actuarial|claims?|siniestros?|premium|reserves?|reservas|ruin|credibility|credibilidad|risk theory|reinsurance",
+    "t_fin": r"portfolio|cartera|bonds?|bonos|derivatives?|derivados|interest rates?|tipos de interes|volatility|volatilidad|capm|markowitz|black-?scholes|value at risk|solvency|solvencia|basel"}
+_TEMA_RE = {k: re.compile(r"\b(?:" + v + r")\b") for k, v in _TEMA_PALABRAS.items()}
+GENEROS_CON_TEMA = {"estadistica", "economia", "tecnologia"}          # solo a estos se les asigna un tema del catálogo de estadística: a un libro de historia no le corresponde ninguno
+
+
+def _puntos_temas(t: str, nombre: str) -> dict:
+    """{(id, nombre): puntos}. Palabras clave en inglés y español (cada una cuenta 1 + log(veces), así no manda una sola palabra repetida) más las frases del catálogo."""
+    out = {}
+    for tid, tnombre, frases in _temas_con_frases():
+        palabras = _TEMA_RE.get(tid)
+        veces = {}
+        for m in (palabras.findall(t) if palabras else []):
+            veces[m] = veces.get(m, 0) + 1
+        clave = sum(1 + math.log(n) for n in veces.values())
+        cat = sum(1 for fr in frases if len(fr) >= 7 and fr in t) + 3 * sum(1 for fr in frases if len(fr) >= 7 and fr in nombre)
+        titulo = 8 * len(palabras.findall(nombre)) if palabras else 0          # lo que dice el título pesa mucho
+        p = int(round(2 * clave + cat / 2 + titulo))
+        if p:
+            out[(tid, tnombre)] = p
+    return out
+
+
 FINANZAS = re.compile(r"\b(bonos?|carteras?|rentabilidad|volatilidad|derivados?|opcion(?:es)?|futuros?|tipos? de interes|capm|markowitz|renta fija|renta variable|tesoreria|"
                       r"solvencia|var|valoracion|acciones|mercados?|activos?|pasivos?|riesgo de credito|fiscalidad|impuestos?|bancari[oa]s?|swaps?|duracion|rating)\b")
 
@@ -161,11 +192,7 @@ def clasificar(ruta: str | Path) -> dict:
     texto, paginas = _muestra(f)
     t = " " + _norm(texto[:40000]) + " "
     nombre = _norm(re.sub(r"[_\-.]+", " ", f.stem))
-    puntos = {}
-    for tid, tnombre, frases in _temas_con_frases():
-        p = sum(t.count(fr) for fr in frases) + 4 * sum(1 for fr in frases if fr in nombre)
-        if p:
-            puntos[(tid, tnombre)] = p
+    puntos = _puntos_temas(t, nombre)
     (tid, tnombre), p = max(puntos.items(), key=lambda kv: kv[1]) if puntos else ((None, "General"), 0)
     fin = len(FINANZAS.findall(t)) + 4 * len(FINANZAS.findall(nombre))
     ext = f.suffix.lower()
@@ -177,19 +204,20 @@ def clasificar(ruta: str | Path) -> dict:
         tipo = "apuntes"
     else:
         tipo = "nota"
-    if fin >= 8 or tid == "t_fin" and p >= 3:
-        galaxia, motivo = "finanzas", f"vocabulario financiero ({fin} términos)"
-    elif tipo == "libro":
-        galaxia, motivo = "libros", f"{'EPUB' if ext == '.epub' else str(paginas) + ' páginas'}"
-    else:
-        galaxia, motivo = "notas", "documento corto o de apuntes"
-    subtema = tnombre if p >= 3 else "General"
-    if subtema != "General":
-        motivo += f"; el tema «{subtema}» sale {p} veces"
     gp = {g: len(r.findall(t)) + 6 * len(r.findall(nombre)) for g, r in _GEN_RE.items()}
-    gp["estadistica"] += p // 2 + fin // 6 * 0                      # lo que casa con el catálogo de conceptos de estadística también cuenta como estadística
+    if p >= 6:
+        gp["economia" if tid == "t_fin" else "estadistica"] += p        # lo que casa con los temas de estadística/finanzas también cuenta como ese género
     gp["economia"] += fin // 2
     genero = max(gp, key=gp.get) if max(gp.values()) >= 4 else "otro"
+    subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
+    if tipo == "libro":                                                  # un libro va a Libros, sea de lo que sea; Finanzas y Notas son para documentos más cortos
+        galaxia, motivo = "libros", f"{'EPUB' if ext == '.epub' else str(paginas) + ' páginas'}"
+    elif fin >= 8 or (tid == "t_fin" and p >= 6):
+        galaxia, motivo = "finanzas", f"vocabulario financiero ({fin} términos)"
+    else:
+        galaxia, motivo = "notas", "documento corto o de apuntes"
+    if subtema != "General":
+        motivo += f"; el tema «{subtema}» puntúa {p}"
     caps, _ = capitulos(f)
     palabras = re.findall(r"[a-z]+", t[:20000])
     es, en = sum(w in _ES for w in palabras), sum(w in _EN for w in palabras)
@@ -198,7 +226,7 @@ def clasificar(ruta: str | Path) -> dict:
     return {"galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "titulo": titulo_corto(f.stem), "titulo_largo": f.stem, "motivo": motivo, "paginas": paginas,
             "tamano": f.stat().st_size, "extension": ext.lstrip("."), "idioma": "es" if es > en else "en" if en else "", "duplicado": dup,
             "vista_previa": re.sub(r"\s+", " ", texto[:1500]).strip()[:380],
-            "temas": [{"tema": nombre_t, "puntos": pt} for (_, nombre_t), pt in sorted(puntos.items(), key=lambda kv: -kv[1])[:4]],
+            "temas": [{"tema": nombre_t, "puntos": pt} for (_, nombre_t), pt in sorted(puntos.items(), key=lambda kv: -kv[1])[:4] if pt >= 3] if genero in GENEROS_CON_TEMA else [],
             "generos": [{"id": g, "nombre": GENEROS[g], "puntos": pt} for g, pt in sorted(gp.items(), key=lambda kv: -kv[1])[:4] if pt],
             "n_capitulos": len(caps), "capitulos": [c["titulo"] for c in caps[:6]]}
 
@@ -256,7 +284,7 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
             tipo = d.get("tipo") if d.get("tipo") in TIPOS else auto["tipo"]
             genero = d.get("genero") if d.get("genero") in GENEROS else auto["genero"]
             titulo = (d.get("titulo") or "").strip() or auto["titulo"]
-            destino = base / galaxia / _slug(subtema)
+            destino = base / galaxia / _slug(GENEROS[genero] if galaxia == "libros" else subtema)      # Libros: una carpeta por género
             destino.mkdir(parents=True, exist_ok=True)
             nombre = _slug(titulo)[:80] or "documento"                          # nombre corto: evita rutas larguísimas (límite de Windows) y es legible
             fin, n = destino / f"{nombre}{f.suffix}", 1
@@ -266,7 +294,7 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
             rel = fin.relative_to(base).as_posix()
             caps, pags = capitulos(fin)
             meta[rel] = {"capitulos": caps, "paginas": pags, "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "etiquetas": (d.get("etiquetas") or "").strip(), "origen": str(f), "hash": h,
-                         "fecha": datetime.now().isoformat(timespec="seconds"), "automatico": not (d.get("titulo") or d.get("galaxia") or d.get("subtema") or d.get("tipo") or d.get("genero"))}
+                         "fecha": datetime.now().isoformat(timespec="seconds"), "automatico": not (d.get("galaxia") or d.get("subtema") or d.get("tipo") or d.get("genero")) and (d.get("titulo") or auto["titulo"]).strip() == auto["titulo"]}
             hashes[h] = rel
             salida.append({**r, "estado": "ok", "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "destino": str(fin), "mensaje": auto["motivo"]})
         except Exception as e:
@@ -299,3 +327,20 @@ def enriquecer(carpeta: Path | None = None) -> int:
     if n:
         (carpeta / "biblioteca" / "metadatos.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
     return n
+
+
+def reclasificar(carpeta: Path | None = None) -> list[tuple]:
+    """Vuelve a clasificar (galaxia aparte: los ficheros no se mueven) el género y el subtema de lo importado con todo en «Automático»; lo que tú fijaste no se toca.
+    Devuelve [(título, subtema antes, subtema ahora, género antes, género ahora)] de lo que cambió."""
+    carpeta = Path(carpeta or carpeta_datos()); meta = leer_metadatos(carpeta); cambios = []
+    for rel, m in meta.items():
+        f = carpeta / "biblioteca" / rel
+        if not f.is_file() or not m.get("automatico", False):
+            continue
+        c = clasificar(f)
+        if (c["subtema"], c["genero"]) != (m.get("subtema"), m.get("genero")):
+            cambios.append((m.get("titulo", rel)[:40], m.get("subtema"), c["subtema"], m.get("genero"), c["genero"]))
+            m["subtema"], m["genero"] = c["subtema"], c["genero"]
+    if cambios:
+        (carpeta / "biblioteca" / "metadatos.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+    return cambios

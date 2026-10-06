@@ -27,7 +27,11 @@ function rgba(c, a) { return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + (a
 function azar(sem) { var a = sem >>> 0; return function () { a = (a + 0x6D2B79F5) >>> 0; var t = a; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 function fib(i, n) { var y = 1 - 2 * (i + .5) / n, r = Math.sqrt(Math.max(0, 1 - y * y)), f = i * 2.399963229728653; return {x: r * Math.cos(f), y: y, z: r * Math.sin(f)}; }
 function acota(v, a, b) { return v < a ? a : v > b ? b : v; }
-function cuenta(n) { return n.kind === 'hoja' ? 1 : n.hijos.reduce(function (a, c) { return a + cuenta(c); }, 0); }
+function cuenta(n) {                        /* nº de elementos; un libro (módulo cuyos hijos son capítulos) cuenta como 1: sus capítulos no se amontonan en el mapa */
+  if (n.kind === 'hoja') return 1;
+  if (n.kind === 'modulo' && n.hijos.length && n.hijos[0].tipo === 'capitulo') return 1;
+  return n.hijos.reduce(function (a, c) { return a + cuenta(c); }, 0);
+}
 
 var sprites = {};
 function sprite(rgb) {                      /* mancha de luz con el centro casi blanco */
@@ -156,7 +160,9 @@ window.crearMapa3D = function (o) {
     });
   }
   function nivel(n) {                      /* 1 = dentro del foco · .38 = hermanos · .1 = el resto */
-    var f = estado().focus; if (f.kind === 'raiz') return 1;
+    var f = estado().focus;
+    if (n.kind === 'hoja' && n.tipo === 'capitulo') return f === n.parent || f === n ? 1 : 0;      /* los capítulos de un libro solo se ven al pulsar el libro */
+    if (f.kind === 'raiz') return 1;
     if (esDesc(n, f) || esDesc(f, n)) return 1;
     if (f.parent && esDesc(n, f.parent)) return .38;
     return .1;
@@ -284,10 +290,10 @@ window.crearMapa3D = function (o) {
           if (proy(m.x, m.y, m.z)) { var mx = PX, my = PY;
             ctx.strokeStyle = rgba(q.rgb, .3 * m.a); ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(mx, my); ctx.stroke();
             ctx.strokeStyle = rgba(q.rgb, .16 * m.a); ctx.beginPath();
-            mn.hijos.forEach(function (h) { var l = h.p3; if (proy(l.x, l.y, l.z)) { ctx.moveTo(mx, my); ctx.lineTo(PX, PY); } }); ctx.stroke(); }
+            mn.hijos.forEach(function (h) { var l = h.p3; if (l.a > .04 && proy(l.x, l.y, l.z)) { ctx.moveTo(mx, my); ctx.lineTo(PX, PY); } }); ctx.stroke(); }
         } else {
           ctx.strokeStyle = rgba(q.rgb, .05 * (.4 + .6 * q.a)); ctx.beginPath();
-          mn.hijos.forEach(function (h) { var l = h.p3; if (proy(l.x, l.y, l.z)) { ctx.moveTo(hx, hy); ctx.lineTo(PX, PY); } }); ctx.stroke();
+          mn.hijos.forEach(function (h) { var l = h.p3; if (l.a > .04 && proy(l.x, l.y, l.z)) { ctx.moveTo(hx, hy); ctx.lineTo(PX, PY); } }); ctx.stroke();
         }
       });
     });

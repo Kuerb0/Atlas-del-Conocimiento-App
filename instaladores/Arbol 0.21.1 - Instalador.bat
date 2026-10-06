@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 0.21.0 - Actualizar
+title Arbol de la estadistica 0.21.1 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=actualizar"
-set "ARBOL_VERSION=0.21.0"
+set "ARBOL_MODO=instalar"
+set "ARBOL_VERSION=0.21.1"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -486,7 +486,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-0.21.0
+0.21.1
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -2688,7 +2688,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "0.21.0"
+version = "0.21.1"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3368,7 +3368,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "0.21.0"
+__version__ = "0.21.1"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -14072,6 +14072,7 @@ from __future__ import annotations
 import hashlib
 import html
 import json
+import math
 import os
 import re
 import shutil
@@ -14102,6 +14103,36 @@ _GEN_PALABRAS = {
 _GEN_RE = {g: re.compile(r"\b(?:" + p + r")\b") for g, p in _GEN_PALABRAS.items()}
 _ES = set("el la de que y en los las un una por con para es se del al lo como mas pero sus le ya o este si porque esta entre cuando muy sin sobre tambien me hasta hay donde quien desde todo nos durante".split())
 _EN = set("the of and to in is that for with as on by it this are was be at from or an which have has not but they their its been were all more can will one also".split())
+_TEMA_PALABRAS = {
+    "t_prob": r"probabilit\w*|probabilidad|random variables?|variables? aleatorias?|distributions?|distribuci\w+|expectation|expected value|esperanza|bayes\w*|markov|poisson|binomial|gaussian|central limit|limit theorem|moment generating",
+    "t_inf": r"estimat\w+|estimad\w+|hypothesis|hipotesis|confidence intervals?|intervalos? de confianza|p-?values?|significan\w+|likelihood|verosimilitud|t-?tests?|chi-?squared?|chi-?cuadrado|nonparametric|sampling distributions?|contrastes?",
+    "t_mod": r"regression|regresion|linear models?|modelos? lineales?|generalized linear|glm|logistic|logit|anova|residuals?|residuos|multicollinearity|colinealidad|least squares|minimos cuadrados|covariates?|predictors?",
+    "t_ml": r"machine learning|aprendizaje automatico|classification|clasificacion|cross-?validation|validacion cruzada|random forests?|boosting|neural networks?|redes neuronales|overfitting|sobreajuste|tuning|resampling|bootstrap|support vector|decision trees?|arboles de decision|predictive|lasso|ridge|regulariz\w+|supervised|unsupervised|clustering",
+    "t_sim": r"simulation|simulacion|monte carlo|mcmc|bayesian|bayesiano|posterior|prior|experimental design|diseno de experimentos|factorial|randomi[sz]ation|aleatorizacion",
+    "t_pob": r"survival analysis|analisis de supervivencia|kaplan|hazard|censoring|censura|demograph\w+|demografi\w+|mortality|mortalidad|life tables?|tablas de vida|cohort|epidemiolog\w+",
+    "t_seg": r"insurance|seguros?|actuarial|claims?|siniestros?|premium|reserves?|reservas|ruin|credibility|credibilidad|risk theory|reinsurance",
+    "t_fin": r"portfolio|cartera|bonds?|bonos|derivatives?|derivados|interest rates?|tipos de interes|volatility|volatilidad|capm|markowitz|black-?scholes|value at risk|solvency|solvencia|basel"}
+_TEMA_RE = {k: re.compile(r"\b(?:" + v + r")\b") for k, v in _TEMA_PALABRAS.items()}
+GENEROS_CON_TEMA = {"estadistica", "economia", "tecnologia"}          # solo a estos se les asigna un tema del catálogo de estadística: a un libro de historia no le corresponde ninguno
+
+
+def _puntos_temas(t: str, nombre: str) -> dict:
+    """{(id, nombre): puntos}. Palabras clave en inglés y español (cada una cuenta 1 + log(veces), así no manda una sola palabra repetida) más las frases del catálogo."""
+    out = {}
+    for tid, tnombre, frases in _temas_con_frases():
+        palabras = _TEMA_RE.get(tid)
+        veces = {}
+        for m in (palabras.findall(t) if palabras else []):
+            veces[m] = veces.get(m, 0) + 1
+        clave = sum(1 + math.log(n) for n in veces.values())
+        cat = sum(1 for fr in frases if len(fr) >= 7 and fr in t) + 3 * sum(1 for fr in frases if len(fr) >= 7 and fr in nombre)
+        titulo = 8 * len(palabras.findall(nombre)) if palabras else 0          # lo que dice el título pesa mucho
+        p = int(round(2 * clave + cat / 2 + titulo))
+        if p:
+            out[(tid, tnombre)] = p
+    return out
+
+
 FINANZAS = re.compile(r"\b(bonos?|carteras?|rentabilidad|volatilidad|derivados?|opcion(?:es)?|futuros?|tipos? de interes|capm|markowitz|renta fija|renta variable|tesoreria|"
                       r"solvencia|var|valoracion|acciones|mercados?|activos?|pasivos?|riesgo de credito|fiscalidad|impuestos?|bancari[oa]s?|swaps?|duracion|rating)\b")
 
@@ -14222,11 +14253,7 @@ def clasificar(ruta: str | Path) -> dict:
     texto, paginas = _muestra(f)
     t = " " + _norm(texto[:40000]) + " "
     nombre = _norm(re.sub(r"[_\-.]+", " ", f.stem))
-    puntos = {}
-    for tid, tnombre, frases in _temas_con_frases():
-        p = sum(t.count(fr) for fr in frases) + 4 * sum(1 for fr in frases if fr in nombre)
-        if p:
-            puntos[(tid, tnombre)] = p
+    puntos = _puntos_temas(t, nombre)
     (tid, tnombre), p = max(puntos.items(), key=lambda kv: kv[1]) if puntos else ((None, "General"), 0)
     fin = len(FINANZAS.findall(t)) + 4 * len(FINANZAS.findall(nombre))
     ext = f.suffix.lower()
@@ -14238,19 +14265,20 @@ def clasificar(ruta: str | Path) -> dict:
         tipo = "apuntes"
     else:
         tipo = "nota"
-    if fin >= 8 or tid == "t_fin" and p >= 3:
-        galaxia, motivo = "finanzas", f"vocabulario financiero ({fin} términos)"
-    elif tipo == "libro":
-        galaxia, motivo = "libros", f"{'EPUB' if ext == '.epub' else str(paginas) + ' páginas'}"
-    else:
-        galaxia, motivo = "notas", "documento corto o de apuntes"
-    subtema = tnombre if p >= 3 else "General"
-    if subtema != "General":
-        motivo += f"; el tema «{subtema}» sale {p} veces"
     gp = {g: len(r.findall(t)) + 6 * len(r.findall(nombre)) for g, r in _GEN_RE.items()}
-    gp["estadistica"] += p // 2 + fin // 6 * 0                      # lo que casa con el catálogo de conceptos de estadística también cuenta como estadística
+    if p >= 6:
+        gp["economia" if tid == "t_fin" else "estadistica"] += p        # lo que casa con los temas de estadística/finanzas también cuenta como ese género
     gp["economia"] += fin // 2
     genero = max(gp, key=gp.get) if max(gp.values()) >= 4 else "otro"
+    subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
+    if tipo == "libro":                                                  # un libro va a Libros, sea de lo que sea; Finanzas y Notas son para documentos más cortos
+        galaxia, motivo = "libros", f"{'EPUB' if ext == '.epub' else str(paginas) + ' páginas'}"
+    elif fin >= 8 or (tid == "t_fin" and p >= 6):
+        galaxia, motivo = "finanzas", f"vocabulario financiero ({fin} términos)"
+    else:
+        galaxia, motivo = "notas", "documento corto o de apuntes"
+    if subtema != "General":
+        motivo += f"; el tema «{subtema}» puntúa {p}"
     caps, _ = capitulos(f)
     palabras = re.findall(r"[a-z]+", t[:20000])
     es, en = sum(w in _ES for w in palabras), sum(w in _EN for w in palabras)
@@ -14259,7 +14287,7 @@ def clasificar(ruta: str | Path) -> dict:
     return {"galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "titulo": titulo_corto(f.stem), "titulo_largo": f.stem, "motivo": motivo, "paginas": paginas,
             "tamano": f.stat().st_size, "extension": ext.lstrip("."), "idioma": "es" if es > en else "en" if en else "", "duplicado": dup,
             "vista_previa": re.sub(r"\s+", " ", texto[:1500]).strip()[:380],
-            "temas": [{"tema": nombre_t, "puntos": pt} for (_, nombre_t), pt in sorted(puntos.items(), key=lambda kv: -kv[1])[:4]],
+            "temas": [{"tema": nombre_t, "puntos": pt} for (_, nombre_t), pt in sorted(puntos.items(), key=lambda kv: -kv[1])[:4] if pt >= 3] if genero in GENEROS_CON_TEMA else [],
             "generos": [{"id": g, "nombre": GENEROS[g], "puntos": pt} for g, pt in sorted(gp.items(), key=lambda kv: -kv[1])[:4] if pt],
             "n_capitulos": len(caps), "capitulos": [c["titulo"] for c in caps[:6]]}
 
@@ -14317,7 +14345,7 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
             tipo = d.get("tipo") if d.get("tipo") in TIPOS else auto["tipo"]
             genero = d.get("genero") if d.get("genero") in GENEROS else auto["genero"]
             titulo = (d.get("titulo") or "").strip() or auto["titulo"]
-            destino = base / galaxia / _slug(subtema)
+            destino = base / galaxia / _slug(GENEROS[genero] if galaxia == "libros" else subtema)      # Libros: una carpeta por género
             destino.mkdir(parents=True, exist_ok=True)
             nombre = _slug(titulo)[:80] or "documento"                          # nombre corto: evita rutas larguísimas (límite de Windows) y es legible
             fin, n = destino / f"{nombre}{f.suffix}", 1
@@ -14327,7 +14355,7 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
             rel = fin.relative_to(base).as_posix()
             caps, pags = capitulos(fin)
             meta[rel] = {"capitulos": caps, "paginas": pags, "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "etiquetas": (d.get("etiquetas") or "").strip(), "origen": str(f), "hash": h,
-                         "fecha": datetime.now().isoformat(timespec="seconds"), "automatico": not (d.get("titulo") or d.get("galaxia") or d.get("subtema") or d.get("tipo") or d.get("genero"))}
+                         "fecha": datetime.now().isoformat(timespec="seconds"), "automatico": not (d.get("galaxia") or d.get("subtema") or d.get("tipo") or d.get("genero")) and (d.get("titulo") or auto["titulo"]).strip() == auto["titulo"]}
             hashes[h] = rel
             salida.append({**r, "estado": "ok", "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "destino": str(fin), "mensaje": auto["motivo"]})
         except Exception as e:
@@ -14360,6 +14388,23 @@ def enriquecer(carpeta: Path | None = None) -> int:
     if n:
         (carpeta / "biblioteca" / "metadatos.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
     return n
+
+
+def reclasificar(carpeta: Path | None = None) -> list[tuple]:
+    """Vuelve a clasificar (galaxia aparte: los ficheros no se mueven) el género y el subtema de lo importado con todo en «Automático»; lo que tú fijaste no se toca.
+    Devuelve [(título, subtema antes, subtema ahora, género antes, género ahora)] de lo que cambió."""
+    carpeta = Path(carpeta or carpeta_datos()); meta = leer_metadatos(carpeta); cambios = []
+    for rel, m in meta.items():
+        f = carpeta / "biblioteca" / rel
+        if not f.is_file() or not m.get("automatico", False):
+            continue
+        c = clasificar(f)
+        if (c["subtema"], c["genero"]) != (m.get("subtema"), m.get("genero")):
+            cambios.append((m.get("titulo", rel)[:40], m.get("subtema"), c["subtema"], m.get("genero"), c["genero"]))
+            m["subtema"], m["genero"] = c["subtema"], c["genero"]
+    if cambios:
+        (carpeta / "biblioteca" / "metadatos.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+    return cambios
 :::END
 :::BEGIN py/cuaderno/__init__.py|text
 """Mini-cuaderno del visor: ejemplos ejecutables por celdas (ejemplos.py) y el ejecutor (ejecutor.py)."""
@@ -31989,11 +32034,40 @@ def test_conceptos_con_video():
     assert any(c["videos"] for c in conceptos) and all(v["url"] for c in conceptos for v in c["videos"])
 
 
-def test_el_visor_tiene_el_desplegable_las_tarjetas_y_el_filtro_de_video():
+def test_el_visor_tiene_el_desplegable_y_las_tarjetas_del_importador():
     import construir_visor as cv
     html = cv.ensamblar(cv.construir())
-    for pieza in ("imp-ayuda", "¿Cómo funciona la importación?", "impTarjeta", "detalleDocumento", 'id="soloVideo"', "actualizar_visor", "esVideo"):
+    for pieza in ("imp-ayuda", "¿Cómo funciona la importación?", "impTarjeta", "detalleDocumento", "actualizar_visor", "esVideo"):
         assert pieza in html
+
+
+def test_solo_se_asignan_temas_de_estadistica_a_lo_que_lo_es(tmp_path):
+    historia = tmp_path / "Rise_of_Empire_a_history.txt"
+    historia.write_text("The history of the empire: the war, the republic, the dynasty. The generals tested every model of validation and cross-validation of their armies' prediction. " * 12, encoding="utf-8")
+    c = imp.clasificar(historia)
+    assert c["genero"] == "historia" and c["subtema"] == "General" and c["temas"] == []          # un libro de historia no recibe un tema de estadística
+    estad = tmp_path / "Regression_Modeling.txt"
+    estad.write_text("Linear regression, logistic regression, residuals, least squares and generalized linear models with covariates and predictors. " * 15, encoding="utf-8")
+    e = imp.clasificar(estad)
+    assert e["genero"] == "estadistica" and e["subtema"] == "Regresión y GLM"
+
+
+def test_importar_desde_la_interfaz_sigue_siendo_automatico_y_los_libros_van_por_genero(tmp_path):
+    f = tmp_path / "libro_de_roma.epub"
+    import zipfile
+    with zipfile.ZipFile(f, "w") as z:
+        z.writestr("OEBPS/c1.xhtml", "<html><body><h1>The Republic</h1><p>" + "The history of the Roman empire and its wars. " * 80 + "</p></body></html>")
+    auto = imp.clasificar(f)
+    r = imp.importar([{"ruta": f, "titulo": auto["titulo"]}], carpeta=tmp_path / "datos", db=tmp_path / "datos" / "i.db")[0]      # la interfaz siempre manda el título
+    assert r["estado"] == "ok" and r["galaxia"] == "libros" and r["genero"] == "historia" and "Historia" in r["destino"]
+    assert imp.leer_metadatos(tmp_path / "datos")[next(iter(imp.leer_metadatos(tmp_path / "datos")))]["automatico"] is True
+
+
+def test_el_visor_no_tiene_los_filtros_de_arriba_y_el_libro_muestra_sus_capitulos_al_pulsarlo():
+    import construir_visor as cv
+    html = cv.ensamblar(cv.construir())
+    assert 'id="chips"' not in html and 'class="filtros"' not in html and 'id="soloSas"' not in html
+    assert "detalleLibro" in html and "esLibro" in html and "n.tipo === 'capitulo'" in html     # capítulos ocultos hasta enfocar el libro (mapa3d.js)
 :::END
 :::BEGIN py/tests/test_instaladores.py|text
 """Los instaladores autoextraibles empaquetan lo correcto y se extraen identicos."""
@@ -34882,7 +34956,11 @@ function rgba(c, a) { return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + (a
 function azar(sem) { var a = sem >>> 0; return function () { a = (a + 0x6D2B79F5) >>> 0; var t = a; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 function fib(i, n) { var y = 1 - 2 * (i + .5) / n, r = Math.sqrt(Math.max(0, 1 - y * y)), f = i * 2.399963229728653; return {x: r * Math.cos(f), y: y, z: r * Math.sin(f)}; }
 function acota(v, a, b) { return v < a ? a : v > b ? b : v; }
-function cuenta(n) { return n.kind === 'hoja' ? 1 : n.hijos.reduce(function (a, c) { return a + cuenta(c); }, 0); }
+function cuenta(n) {                        /* nº de elementos; un libro (módulo cuyos hijos son capítulos) cuenta como 1: sus capítulos no se amontonan en el mapa */
+  if (n.kind === 'hoja') return 1;
+  if (n.kind === 'modulo' && n.hijos.length && n.hijos[0].tipo === 'capitulo') return 1;
+  return n.hijos.reduce(function (a, c) { return a + cuenta(c); }, 0);
+}
 
 var sprites = {};
 function sprite(rgb) {                      /* mancha de luz con el centro casi blanco */
@@ -35011,7 +35089,9 @@ window.crearMapa3D = function (o) {
     });
   }
   function nivel(n) {                      /* 1 = dentro del foco · .38 = hermanos · .1 = el resto */
-    var f = estado().focus; if (f.kind === 'raiz') return 1;
+    var f = estado().focus;
+    if (n.kind === 'hoja' && n.tipo === 'capitulo') return f === n.parent || f === n ? 1 : 0;      /* los capítulos de un libro solo se ven al pulsar el libro */
+    if (f.kind === 'raiz') return 1;
     if (esDesc(n, f) || esDesc(f, n)) return 1;
     if (f.parent && esDesc(n, f.parent)) return .38;
     return .1;
@@ -35139,10 +35219,10 @@ window.crearMapa3D = function (o) {
           if (proy(m.x, m.y, m.z)) { var mx = PX, my = PY;
             ctx.strokeStyle = rgba(q.rgb, .3 * m.a); ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(mx, my); ctx.stroke();
             ctx.strokeStyle = rgba(q.rgb, .16 * m.a); ctx.beginPath();
-            mn.hijos.forEach(function (h) { var l = h.p3; if (proy(l.x, l.y, l.z)) { ctx.moveTo(mx, my); ctx.lineTo(PX, PY); } }); ctx.stroke(); }
+            mn.hijos.forEach(function (h) { var l = h.p3; if (l.a > .04 && proy(l.x, l.y, l.z)) { ctx.moveTo(mx, my); ctx.lineTo(PX, PY); } }); ctx.stroke(); }
         } else {
           ctx.strokeStyle = rgba(q.rgb, .05 * (.4 + .6 * q.a)); ctx.beginPath();
-          mn.hijos.forEach(function (h) { var l = h.p3; if (proy(l.x, l.y, l.z)) { ctx.moveTo(hx, hy); ctx.lineTo(PX, PY); } }); ctx.stroke();
+          mn.hijos.forEach(function (h) { var l = h.p3; if (l.a > .04 && proy(l.x, l.y, l.z)) { ctx.moveTo(hx, hy); ctx.lineTo(PX, PY); } }); ctx.stroke();
         }
       });
     });
@@ -35486,10 +35566,6 @@ code,pre{font-family:var(--mono)}
 .tools{display:flex;align-items:center;gap:4px;margin-left:auto;flex:none}
 .btn.ic{padding:5px 9px;font-size:13px;line-height:1.2}
 .btn[aria-pressed="true"]{background:var(--surface-2);border-color:var(--muted)}
-.filtros{position:relative} .filtros summary{list-style:none} .filtros summary::-webkit-details-marker{display:none}
-.filtros .pop{position:absolute;right:0;top:calc(100% + 4px);z-index:30;width:300px;display:grid;gap:8px;padding:10px 12px;
-  background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.18);font-size:12.5px}
-.filtros .pop p{margin:0;color:var(--muted);font-size:12px}
 .chk{display:flex;align-items:center;gap:6px;color:var(--muted);cursor:pointer;white-space:nowrap}
 .btn{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border:1px solid var(--line);border-radius:7px;background:var(--surface);cursor:pointer;text-decoration:none;color:var(--ink);white-space:nowrap}
 .btn:hover{background:var(--surface-2)}
@@ -35712,6 +35788,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 }
 @media (prefers-reduced-motion:reduce){ .toast{transition:none} }
 
+.caps{margin:0;padding:0;list-style:none;display:grid;gap:4px} .caps .btn{width:100%;text-align:left;white-space:normal;line-height:1.35}
 .enlaces a.btn{display:block;max-width:100%;white-space:normal;text-align:left;line-height:1.35;overflow-wrap:anywhere}
 /* pestañas (Universo / Importar) */
 .pestanas{display:flex;gap:2px;flex:none;padding:2px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}
@@ -35774,17 +35851,9 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
       <input id="q" type="search" placeholder="Buscar…  ( / )" autocomplete="off" spellcheck="false" aria-label="Buscar">
       <ul id="resultados" class="resultados" role="listbox" hidden></ul>
     </div>
-    <nav class="ramas" id="chips" aria-label="Ramas"></nav>
     <div class="tools">
       <button class="btn" id="aprenderBtn" type="button" title="Guía de aprendizaje paso a paso" aria-pressed="false">🎓 Aprender</button>
-            <details class="filtros"><summary class="btn ic" title="Filtros">Filtros</summary>
-        <div class="pop">
-          <label class="chk"><input type="checkbox" id="soloSas"> Solo con equivalente SAS</label>
-          <label class="chk" title="Conceptos de método (estadística, actuarial, finanzas) que todavía no tienen una función en el árbol. Los normativos no cuentan: no se programan"><input type="checkbox" id="soloHuecos"> Solo huecos (sin código)</label>
-          <label class="chk" title="Conceptos con algún vídeo (Very Normal, Harvard, MIT, 3Blue1Brown…): llevan un ▶ en el mapa"><input type="checkbox" id="soloVideo"> Solo conceptos con vídeo</label>
-          <label class="chk" title="Conceptos marcados como prioritarios en el catálogo"><input type="checkbox" id="soloAlta"> Solo prioridad alta</label>
-          <p id="resumen"></p><p id="pista"></p>
-        </div></details>
+
       <select class="perfil-sel" id="perfil" title="Perfil de proyecto: cuánto pesa cada propiedad al puntuar y ordenar las funciones" aria-label="Perfil de proyecto"></select>
       <button class="btn ic" id="tema" type="button" title="Cambiar tema (auto / claro / oscuro)">◐</button>
       <button class="btn ic" id="panelBtn" type="button" title="Plegar / desplegar el panel de la derecha (P)" aria-pressed="false">▤</button>
@@ -35918,6 +35987,7 @@ function clicNodo(n, ev) {
   if (ctrl && n.kind === 'rama') { var mp = moduloPrincipal(n); if (mp !== focus) ir(mp); return; }   /* Ctrl+clic: directo al módulo principal */
   if (n === focus) { ir(focus.parent || galAct.raiz); return; }
   ir(n);
+  if (esLibro(n)) { detalleLibro(n); return; }                  /* un libro: sus capítulos aparecen al pulsarlo */
   if ((n.kind === 'modulo' || n.kind === 'rama') && typeof detalleGrupoFunciones === 'function') detalleGrupoFunciones(n);
 }
 /* Un mapa 3D por galaxia, creado al entrar por primera vez; `mapa` es el de la galaxia en la que estamos. */
@@ -35985,7 +36055,7 @@ var coleccionK = '', resArbol = {}, resK = {};
   var nVideo = hojas.filter(function (h) { return h.video; }).length;
   GAL.codigo.base = (n.codigo || 0) + ' funciones'; GAL.conceptos.base = (n.conceptos || 0) + ' conceptos · ' + nVideo + ' con vídeo';
   GAL.demos.base = (n.demos || 0) + ' demos y guías'; GAL.finanzas.base = (n.finanzas || 0) + ' funciones y conceptos';
-  if (caps.libros) GAL.libros.base = GAL.libros.raiz.hijos.reduce(function (s, r) { return s + r.hijos.length; }, 0) + ' libros · ' + caps.libros + ' capítulos';
+  if (caps.libros) GAL.libros.base = GAL.libros.raiz.hijos.reduce(function (s, r) { return s + r.hijos.length; }, 0) + ' libros';
   if (docs.notas) GAL.notas.base = docs.notas + ' notas';
   ['codigo', 'conceptos', 'demos', 'finanzas'].forEach(function (c) { if (docs[c]) GAL[c].base += ' · +' + docs[c] + ' docs'; });
   GALAXIAS.forEach(function (g) { g.sub = g.base || 'vacía: importa algo'; });
@@ -36070,18 +36140,10 @@ function migas() {
     if (n === focus) { var a = document.createElement('span'); a.className = 'act'; a.textContent = n.nombre; m.appendChild(a); }
     else { var b = document.createElement('button'); b.type = 'button'; b.textContent = n.nombre; b.onclick = function () { ir(n); }; m.appendChild(b); }
   });
-  Array.prototype.forEach.call($('#chips').children, function (c) { c.setAttribute('aria-pressed', String(esDesc(focus, porId[c.dataset.id]) )); });
 }
 var nCon = hojas.filter(function (h) { return h.tipo === 'concepto'; }), nHuecos = nCon.filter(esHueco).length;
-$('#resumen').textContent = hojas.filter(function (h) { return h.tipo === 'funcion'; }).length + ' funciones · ' + nCon.length + ' conceptos (' + nHuecos + ' huecos) · ' + hojas.filter(function (h) { return h.tipo === 'demo'; }).length + ' demos · ' + DATA.pruebas + ' pruebas · generado ' + DATA.generado;
-root.hijos.forEach(function (rn) {
-  if (rn.biblioteca) return;
-  var b = document.createElement('button'); b.type = 'button'; b.className = 'chip b-' + rn.rama; b.dataset.id = rn.id;
-  b.innerHTML = '<i style="background:var(--c)"></i>' + esc(rn.nombre) + ' <b>' + cuenta(rn) + '</b>';
-  b.onclick = function () { var dst = focus === rn ? rn.parent : rn; ir(dst); if (dst === rn) detalleGrupoFunciones(rn); }; $('#chips').appendChild(b);
-});
-$('#pista').textContent = 'El núcleo es el árbol; los nodos con anillo son las ramas y orbitan a su alrededor. Arrastra para girar, rueda para acercar, clic en una rama para entrar y ver sus módulos (Ctrl+clic: salta directo a su módulo principal); clic en el vacío o en las migas para volver. Los arcos unen conceptos con las funciones que los implementan. Puntos sólidos = funciones o conceptos con código; punteados = conceptos aún sin código. Arrastra la barra de la derecha para agrandar el mapa (doble clic la oculta). «Cómo funciona» tiene demos interactivas.';
-$('#titulo').title = 'Árbol de la estadística · ' + $('#resumen').textContent;
+var RESUMEN = hojas.filter(function (h) { return h.tipo === 'funcion'; }).length + ' funciones · ' + nCon.length + ' conceptos (' + nHuecos + ' huecos) · ' + hojas.filter(function (h) { return h.tipo === 'demo'; }).length + ' demos · ' + DATA.pruebas + ' pruebas · generado ' + DATA.generado;
+$('#titulo').title = 'Árbol de la estadística · ' + RESUMEN;
 $('#panelBtn').addEventListener('click', function () { window.alternarDetalle(); });
 function pantallaCompleta() {
   var d = document, el = d.documentElement;
@@ -36114,7 +36176,7 @@ function puntuar(n, tokens) {
 }
 var resultados = [], idxRes = -1;
 function buscar() {
-  query = $('#q').value.trim(); soloSas = $('#soloSas').checked; soloHuecos = $('#soloHuecos').checked; soloAlta = $('#soloAlta').checked; soloVideo = $('#soloVideo').checked;
+  query = $('#q').value.trim();
   var tokens = norm(query).split(/\s+/).filter(Boolean);
   coincide = {}; conCoincidencia = {}; resultados = [];
   hojas.forEach(function (h) {
@@ -36187,8 +36249,7 @@ $('#q').addEventListener('keydown', function (ev) {
   else if (ev.key === 'Enter') { var r = resultados[idxRes >= 0 ? idxRes : 0]; if (r) { ev.preventDefault(); elegir(r.n); } }
   else if (ev.key === 'Escape') { this.value = ''; buscar(); this.blur(); }
 });
-$('#soloSas').addEventListener('change', buscar); $('#soloAlta').addEventListener('change', buscar); $('#soloVideo').addEventListener('change', buscar);
-$('#soloHuecos').addEventListener('change', buscar);
+
 document.addEventListener('keydown', function (ev) {
   var t = ev.target && ev.target.tagName;
   if (ev.key === '/' && t !== 'INPUT') { ev.preventDefault(); $('#q').focus(); $('#q').select(); }
@@ -36408,6 +36469,26 @@ function detalleDocumento(n, d) {         /* un capítulo de un libro o un docum
 }
 var GENEROS_NOM = {historia: 'Historia', economia: 'Economía y finanzas', ensayo: 'Ensayo y filosofía', estadistica: 'Estadística y matemáticas', ciencia: 'Ciencia y divulgación', novela: 'Novela y ficción',
                    biografia: 'Biografía y memorias', politica: 'Política y sociedad', tecnologia: 'Tecnología e informática', psicologia: 'Psicología y salud', arte: 'Arte, música y cultura', otro: 'Otros'};
+function esLibro(m) { return m.kind === 'modulo' && m.hijos.length > 0 && m.hijos[0].tipo === 'capitulo'; }
+function detalleLibro(m) {                  /* el panel de un libro: ficha y lista de capítulos (en el mapa solo se ven al pulsar el libro) */
+  var d = $('#detalle'), c0 = m.hijos[0], r = m.parent, gen = c0.genero && GENEROS_NOM[c0.genero] ? GENEROS_NOM[c0.genero] : '';
+  if (window.mostrarDetalle) window.mostrarDetalle();
+  vistaModulo = null; sel = null;
+  var h = '<div class="det-cab b-' + r.rama + '"><i></i><span>' + esc(r.nombre) + ' › libro</span></div><h2 class="sans">' + esc(m.nombre) + '</h2><p class="desc">' + esc(m.desc) + '</p><dl class="meta">' +
+    (gen ? '<dt>Género</dt><dd>' + esc(gen) + '</dd>' : '') + (c0.subtema ? '<dt>Subtema</dt><dd>' + esc(c0.subtema) + '</dd>' : '') + (c0.paginas ? '<dt>Páginas</dt><dd>' + c0.paginas + '</dd>' : '') +
+    (c0.etiquetas ? '<dt>Etiquetas</dt><dd>' + esc(c0.etiquetas) + '</dd>' : '') + (c0.fecha ? '<dt>Importado</dt><dd>' + esc(c0.fecha) + '</dd>' : '') +
+    (c0.titulo_largo && c0.titulo_largo !== m.nombre ? '<dt>Nombre completo</dt><dd>' + esc(c0.titulo_largo) + '</dd>' : '') + '</dl>' +
+    '<div class="acciones"><button class="btn primario" data-a="abrir" type="button">Abrir el libro</button><button class="btn" data-a="buscar" type="button" title="Busca en el texto de todo lo importado">Buscar en el libro</button></div>' +
+    '<h3>Capítulos (' + m.hijos.length + ')</h3><ol class="caps">' + m.hijos.map(function (c) {
+      return '<li><button class="btn" type="button" data-ir="' + esc(c.rid) + '">' + esc(c.nombre) + (c.pagina ? ' <small>· p. ' + c.pagina + '</small>' : '') + '</button></li>'; }).join('') + '</ol>';
+  d.innerHTML = h; d.scrollTop = 0; pintar();
+  d.onclick = function (ev) {
+    var go = ev.target.closest('button[data-ir]'); if (go && porNombre[go.dataset.ir]) { seleccionar(porNombre[go.dataset.ir], true); return; }
+    var b = ev.target.closest('button[data-a]'); if (!b) return;
+    if (b.dataset.a === 'abrir') { var a = window.pywebview && window.pywebview.api; if (a && a.abrir_fuente) a.abrir_fuente(c0.ruta, ''); else aviso('Abrir los ficheros funciona en la app'); }
+    else { $('#q').value = m.nombre; buscar(); $('#q').focus(); }
+  };
+}
 function detalleDemo(n, d) {
   var h = '<div class="det-cab b-' + n.rama + '"><i></i><span>' + esc(n.ramaNombre) + ' › ' + esc(n.modulo) + '</span></div>' +
     '<h2 class="sans">' + esc(n.nombre) + '</h2><p class="desc">' + esc(n.desc) + '</p><div class="dm"></div>' +
@@ -37898,7 +37979,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 5g. **Universo (primera capa del visor):** el visor se abre en un universo 3D (`py/visor/cerebro.js`; el fichero y las variables se siguen llamando «cerebro» por historia) con paisaje (estrellas con paralaje, nebulosas, galaxias lejanas, hilos entre galaxias) y una galaxia en espiral por parte: **Código** (las ramas de funciones), **Conceptos** (los temas `t_*` salvo finanzas), **Demos y guías**, **Finanzas** (rama `finanzas` + `t_fin`) —cada una con su propio mapa 3D, que es también una galaxia: núcleo, polvo y dos brazos espirales (`ESPIRAL`/`GIRO` en `mapa3d.js`), con su color (`color` en `crearMapa3D`)— y **Libros** y **Notas** (solo ámbitos de búsqueda del gestor). El reparto está en `GALAXIAS` de `plantilla.html`; la galaxia pequeña del universo es una miniatura exacta de la de dentro. El buscador ilumina las galaxias con coincidencias y, al elegir un resultado, vuela a su galaxia. **Vuelo:** un único movimiento continuo hasta el destino (galaxia o nodo), sin parada en la vista general: la cámara no cambia de orientación, el mapa de dentro se dibuja ya por debajo con la cámara del universo (`mapa.sync()`, `camaraDe()`, `geometria()`) y toma el relevo con un fundido; al volver (🌌) es lo mismo al revés, desde el nodo en el que estés. Icono (una galaxia): `python herramientas/generar_icono.py`. `indexar_conocimiento.bat` crea `conocimiento/fuentes.json` (tus carpetas) e indexa.
 5f. **Gestor de conocimiento:** `py/conocimiento/` es un buscador único (SQLite FTS5, BM25, sinónimos del catálogo) sobre código, conceptos, teoría y tus libros/finanzas/notas (`conocimiento/fuentes.json`, no se publica). `cd py && python -m conocimiento indexar | buscar "consulta" [-c colección] | estado`. Antes de buscar a mano en `Manuales Estadística` o en `teoria/`, usa `buscar`.
 5h. **Modo vivo (para ver los cambios mientras se trabaja):** el acceso directo con `--vivo` (`powershell -ExecutionPolicy Bypass -File herramientascceso_vivo.ps1 on|off` lo apunta a esta carpeta o lo restaura) recarga la app solo cuando se regenera `visor_arbol.html` y la coloca donde indique `.foco`. Para enseñar un cambio: `python herramientas/ver.py [destino]` regenera el visor y escribe el foco (`cerebro`, `galaxia:codigo|conceptos|demos|finanzas` o el nombre de una función/concepto/demo; el visor también lo admite como `#destino`).
-5i. **Pestañas e importador:** el visor tiene pestañas **🌌 Universo** (el mapa) y **⚫ Importar** (además de 🎓 Aprender). «Importar» es un agujero negro (`py/visor/agujero.js`): clic o soltar archivos abre el explorador de Windows (`Api.elegir_archivos`); `py/conocimiento/importar.py` analiza cada fichero (`clasificar`: galaxia finanzas/libros/notas, **género** —historia, economía, ensayo, estadística, ciencia, novela…—, subtema = tema del catálogo con más coincidencias, tipo, capítulos, vista previa, idioma, duplicado) y el panel muestra una tarjeta desplegable por archivo (barras con lo detectado: pulsar una fija el género o el subtema; desplegables de galaxia/género/tipo, título editable —los nombres largos se recortan con `titulo_corto`—, etiquetas, «Para todos»). Se importa archivo a archivo con progreso: `importar()` copia a `conocimiento/biblioteca/<galaxia>/<subtema>/` con nombre corto, guarda `biblioteca/metadatos.json` (hash: no duplica) y lo indexa; después `Api.actualizar_visor` regenera `visor_arbol.html` y el visor se recarga. `enriquecer()` completa capítulos/género/títulos de lo importado con versiones anteriores. Al final de la pestaña hay un desplegable «¿Cómo funciona la importación?». **Mapas con tu biblioteca** (`ramas_biblioteca` en `construir_visor.py`): Libros = una rama por género › un módulo por libro › un punto por capítulo (PDF: marcadores o tramos de 25 págs.; EPUB: su índice) con «Abrir en la página N»; Notas = una rama por subtema con un punto por documento; las demás galaxias reciben una rama «Documentos importados». Una galaxia sin nada no tiene mapa ni líneas (solo búsqueda). **Conceptos con vídeo:** los conceptos con fuentes de vídeo (Very Normal, Harvard, MIT, 3Blue1Brown…; `es_video`) llevan un ▶ en el mapa, un filtro «Solo conceptos con vídeo» y la lista de vídeos arriba del panel. Los `*.pdf` y `*.epub` están en `.gitignore`. Por consola: `cd py && python -m conocimiento importar f.pdf [-g libros] [-G historia] [-s "Inferencia y contrastes"] [-t libro]`.
+5i. **Pestañas e importador:** el visor tiene pestañas **🌌 Universo** (el mapa) y **⚫ Importar** (además de 🎓 Aprender). «Importar» es un agujero negro (`py/visor/agujero.js`): clic o soltar archivos abre el explorador de Windows (`Api.elegir_archivos`); `py/conocimiento/importar.py` analiza cada fichero (`clasificar`: galaxia finanzas/libros/notas, **género** —historia, economía, ensayo, estadística, ciencia, novela…—, subtema = tema del catálogo (palabras clave en inglés y español, peso del título) y solo para estadística/economía/tecnología —un libro de historia queda en «General»—, tipo, capítulos, vista previa, idioma, duplicado) y el panel muestra una tarjeta desplegable por archivo (barras con lo detectado: pulsar una fija el género o el subtema; desplegables de galaxia/género/tipo, título editable —los nombres largos se recortan con `titulo_corto`—, etiquetas, «Para todos»). Se importa archivo a archivo con progreso: `importar()` copia a `conocimiento/biblioteca/<galaxia>/<subtema>/` con nombre corto, guarda `biblioteca/metadatos.json` (hash: no duplica) y lo indexa; después `Api.actualizar_visor` regenera `visor_arbol.html` y el visor se recarga. `enriquecer()` completa capítulos/género/títulos de lo importado con versiones anteriores. Al final de la pestaña hay un desplegable «¿Cómo funciona la importación?». **Mapas con tu biblioteca** (`ramas_biblioteca` en `construir_visor.py`): Libros = una rama por género › un módulo por libro › un punto por capítulo (PDF: marcadores o tramos de 25 págs.; EPUB: su índice) con «Abrir en la página N»; los capítulos NO se dibujan hasta que pulsas el libro (`nivel()` en `mapa3d.js`; el panel del libro, `detalleLibro`, los lista siempre); el recuento de una rama son sus libros; Notas = una rama por subtema con un punto por documento; las demás galaxias reciben una rama «Documentos importados». Una galaxia sin nada no tiene mapa ni líneas (solo búsqueda). **Conceptos con vídeo:** los conceptos con fuentes de vídeo (Very Normal, Harvard, MIT, 3Blue1Brown…; `es_video`) llevan un ▶ en el mapa y la lista de vídeos arriba del panel (la cabecera ya no tiene filtros ni chips de ramas: solo buscador y perfil). Los `*.pdf` y `*.epub` están en `.gitignore`. Por consola: `cd py && python -m conocimiento importar f.pdf [-g libros] [-G historia] [-s "Inferencia y contrastes"] [-t libro]`.
 6. **Conceptos:** `conceptos/catalogo.json` lista los conceptos del temario del máster y de Very Normal con las funciones que los implementan. Organización: `temas` (ramas del mapa, con color) > `areas` (módulos, con `ambito`) > conceptos (`area`, `prioridad` opcional, `area_fija` para que la actualización no lo mueva). La migración de 0.6.0 está en `herramientas/reorganizar_catalogo.py`.
    Si un concepto no tiene función (*hueco*), es que el árbol aún no lo cubre: impleméntalo (módulo + test), enlázalo en el catálogo (`funciones`) y regenera el visor.
    Al añadir una función nueva, enlázala al menos a un concepto (hay un test que lo exige).
