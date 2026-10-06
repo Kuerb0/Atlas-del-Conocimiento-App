@@ -12,5 +12,6 @@ start "" "%~dp0visor_arbol.html"
 exit /b 0
 
 :lanzar
-start "" /min "%EXE%" "%APP%"
+rem Igual que el acceso directo del Escritorio: pythonw abre su ventana normal; solo un python.exe con consola se minimiza.
+echo %EXE%| find /i "pythonw" >nul && (start "" "%EXE%" "%APP%") || (start "" /min "%EXE%" "%APP%")
 exit /b 0

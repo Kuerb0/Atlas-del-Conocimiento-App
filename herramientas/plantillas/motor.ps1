@@ -346,6 +346,14 @@ function Crear-Accesos($dest) {
     } catch { Aviso "No se pudieron crear los accesos directos: $($_.Exception.Message)" }
 }
 
+function Abrir-App($dest) {
+    # Abre la app EXACTAMENTE como el acceso directo del Escritorio (mismo programa, mismos argumentos, misma carpeta, misma ventana): se lanza el propio acceso.
+    # Así lo que se abre al terminar el instalador/actualizador y lo que se abre con el icono es siempre lo mismo.
+    $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) ($Nombre + '.lnk')
+    if (Test-Path -LiteralPath $lnk) { Start-Process -FilePath $lnk -WorkingDirectory $dest }
+    else { Start-Process -FilePath (Ruta $dest 'abrir_arbol.bat') -WindowStyle Hidden -WorkingDirectory $dest }
+}
+
 # ---------------------------------------------------------------- flujo común tras copiar los ficheros
 function Preparar-Python-Y-Visor($dest) {
     Paso '[Python] Buscando Python 3.10 o superior...'
@@ -415,7 +423,7 @@ if ($Modo -eq 'instalar') {
     Titulo 'Instalación terminada'
     Write-Host "  Carpeta: $dest"
     Write-Host '  En tus notebooks:  from arbol_estadistica.modelos import tabla_odds_ratios'
-    if ($ok -and $EnWindows -and $env:ARBOL_SIN_ACCESOS -ne '1') { Start-Process -FilePath (Ruta $dest 'abrir_arbol.bat') -WindowStyle Hidden -WorkingDirectory $dest }
+    if ($ok -and $EnWindows -and $env:ARBOL_SIN_ACCESOS -ne '1') { Abrir-App $dest }
     exit 0
 }
 
@@ -463,7 +471,7 @@ if ($Modo -eq 'actualizar') {
     if ($env:ARBOL_SIN_ACCESOS -ne '1') { Crear-Accesos $dest; Registrar $dest }
     Titulo 'Actualización terminada'
     Write-Host "  Si algo fuera mal, la versión anterior está en: $guardado"
-    if ($ok -and $EnWindows -and $env:ARBOL_SIN_ACCESOS -ne '1') { Start-Process -FilePath (Ruta $dest 'abrir_arbol.bat') -WindowStyle Hidden -WorkingDirectory $dest }
+    if ($ok -and $EnWindows -and $env:ARBOL_SIN_ACCESOS -ne '1') { Abrir-App $dest }
     exit 0
 }
 

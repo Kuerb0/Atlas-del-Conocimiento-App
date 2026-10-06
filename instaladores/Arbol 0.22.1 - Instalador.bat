@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 0.22.0 - Instalador
+title Arbol de la estadistica 0.22.1 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
 set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=0.22.0"
+set "ARBOL_VERSION=0.22.1"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -361,6 +361,14 @@ function Crear-Accesos($dest) {
     } catch { Aviso "No se pudieron crear los accesos directos: $($_.Exception.Message)" }
 }
 
+function Abrir-App($dest) {
+    # Abre la app EXACTAMENTE como el acceso directo del Escritorio (mismo programa, mismos argumentos, misma carpeta, misma ventana): se lanza el propio acceso.
+    # Así lo que se abre al terminar el instalador/actualizador y lo que se abre con el icono es siempre lo mismo.
+    $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) ($Nombre + '.lnk')
+    if (Test-Path -LiteralPath $lnk) { Start-Process -FilePath $lnk -WorkingDirectory $dest }
+    else { Start-Process -FilePath (Ruta $dest 'abrir_arbol.bat') -WindowStyle Hidden -WorkingDirectory $dest }
+}
+
 # ---------------------------------------------------------------- flujo común tras copiar los ficheros
 function Preparar-Python-Y-Visor($dest) {
     Paso '[Python] Buscando Python 3.10 o superior...'
@@ -430,7 +438,7 @@ if ($Modo -eq 'instalar') {
     Titulo 'Instalación terminada'
     Write-Host "  Carpeta: $dest"
     Write-Host '  En tus notebooks:  from arbol_estadistica.modelos import tabla_odds_ratios'
-    if ($ok -and $EnWindows -and $env:ARBOL_SIN_ACCESOS -ne '1') { Start-Process -FilePath (Ruta $dest 'abrir_arbol.bat') -WindowStyle Hidden -WorkingDirectory $dest }
+    if ($ok -and $EnWindows -and $env:ARBOL_SIN_ACCESOS -ne '1') { Abrir-App $dest }
     exit 0
 }
 
@@ -478,7 +486,7 @@ if ($Modo -eq 'actualizar') {
     if ($env:ARBOL_SIN_ACCESOS -ne '1') { Crear-Accesos $dest; Registrar $dest }
     Titulo 'Actualización terminada'
     Write-Host "  Si algo fuera mal, la versión anterior está en: $guardado"
-    if ($ok -and $EnWindows -and $env:ARBOL_SIN_ACCESOS -ne '1') { Start-Process -FilePath (Ruta $dest 'abrir_arbol.bat') -WindowStyle Hidden -WorkingDirectory $dest }
+    if ($ok -and $EnWindows -and $env:ARBOL_SIN_ACCESOS -ne '1') { Abrir-App $dest }
     exit 0
 }
 
@@ -486,7 +494,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-0.22.0
+0.22.1
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -2698,7 +2706,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "0.22.0"
+version = "0.22.1"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3378,7 +3386,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "0.22.0"
+__version__ = "0.22.1"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -32380,6 +32388,15 @@ def test_un_solo_acceso_directo_y_lanzador_comprobado():
     assert "Elegir-Lanzador" in motor and "sys.base_prefix" in motor    # pythonw solo si existe de verdad
     bat = (RAIZ / "abrir_arbol.bat").read_text(encoding="utf-8", errors="replace").lower()
     assert "where pythonw" not in bat and "where pyw" not in bat       # no adivinar con el PATH (podía coger uno roto)
+
+
+def test_el_actualizador_abre_lo_mismo_que_el_acceso_directo():
+    motor = (RAIZ / "herramientas" / "plantillas" / "motor.ps1").read_text(encoding="utf-8")
+    assert "function Abrir-App" in motor and motor.count("Abrir-App $dest") == 2                    # instalador y actualizador abren la app con el propio acceso directo
+    assert "Start-Process -FilePath $lnk" in motor
+    assert motor.count("Start-Process -FilePath (Ruta $dest 'abrir_arbol.bat')") == 1               # abrir_arbol.bat solo como último recurso (sin acceso directo)
+    bat = (RAIZ / "abrir_arbol.bat").read_text(encoding="utf-8", errors="replace")
+    assert 'find /i "pythonw"' in bat                                                                # pythonw no se lanza minimizado: igual que el acceso directo
 :::END
 :::BEGIN py/tests/test_ml.py|text
 """Rama ML (0.9): salida común, los modelos flexibles captan lo no lineal y la explicabilidad funciona."""
@@ -38197,6 +38214,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
    Cuando Mario pregunte «¿qué uso para X?», mira el grupo de alternativas y ordénalas con el perfil que encaje con su proyecto.
 5g. **Universo (primera capa del visor):** el visor se abre en un universo 3D (`py/visor/cerebro.js`; el fichero y las variables se siguen llamando «cerebro» por historia) con paisaje (estrellas con paralaje, nebulosas, galaxias lejanas, hilos entre galaxias) y una galaxia en espiral por parte: **Código** (las ramas de funciones), **Conceptos** (los temas `t_*` salvo finanzas), **Demos y guías**, **Finanzas** (rama `finanzas` + `t_fin`) —cada una con su propio mapa 3D, que es también una galaxia: núcleo, polvo y dos brazos espirales (`ESPIRAL`/`GIRO` en `mapa3d.js`), con su color (`color` en `crearMapa3D`)— y **Libros** y **Notas** (solo ámbitos de búsqueda del gestor). El reparto está en `GALAXIAS` de `plantilla.html`; la galaxia pequeña del universo es una miniatura exacta de la de dentro. El buscador ilumina las galaxias con coincidencias y, al elegir un resultado, vuela a su galaxia. **Vuelo:** un único movimiento continuo hasta el destino (galaxia o nodo), sin parada en la vista general: la cámara no cambia de orientación, el mapa de dentro se dibuja ya por debajo con la cámara del universo (`mapa.sync()`, `camaraDe()`, `geometria()`) y toma el relevo con un fundido; al volver (🌌) es lo mismo al revés, desde el nodo en el que estés. Icono (una galaxia): `python herramientas/generar_icono.py`. `indexar_conocimiento.bat` crea `conocimiento/fuentes.json` (tus carpetas) e indexa.
 5f. **Gestor de conocimiento:** `py/conocimiento/` es un buscador único (SQLite FTS5, BM25, sinónimos del catálogo) sobre código, conceptos, teoría y tus libros/finanzas/notas (`conocimiento/fuentes.json`, no se publica). `cd py && python -m conocimiento indexar | buscar "consulta" [-c colección] | estado`. Antes de buscar a mano en `Manuales Estadística` o en `teoria/`, usa `buscar`.
+5hh. **Un solo arranque:** el instalador/actualizador abre la app lanzando el propio acceso directo del Escritorio (`Abrir-App` en `herramientas/plantillas/motor.ps1`), y `abrir_arbol.bat` no minimiza pythonw: lo que se abre al terminar y lo que se abre con el icono es lo mismo.
 5h. **Modo vivo (para ver los cambios mientras se trabaja):** el acceso directo con `--vivo` (`powershell -ExecutionPolicy Bypass -File herramientascceso_vivo.ps1 on|off` lo apunta a esta carpeta o lo restaura) recarga la app solo cuando se regenera `visor_arbol.html` y la coloca donde indique `.foco`. Para enseñar un cambio: `python herramientas/ver.py [destino]` regenera el visor y escribe el foco (`cerebro`, `galaxia:codigo|conceptos|demos|finanzas` o el nombre de una función/concepto/demo; el visor también lo admite como `#destino`).
 5i. **Pestañas e importador:** el visor tiene pestañas **🌌 Universo** (el mapa) y **⚫ Importar** (además de 🎓 Aprender). «Importar» es un agujero negro (`py/visor/agujero.js`): clic o soltar archivos abre el explorador de Windows (`Api.elegir_archivos`); `py/conocimiento/importar.py` analiza cada fichero (`clasificar`: galaxia finanzas/libros/notas, **género** —historia, economía, ensayo, estadística, ciencia, novela…—, subtema = tema del catálogo (palabras clave en inglés y español, peso del título) y solo para estadística/economía/tecnología —un libro de historia queda en «General»—, tipo, capítulos, vista previa, idioma, duplicado) y el panel muestra una tarjeta desplegable por archivo (barras con lo detectado: pulsar una fija el género o el subtema; desplegables de galaxia/género/tipo, título editable —los nombres largos se recortan con `titulo_corto`—, etiquetas, «Para todos»). Se importa archivo a archivo con progreso: `importar()` copia a `conocimiento/biblioteca/<galaxia>/<subtema>/` con nombre corto, guarda `biblioteca/metadatos.json` (hash: no duplica) y lo indexa; después `Api.actualizar_visor` regenera `visor_arbol.html` y el visor se recarga. `enriquecer()` completa capítulos/género/títulos de lo importado con versiones anteriores. Al final de la pestaña hay un desplegable «¿Cómo funciona la importación?». **Mapas con tu biblioteca** (`ramas_biblioteca` en `construir_visor.py`): Libros = una rama por género › un módulo por libro › un punto por capítulo (PDF: marcadores o tramos de 25 págs.; EPUB: su índice) con «Abrir en la página N»; los capítulos NO se dibujan hasta que pulsas el libro (`nivel()` en `mapa3d.js`; el panel del libro, `detalleLibro`, los lista siempre); el recuento de una rama son sus libros; Notas = una rama por subtema con un punto por documento; las demás galaxias reciben una rama «Documentos importados». Una galaxia sin nada no tiene mapa ni líneas (solo búsqueda). **Conceptos con vídeo:** los conceptos con fuentes de vídeo (Very Normal, Harvard, MIT, 3Blue1Brown…; `es_video`) llevan un ▶ en el mapa y la lista de vídeos arriba del panel (la cabecera ya no tiene filtros ni chips de ramas: solo buscador y perfil). **Buscador:** la barra ocupa todo el espacio libre de la cabecera y cada resultado lleva un icono (`iconoNodo`/`iconoRes` en la plantilla): portada del libro (la del EPUB, la primera página del PDF con Poppler si está, o una generada por género; `importar.portada`, `DATA.portadas`), logo de Python (funciones y ejemplos), ∑ (conceptos; con ▶ si tienen vídeo), f(x) (demos), documento (guías) y la etiqueta del formato (PDF, DOCX, MD…). Al buscar, el universo reacciona: la galaxia con más coincidencias late y la cámara se acerca un poco (`cerebro.enfocar`), el resto se atenúa; los capítulos de un mismo libro se agrupan en un resultado. Los `*.pdf` y `*.epub` están en `.gitignore`. Por consola: `cd py && python -m conocimiento importar f.pdf [-g libros] [-G historia] [-s "Inferencia y contrastes"] [-t libro]`.
 6. **Conceptos:** `conceptos/catalogo.json` lista los conceptos del temario del máster y de Very Normal con las funciones que los implementan. Organización: `temas` (ramas del mapa, con color) > `areas` (módulos, con `ambito`) > conceptos (`area`, `prioridad` opcional, `area_fija` para que la actualización no lo mueva). La migración de 0.6.0 está en `herramientas/reorganizar_catalogo.py`.
@@ -38318,7 +38336,8 @@ start "" "%~dp0visor_arbol.html"
 exit /b 0
 
 :lanzar
-start "" /min "%EXE%" "%APP%"
+rem Igual que el acceso directo del Escritorio: pythonw abre su ventana normal; solo un python.exe con consola se minimiza.
+echo %EXE%| find /i "pythonw" >nul && (start "" "%EXE%" "%APP%") || (start "" /min "%EXE%" "%APP%")
 exit /b 0
 :::END
 :::BEGIN regenerar_visor.bat|text

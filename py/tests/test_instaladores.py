@@ -129,3 +129,12 @@ def test_un_solo_acceso_directo_y_lanzador_comprobado():
     assert "Elegir-Lanzador" in motor and "sys.base_prefix" in motor    # pythonw solo si existe de verdad
     bat = (RAIZ / "abrir_arbol.bat").read_text(encoding="utf-8", errors="replace").lower()
     assert "where pythonw" not in bat and "where pyw" not in bat       # no adivinar con el PATH (podía coger uno roto)
+
+
+def test_el_actualizador_abre_lo_mismo_que_el_acceso_directo():
+    motor = (RAIZ / "herramientas" / "plantillas" / "motor.ps1").read_text(encoding="utf-8")
+    assert "function Abrir-App" in motor and motor.count("Abrir-App $dest") == 2                    # instalador y actualizador abren la app con el propio acceso directo
+    assert "Start-Process -FilePath $lnk" in motor
+    assert motor.count("Start-Process -FilePath (Ruta $dest 'abrir_arbol.bat')") == 1               # abrir_arbol.bat solo como último recurso (sin acceso directo)
+    bat = (RAIZ / "abrir_arbol.bat").read_text(encoding="utf-8", errors="replace")
+    assert 'find /i "pythonw"' in bat                                                                # pythonw no se lanza minimizado: igual que el acceso directo
