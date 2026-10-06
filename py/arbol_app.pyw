@@ -38,7 +38,7 @@ def asegurar_visor() -> None:
 
 
 class Api:
-    """Lo que el visor puede pedir a Python (window.pywebview.api.*): ejecutar las celdas de «Probar»."""
+    """Lo que el visor puede pedir a Python (window.pywebview.api.*): ejecutar las celdas de «Probar» y buscar en el gestor de conocimiento."""
 
     def __init__(self) -> None:
         self._cuaderno = None
@@ -57,6 +57,32 @@ class Api:
 
     def reiniciar(self, sesion):
         return self._c().reiniciar(str(sesion))
+
+    def estado_conocimiento(self):
+        """{colección: nº de ficheros indexados}, para rotular las galaxias del cerebro."""
+        try:
+            import conocimiento
+            return {c: nf for c, nf, _ in conocimiento.estado()}
+        except Exception:
+            return {}
+
+    def buscar_conocimiento(self, consulta, n=12, coleccion=None):
+        """Gestor de conocimiento (py/conocimiento): los mejores trozos de código, conceptos, teoría, libros, finanzas y notas."""
+        try:
+            import conocimiento
+            return {"resultados": conocimiento.buscar(str(consulta), coleccion or None, int(n))}
+        except FileNotFoundError as e:
+            return {"error": str(e)}
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    def abrir_fuente(self, ruta):
+        """Abre con su programa un fichero del índice (un PDF, una nota…); nada que no esté indexado."""
+        import conocimiento
+        if conocimiento.es_fuente(str(ruta)) and Path(ruta).exists():
+            os.startfile(str(ruta))
+            return True
+        return False
 
 
 def abrir_con_pywebview() -> bool:

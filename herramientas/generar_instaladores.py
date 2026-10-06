@@ -40,7 +40,7 @@ PLANTILLAS_BAT = [
     ("actualizar.bat.txt", "Arbol {v} - Actualizar.bat"),
 ]
 
-FICHEROS_RAIZ = ["INDEX.md", "CLAUDE.md", "abrir_arbol.bat", "regenerar_visor.bat", "ejecutar_tests.bat", "medir_propiedades.bat",
+FICHEROS_RAIZ = ["INDEX.md", "CLAUDE.md", "abrir_arbol.bat", "regenerar_visor.bat", "indexar_conocimiento.bat", "ejecutar_tests.bat", "medir_propiedades.bat",
                  "herramientas/descargar_python.ps1"]
 SEMILLAS = ["conceptos/catalogo.json"]            # se copian solo si no existen
 TEXTOS_VERSION = ["conceptos/catalogo_base.json"]  # texto que si se actualiza con cada version

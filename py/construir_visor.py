@@ -23,6 +23,7 @@ Regenerar después de añadir o cambiar funciones (el visor no se actualiza solo
 from __future__ import annotations
 
 import ast
+import base64
 import datetime as dt
 import json
 import re
@@ -500,8 +501,11 @@ def ensamblar(datos: dict) -> str:
     plantilla = (CODIGO / "visor" / "plantilla.html").read_text(encoding="utf-8")
     demos_js = (CODIGO / "visor" / "demos.js").read_text(encoding="utf-8").replace("</", "<\\/")
     mapa_js = (CODIGO / "visor" / "mapa3d.js").read_text(encoding="utf-8").replace("</", "<\\/")
+    cerebro_js = (CODIGO / "visor" / "cerebro.js").read_text(encoding="utf-8").replace("</", "<\\/")
+    icono = "data:image/png;base64," + base64.b64encode((CODIGO.parent / "assets" / "icono.png").read_bytes()).decode()
     js = json.dumps(datos, ensure_ascii=False).replace("</", "<\\/")
-    return plantilla.replace("/*__DEMOS_JS__*/", demos_js).replace("/*__MAPA3D_JS__*/", mapa_js).replace("__DATOS__", js)
+    return (plantilla.replace("/*__DEMOS_JS__*/", demos_js).replace("/*__MAPA3D_JS__*/", mapa_js).replace("/*__CEREBRO_JS__*/", cerebro_js)
+            .replace("__ICONO__", icono).replace("__DATOS__", js))
 
 
 def main() -> None:

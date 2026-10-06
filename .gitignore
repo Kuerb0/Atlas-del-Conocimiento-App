@@ -13,3 +13,6 @@ tuple[dict*
 python_arbol.txt
 x.tag
 mn
+
+# datos del gestor de conocimiento (índice, fuentes propias)
+/conocimiento/

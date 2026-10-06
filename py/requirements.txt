@@ -6,3 +6,4 @@ statsmodels>=0.14
 patsy
 matplotlib>=3.7
 pytest
+pypdf
