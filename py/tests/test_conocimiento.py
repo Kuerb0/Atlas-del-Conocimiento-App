@@ -61,3 +61,9 @@ def test_cerebro_reparte_el_arbol_en_galaxias():
     for g in ("codigo", "conceptos", "demos", "finanzas", "libros", "notas"):
         assert f"{{id: '{g}'" in html                                   # una galaxia por parte del árbol y por colección
     assert "volar: function" in html and "cerebro.volar(" in html        # animación de vuelo antes de entrar
+
+
+def test_visor_tiene_destinos_para_el_modo_vivo():
+    import construir_visor as cv
+    html = cv.ensamblar(cv.construir())
+    assert "window.irDestino" in html and "galaxia:(" in html            # #galaxia:codigo, #cerebro, #nombre: la app en modo vivo se coloca con esto

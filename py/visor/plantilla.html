@@ -1163,11 +1163,21 @@ aplicarTema();
 /* ---------- arranque ---------- */
 coincide = {}; detalleVacio(); medir(); migas();
 var hash = decodeURIComponent((location.hash || '').slice(1));
-if (hash && porNombre[hash]) { seleccionar(porNombre[hash], false); ir(porNombre[hash].parent, true); }
-else cerebro.mostrar();
+/* Destinos: `nombre` de una función/concepto/demo, `galaxia:codigo` (o conceptos, demos, finanzas) o `cerebro`. Sirven para los enlaces #…, y para que
+   la app en modo vivo se coloque donde se está trabajando (py/arbol_app.pyw, herramientas/ver.py). */
+function irDestino(d, instante) {
+  var g = /^galaxia:(\w+)$/.exec(d || '');
+  if (d === 'cerebro') mostrarCerebro();
+  else if (g && GAL[g[1]] && GAL[g[1]].raiz) ir(GAL[g[1]].raiz, instante);
+  else if (porNombre[d]) { if (instante) { seleccionar(porNombre[d], false); ir(porNombre[d].parent, true); } else if (porNombre[d] !== sel) seleccionar(porNombre[d], true); }
+  else return false;
+  return true;
+}
+window.irDestino = function (d) { return irDestino(d, false); };
+if (!irDestino(hash, true)) cerebro.mostrar();
 window.addEventListener('hashchange', function () {     /* enlaces #nombre y atrás/adelante del navegador */
   var h2 = decodeURIComponent((location.hash || '').slice(1));
-  if (h2 && porNombre[h2] && porNombre[h2] !== sel) seleccionar(porNombre[h2], true);
+  if (h2) irDestino(h2, false);
 });
 })();
 </script>

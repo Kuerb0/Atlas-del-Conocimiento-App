@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 0.18.0 - Instalador
+title Arbol de la estadistica 0.18.1 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
 set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=0.18.0"
+set "ARBOL_VERSION=0.18.1"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -486,7 +486,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-0.18.0
+0.18.1
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -503,10 +503,12 @@ Si visor_arbol.html no existe todavía, lo genera antes con py/construir_visor.p
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
 import sys
+import time
 import webbrowser
 from pathlib import Path
 
@@ -515,6 +517,8 @@ RAIZ = CODIGO.parent
 if str(CODIGO) not in sys.path:          # arbol_estadistica y el cuaderno, aunque no esté registrado el paquete
     sys.path.insert(0, str(CODIGO))
 VISOR = RAIZ / "visor_arbol.html"
+FOCO = RAIZ / ".foco"                  # modo vivo: dónde debe colocarse la app (ver vigilar)
+VIVO = "--vivo" in sys.argv
 TITULO = "Árbol de la estadística"
 
 
@@ -592,14 +596,49 @@ def abrir_con_pywebview() -> bool:
         pass
     opciones = dict(width=1400, height=900, min_size=(800, 500), text_select=True, js_api=Api())
     try:
-        webview.create_window(TITULO, VISOR.as_uri(), maximized=True, **opciones)
+        ventana = webview.create_window(TITULO, VISOR.as_uri(), maximized=True, **opciones)
     except TypeError:                                                   # pywebview antiguo, sin `maximized`
-        webview.create_window(TITULO, VISOR.as_uri(), **opciones)
+        ventana = webview.create_window(TITULO, VISOR.as_uri(), **opciones)
+    extra = (vigilar, ventana) if VIVO else ()
     try:   # private_mode=False: recuerda tema, ancho del panel, etc. entre sesiones
-        webview.start(private_mode=False, storage_path=str(RAIZ / ".ventana"))
+        webview.start(*extra, private_mode=False, storage_path=str(RAIZ / ".ventana"))
     except TypeError:
-        webview.start()
+        webview.start(*extra)
     return True
+
+
+def leer_foco() -> str:
+    try:
+        return FOCO.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def vigilar(ventana) -> None:
+    """Modo vivo (acceso directo con --vivo): si se regenera visor_arbol.html la ventana se recarga sola, y si cambia el fichero
+    .foco (una línea: nombre de función/concepto/demo, `galaxia:codigo` o `cerebro`) la app se coloca ahí. Lo escribe herramientas/ver.py."""
+    def aplicar():
+        destino = leer_foco()
+        if destino:
+            ventana.evaluate_js("window.irDestino && window.irDestino(%s)" % json.dumps(destino))
+    ventana.events.loaded += aplicar                                     # tras cada recarga, vuelve al sitio del foco
+    visto, foco = _marca(), leer_foco()
+    while True:
+        time.sleep(.7)
+        marca, f = _marca(), leer_foco()
+        if marca != visto:
+            visto, foco = marca, f
+            ventana.evaluate_js("location.reload()")
+        elif f != foco:
+            foco = f
+            aplicar()
+
+
+def _marca() -> int:
+    try:
+        return VISOR.stat().st_mtime_ns
+    except OSError:
+        return 0
 
 
 def navegadores() -> list[Path]:
@@ -2520,7 +2559,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "0.18.0"
+version = "0.18.1"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3200,7 +3239,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "0.18.0"
+__version__ = "0.18.1"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -30093,6 +30132,12 @@ def test_cerebro_reparte_el_arbol_en_galaxias():
     for g in ("codigo", "conceptos", "demos", "finanzas", "libros", "notas"):
         assert f"{{id: '{g}'" in html                                   # una galaxia por parte del árbol y por colección
     assert "volar: function" in html and "cerebro.volar(" in html        # animación de vuelo antes de entrar
+
+
+def test_visor_tiene_destinos_para_el_modo_vivo():
+    import construir_visor as cv
+    html = cv.ensamblar(cv.construir())
+    assert "window.irDestino" in html and "galaxia:(" in html            # #galaxia:codigo, #cerebro, #nombre: la app en modo vivo se coloca con esto
 :::END
 :::BEGIN py/tests/test_contrastes_extra.py|text
 """Contrastes añadidos en 0.9: apareados, no paramétricos, permutación, intervalos y bootstrap."""
@@ -35899,11 +35944,21 @@ aplicarTema();
 /* ---------- arranque ---------- */
 coincide = {}; detalleVacio(); medir(); migas();
 var hash = decodeURIComponent((location.hash || '').slice(1));
-if (hash && porNombre[hash]) { seleccionar(porNombre[hash], false); ir(porNombre[hash].parent, true); }
-else cerebro.mostrar();
+/* Destinos: `nombre` de una función/concepto/demo, `galaxia:codigo` (o conceptos, demos, finanzas) o `cerebro`. Sirven para los enlaces #…, y para que
+   la app en modo vivo se coloque donde se está trabajando (py/arbol_app.pyw, herramientas/ver.py). */
+function irDestino(d, instante) {
+  var g = /^galaxia:(\w+)$/.exec(d || '');
+  if (d === 'cerebro') mostrarCerebro();
+  else if (g && GAL[g[1]] && GAL[g[1]].raiz) ir(GAL[g[1]].raiz, instante);
+  else if (porNombre[d]) { if (instante) { seleccionar(porNombre[d], false); ir(porNombre[d].parent, true); } else if (porNombre[d] !== sel) seleccionar(porNombre[d], true); }
+  else return false;
+  return true;
+}
+window.irDestino = function (d) { return irDestino(d, false); };
+if (!irDestino(hash, true)) cerebro.mostrar();
 window.addEventListener('hashchange', function () {     /* enlaces #nombre y atrás/adelante del navegador */
   var h2 = decodeURIComponent((location.hash || '').slice(1));
-  if (h2 && porNombre[h2] && porNombre[h2] !== sel) seleccionar(porNombre[h2], true);
+  if (h2) irDestino(h2, false);
 });
 })();
 </script>
@@ -36929,6 +36984,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
    Cuando Mario pregunte «¿qué uso para X?», mira el grupo de alternativas y ordénalas con el perfil que encaje con su proyecto.
 5g. **Cerebro (primera capa del visor):** el visor se abre en un cerebro 3D (`py/visor/cerebro.js`) con una galaxia en espiral por parte (y el mapa 3D de dentro también es una galaxia: las ramas se reparten por dos brazos espirales, `ESPIRAL`/`GIRO` en `mapa3d.js`) : **Código** (las ramas de funciones), **Conceptos** (los temas `t_*` salvo finanzas), **Demos y guías**, **Finanzas** (rama `finanzas` + `t_fin`) —cada una con su propio mapa 3D, creado al entrar, y una animación de vuelo hacia ella— y **Libros** y **Notas** (solo ámbitos de búsqueda del gestor). El reparto está en `GALAXIAS` de `plantilla.html`; el buscador ilumina las galaxias con coincidencias y, al elegir un resultado, vuela a su galaxia. **Transición realista:** la cámara no cambia: el cerebro se acerca a la galaxia hasta que la miniatura (mismas ramas, ángulos y giro que la de dentro) tiene el tamaño del mapa real, que se ve ya por debajo (`mapa.sync()` le presta la cámara del cerebro; `geometria()` da su escala) y la sustituye con un fundido; al volver (🧠) es lo mismo al revés. El botón 🧠 (o la miga) vuelve al cerebro. Icono: `python herramientas/generar_icono.py`. `indexar_conocimiento.bat` crea `conocimiento/fuentes.json` (tus carpetas) e indexa.
 5f. **Gestor de conocimiento:** `py/conocimiento/` es un buscador único (SQLite FTS5, BM25, sinónimos del catálogo) sobre código, conceptos, teoría y tus libros/finanzas/notas (`conocimiento/fuentes.json`, no se publica). `cd py && python -m conocimiento indexar | buscar "consulta" [-c colección] | estado`. Antes de buscar a mano en `Manuales Estadística` o en `teoria/`, usa `buscar`.
+5h. **Modo vivo (para ver los cambios mientras se trabaja):** el acceso directo con `--vivo` (`powershell -ExecutionPolicy Bypass -File herramientascceso_vivo.ps1 on|off` lo apunta a esta carpeta o lo restaura) recarga la app solo cuando se regenera `visor_arbol.html` y la coloca donde indique `.foco`. Para enseñar un cambio: `python herramientas/ver.py [destino]` regenera el visor y escribe el foco (`cerebro`, `galaxia:codigo|conceptos|demos|finanzas` o el nombre de una función/concepto/demo; el visor también lo admite como `#destino`).
 6. **Conceptos:** `conceptos/catalogo.json` lista los conceptos del temario del máster y de Very Normal con las funciones que los implementan. Organización: `temas` (ramas del mapa, con color) > `areas` (módulos, con `ambito`) > conceptos (`area`, `prioridad` opcional, `area_fija` para que la actualización no lo mueva). La migración de 0.6.0 está en `herramientas/reorganizar_catalogo.py`.
    Si un concepto no tiene función (*hueco*), es que el árbol aún no lo cubre: impleméntalo (módulo + test), enlázalo en el catálogo (`funciones`) y regenera el visor.
    Al añadir una función nueva, enlázala al menos a un concepto (hay un test que lo exige).

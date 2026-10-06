@@ -12,10 +12,12 @@ Si visor_arbol.html no existe todavía, lo genera antes con py/construir_visor.p
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
 import sys
+import time
 import webbrowser
 from pathlib import Path
 
@@ -24,6 +26,8 @@ RAIZ = CODIGO.parent
 if str(CODIGO) not in sys.path:          # arbol_estadistica y el cuaderno, aunque no esté registrado el paquete
     sys.path.insert(0, str(CODIGO))
 VISOR = RAIZ / "visor_arbol.html"
+FOCO = RAIZ / ".foco"                  # modo vivo: dónde debe colocarse la app (ver vigilar)
+VIVO = "--vivo" in sys.argv
 TITULO = "Árbol de la estadística"
 
 
@@ -101,14 +105,49 @@ def abrir_con_pywebview() -> bool:
         pass
     opciones = dict(width=1400, height=900, min_size=(800, 500), text_select=True, js_api=Api())
     try:
-        webview.create_window(TITULO, VISOR.as_uri(), maximized=True, **opciones)
+        ventana = webview.create_window(TITULO, VISOR.as_uri(), maximized=True, **opciones)
     except TypeError:                                                   # pywebview antiguo, sin `maximized`
-        webview.create_window(TITULO, VISOR.as_uri(), **opciones)
+        ventana = webview.create_window(TITULO, VISOR.as_uri(), **opciones)
+    extra = (vigilar, ventana) if VIVO else ()
     try:   # private_mode=False: recuerda tema, ancho del panel, etc. entre sesiones
-        webview.start(private_mode=False, storage_path=str(RAIZ / ".ventana"))
+        webview.start(*extra, private_mode=False, storage_path=str(RAIZ / ".ventana"))
     except TypeError:
-        webview.start()
+        webview.start(*extra)
     return True
+
+
+def leer_foco() -> str:
+    try:
+        return FOCO.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def vigilar(ventana) -> None:
+    """Modo vivo (acceso directo con --vivo): si se regenera visor_arbol.html la ventana se recarga sola, y si cambia el fichero
+    .foco (una línea: nombre de función/concepto/demo, `galaxia:codigo` o `cerebro`) la app se coloca ahí. Lo escribe herramientas/ver.py."""
+    def aplicar():
+        destino = leer_foco()
+        if destino:
+            ventana.evaluate_js("window.irDestino && window.irDestino(%s)" % json.dumps(destino))
+    ventana.events.loaded += aplicar                                     # tras cada recarga, vuelve al sitio del foco
+    visto, foco = _marca(), leer_foco()
+    while True:
+        time.sleep(.7)
+        marca, f = _marca(), leer_foco()
+        if marca != visto:
+            visto, foco = marca, f
+            ventana.evaluate_js("location.reload()")
+        elif f != foco:
+            foco = f
+            aplicar()
+
+
+def _marca() -> int:
+    try:
+        return VISOR.stat().st_mtime_ns
+    except OSError:
+        return 0
 
 
 def navegadores() -> list[Path]:
