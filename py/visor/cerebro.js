@@ -15,12 +15,14 @@ function sprite(c) {                                  /* mancha de luz de 32 px 
   g.fillStyle = gr; g.fillRect(0, 0, 32, 32); return spr[k] = cv;
 }
 var CEREBRO = [[240, 140, 192], [210, 130, 235], [170, 140, 250], [130, 160, 255]];   /* rosa → violeta → azul */
+var ESPIRAL = .0095, GIRO = .04;                      /* los mismos que mapa3d.js: así la galaxia pequeña es una miniatura exacta de la de dentro */
+var DUST = [[255, 154, 46], [255, 196, 120], [255, 106, 31], [255, 230, 190]];
 var SITIOS = [[-56, 26, 56], [56, 22, 40], [-58, -10, -30], [56, -4, -48], [0, 54, -6], [0, -30, 74], [0, 8, 6], [-20, 46, -50]];
 function suave(x) { return x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x); }
 
 window.crearCerebro = function (o) {
   var cv = o.canvas, ctx = cv.getContext('2d'), G = o.galaxias, rnd = azar(11), gauss = function () { return (rnd() + rnd() + rnd() - 1.5) * 1.15; };
-  var W = 800, H = 600, DPR = 1, yaw = .5, pitch = .42, zoom = 1, t = 0, tPrev = 0, raf = 0, vivo = false, hover = -1, arr = null, res = {};
+  var W = 800, H = 600, DPR = 1, yaw = .5, pitch = .8, zoom = 1, t = 0, tPrev = 0, raf = 0, vivo = false, hover = -1, arr = null, res = {};
   var P = [], L = [], mundo = [];
 
   /* ---- el cerebro: dos hemisferios con circunvoluciones, cerebelo, tronco y algunas conexiones ---- */
@@ -41,20 +43,23 @@ window.crearCerebro = function (o) {
     var a = P[Math.floor(rnd() * P.length)], b = P[Math.floor(rnd() * P.length)], d = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
     if (d > 14 && d < 42) L.push([a, b]);
   }
-  /* ---- las galaxias: dos brazos en espiral logarítmica, inclinadas y girando ---- */
+  /* ---- las galaxias: miniatura de la de dentro (mismas ramas, ángulos y giro; ver mapa3d.js): núcleo, polvo en dos brazos y una nube por rama ---- */
   G.forEach(function (g, i) {
-    var s = SITIOS[i] || [0, 0, 0], R = 30 + 18 * (g.peso || 0), pts = [], N = 170 + Math.round(150 * (g.peso || 0)), tilt = (rnd() - .5) * 1.1;
-    for (var k = 0; k < N; k++) { var r = 3 + R * Math.pow(rnd(), .75), brazo = k % 2 ? Math.PI : 0;
-      pts.push({r: r, a: r * .17 + brazo + gauss() * .22, y: gauss() * 2.2 * (1 - r / R * .6), s: .7 + 1.1 * rnd(), al: .35 + .6 * rnd()}); }
-    mundo.push({g: g, s: s, R: R, pts: pts, tilt: tilt, w: .25 + .2 * rnd(), sx: 0, sy: 0, sr: 40, rgb: g.color});
+    var polvo = [];
+    for (var k = 0; k < 520; k++) {
+      var r = 38 + 640 * Math.pow(rnd(), 1.65), a = r > 190 && rnd() < .85 ? (rnd() < .5 ? 0 : Math.PI) + (r - 190) * ESPIRAL + .3 * gauss() : 2 * Math.PI * rnd();
+      polvo.push({lx: r * Math.cos(a), lz: r * Math.sin(a), y: (rnd() + rnd() + rnd() - 1.5) * .34 * (30 + r * .22), c: DUST[k % 4], s: .8 + 1.2 * rnd(), al: .25 + .6 * rnd()});
+    }
+    mundo.push({g: g, s: SITIOS[i] || [0, 0, 0], R: 26 + 24 * (g.peso || 0), polvo: polvo, sx: 0, sy: 0, sr: 40, rgb: g.color});
   });
+  function escala(m) { return m.R / ((m.g.sistema && m.g.sistema.extent) || 520); }   /* unidades del mapa de dentro -> unidades del cerebro */
 
   /* ---- proyección ---- */
   var cY, sY, cP, sP, CX, CY, F, DIST = 470, dist = DIST, foco = {x: 0, y: 0, z: 0}, an = null, vel = 1;
-  function prep() { cY = Math.cos(yaw); sY = Math.sin(yaw); cP = Math.cos(pitch); sP = Math.sin(pitch); CX = W / 2; CY = H / 2 + 10; F = 760 * Math.min(W / 800, H / 600) * zoom; }
+  function prep() { cY = Math.cos(yaw); sY = Math.sin(yaw); cP = Math.cos(pitch); sP = Math.sin(pitch); CX = W / 2; CY = H / 2; F = 760 * Math.min(W / 800, H / 600) * zoom; }
   function pr(x, y, z, out) {
     x -= foco.x; y -= foco.y; z -= foco.z;
-    var x1 = x * cY + z * sY, z1 = -x * sY + z * cY, y2 = y * cP - z1 * sP, z2 = y * sP + z1 * cP, d = z2 + dist; if (d < 30) return false;
+    var x1 = x * cY + z * sY, z1 = -x * sY + z * cY, y2 = y * cP + z1 * sP, z2 = -y * sP + z1 * cP, d = z2 + dist;   /* misma convención que mapa3d.js */ if (d < 30) return false;
     var s = F / d; out.x = CX + x1 * s; out.y = CY - y2 * s; out.s = s; out.d = d; return true;
   }
   var O = {};
@@ -67,15 +72,24 @@ window.crearCerebro = function (o) {
     L.forEach(function (e) { var A = {}, B = {}; if (pr(e[0].x, e[0].y, e[0].z, A) && pr(e[1].x, e[1].y, e[1].z, B)) { ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); } });
     ctx.stroke();
     for (var i = 0; i < P.length; i++) { var p = P[i]; if (!pr(p.x, p.y, p.z, O)) continue;
-      var prof = 1.15 - (O.d - dist + 130) / 520; luz(CEREBRO[p.c < 0 ? 0 : p.c], O.x, O.y, (1.2 + 1.5 * p.s) * O.s * 1.5, p.a * .55 * (prof < .3 ? .3 : prof)); }
+      var prof = 1.15 - (O.d - dist + 130) / 520; luz(CEREBRO[p.c < 0 ? 0 : p.c], O.x, O.y, (1.2 + 1.5 * p.s) * O.s * 1.5, p.a * .3 * (prof < .3 ? .3 : prof)); }
     mundo.forEach(function (m, gi) {
-      var hot = gi === hover || res[m.g.id], ct = Math.cos(m.tilt), st = Math.sin(m.tilt), c0 = [255, 255, 255];
-      m.pts.forEach(function (p) { var a = p.a + t * m.w, x = p.r * Math.cos(a), z = p.r * Math.sin(a), y = p.y * ct - z * st, z2 = p.y * st + z * ct;
-        if (pr(m.s[0] + x, m.s[1] + y, m.s[2] + z2, O)) luz(m.rgb, O.x, O.y, (3 + 4 * p.s) * O.s * (hot ? 1.5 : 1.15), p.al * (hot ? 1 : .8)); });
-      if (pr(m.s[0], m.s[1], m.s[2], O)) { m.sx = O.x; m.sy = O.y; m.sr = (m.R + 6) * O.s; luz(m.rgb, O.x, O.y, m.R * 1.5 * O.s * (hot ? 1.6 : 1.1), hot ? .9 : .55); luz(c0, O.x, O.y, 9 * O.s, .9); }
+      var hot = gi === hover || res[m.g.id], k = escala(m), gc = Math.cos(GIRO * t), gs = Math.sin(GIRO * t), s0 = m.s;
+      m.polvo.forEach(function (d) {                          /* el polvo: puntos pequeños, como en el mapa de dentro */
+        if (pr(s0[0] + (d.lx * gc + d.lz * gs) * k, s0[1] + d.y * k, s0[2] + (-d.lx * gs + d.lz * gc) * k, O)) luz(d.c, O.x, O.y, 3.6 + 2.6 * d.s, Math.min(1, d.al * 1.35) * (hot ? 1 : .9));
+      });
+      var sis = m.g.sistema;
+      if (sis) sis.ramas.forEach(function (q) {              /* una nube de color por rama, en su sitio y con su giro */
+        var a = q.w * t, c = Math.cos(a), s = Math.sin(a);
+        if (pr(s0[0] + (q.bx * c + q.bz * s) * k, s0[1] + q.by * k, s0[2] + (-q.bx * s + q.bz * c) * k, O)) luz(q.rgb, O.x, O.y, Math.max(5, q.ext * k * O.s * 1.7) * (hot ? 1.25 : 1), .85);
+      });
+      if (pr(s0[0], s0[1], s0[2], O)) {                       /* el núcleo, con un halo del color de la colección */
+        m.sx = O.x; m.sy = O.y; m.sr = (m.R + 6) * O.s;
+        luz(m.rgb, O.x, O.y, m.R * 2 * O.s * (hot ? 1.3 : 1), hot ? .55 : .3); luz([255, 150, 40], O.x, O.y, Math.max(10, 300 * k * O.s * 1.3), .9); luz([255, 255, 255], O.x, O.y, Math.max(5, 60 * k * O.s), .9);
+      }
     });
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.textAlign = 'center';
-    if (an) { var ov = an.sale ? 1 - suave(an.p / .4) : suave((an.p - .72) / .28); ctx.fillStyle = 'rgba(3,4,10,' + ov.toFixed(3) + ')'; ctx.fillRect(0, 0, W, H); return; }
+    if (an) return;                                 /* durante el vuelo no hay títulos ni textos */
     var puestas = [];                               /* etiquetas: de arriba abajo, bajando la que se pise con otra */
     mundo.map(function (m, gi) { return {m: m, gi: gi, y: m.sy + m.sr + 14}; }).sort(function (a, b) { return a.y - b.y; }).forEach(function (e) {
       puestas.forEach(function (q) { if (Math.abs(e.m.sx - q.m.sx) < 130 && e.y < q.y + 28) e.y = q.y + 28; });
@@ -91,17 +105,22 @@ window.crearCerebro = function (o) {
     });
     ctx.font = '500 12px ' + SANS; ctx.fillStyle = 'rgba(160,176,205,.7)'; ctx.fillText('Clic en una galaxia para entrar · arrastra para girar · rueda para acercar', W / 2, H - 14);
   }
+  function termina() { var fin = an.fin; an = null; foco = {x: 0, y: 0, z: 0}; dist = DIST; if (fin) fin(); }
   function frame(ahora) {
     var dt = Math.min(.05, (ahora - (tPrev || ahora)) / 1000); tPrev = ahora;
-    if (an) {                                               /* vuelo: la cámara se acerca a la galaxia (o se aleja de ella al volver) */
-      an.p = Math.min(1, (ahora - an.t0) / an.dur); var e = suave(an.p), k = an.sale ? 1 - e : e;
-      foco = {x: an.s[0] * k, y: an.s[1] * k, z: an.s[2] * k}; dist = DIST + (95 - DIST) * k; pitch += (an.pitch0 - pitch) * .04 * (1 - k);
-      if (an.p >= 1) { var fin = an.fin; an = null; foco = {x: 0, y: 0, z: 0}; dist = DIST; if (fin) fin(); }
-    } else if (!o.reducir && !arr) yaw += dt * .13 * vel;
-    t += dt; dibujar(); raf = vivo && (!o.reducir || an) ? requestAnimationFrame(frame) : 0;
+    if (an) {                                               /* vuelo: la cámara (misma orientación todo el rato) se acerca a la galaxia, o se aleja al volver */
+      prep(); an.p = Math.min(1, (ahora - an.t0) / an.dur);
+      var u = an.sale ? 1 - an.p : an.p, e = suave(u), m = an.m, kk = escala(m), dEnd = F * kk / m.g.sistema.px;
+      foco = {x: m.s[0] * e, y: m.s[1] * e, z: m.s[2] * e}; dist = Math.exp(Math.log(DIST) + (Math.log(dEnd) - Math.log(DIST)) * e);
+      if (pr(m.s[0], m.s[1], m.s[2], O) && o.alVuelo) o.alVuelo({id: m.g.id, yaw: yaw, pitch: pitch, px: O.s * kk, t: t, dx: O.x - W / 2, dy: O.y - H / 2,
+        sync: u > .25, opMapa: suave((u - .4) / .5), opCerebro: 1 - suave((u - .62) / .38)});
+      if (an.p >= 1) termina();
+      t += dt * .7;
+    } else { if (!o.reducir && !arr) yaw += dt * .13 * vel; t += dt * .7; }
+    dibujar(); raf = vivo && (!o.reducir || an) ? requestAnimationFrame(frame) : 0;
   }
   function ocupado() {                                    /* ¿hay un vuelo en curso? (uno que lleva mucho más de su duración se da por muerto: pestaña sin fotogramas) */
-    if (an && performance.now() - an.t0 > an.dur + 500) { var fin = an.fin; an = null; foco = {x: 0, y: 0, z: 0}; dist = DIST; if (fin) fin(); }
+    if (an && performance.now() - an.t0 > an.dur + 500) termina();
     return !!an;
   }
   function pintar() { if (vivo && !raf) raf = requestAnimationFrame(frame); }
@@ -124,15 +143,17 @@ window.crearCerebro = function (o) {
   cv.style.cursor = 'grab'; cv.style.touchAction = 'none';
 
   return {
-    mostrar: function (desde) {                             /* desde = id de la galaxia de la que se vuelve: la cámara se aleja de ella */
+    mostrar: function (desde, pose, fin) {                  /* vuelta desde una galaxia: el cerebro adopta la pose del mapa y la cámara se aleja de ella */
       vivo = true; an = null; foco = {x: 0, y: 0, z: 0}; dist = DIST; medir();
-      var m = desde && !o.reducir ? mundo.filter(function (q) { return q.g.id === desde; })[0] : null;
-      if (m) { an = {s: m.s, sale: true, t0: performance.now(), dur: 900, p: 0, pitch0: pitch}; pintar(); }
+      var m = desde && pose && !o.reducir ? mundo.filter(function (q) { return q.g.id === desde && q.g.sistema; })[0] : null;
+      if (!m) { if (fin) fin(); return; }
+      yaw = pose.yaw; pitch = pose.pitch; t = pose.t;
+      an = {m: m, sale: true, t0: performance.now(), dur: 1500, p: 0, fin: fin}; pintar();
     },
-    volar: function (id, fin) {                             /* acerca la cámara a la galaxia y llama a fin() al llegar */
+    volar: function (id, fin) {                             /* acerca la cámara a la galaxia (g.sistema ya lleva extent y px del mapa de dentro) y llama a fin() al llegar */
       var m = mundo.filter(function (q) { return q.g.id === id; })[0];
-      if (!m || o.reducir || ocupado()) { if (fin) fin(); return; }
-      hover = -1; an = {s: m.s, sale: false, t0: performance.now(), dur: 1150, p: 0, fin: fin, pitch0: pitch}; if (!vivo) vivo = true; pintar();
+      if (!m || !m.g.sistema || o.reducir || ocupado()) { if (fin) fin(); return; }
+      hover = -1; an = {m: m, sale: false, t0: performance.now(), dur: 1900, p: 0, fin: fin}; if (!vivo) vivo = true; pintar();
     },
     ocultar: function () { vivo = false; if (raf) cancelAnimationFrame(raf); raf = 0; },
     medir: medir,

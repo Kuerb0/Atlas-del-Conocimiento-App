@@ -50,7 +50,7 @@ function spriteNucleo() {
 window.crearMapa3D = function (o) {
   var canvas = o.canvas, ctx = canvas.getContext('2d'), root = o.root, hojas = o.hojas, estado = o.estado, esDesc = o.esDesc;
   var rnd = azar(42), gauss = function () { return (rnd() + rnd() + rnd() + rnd() - 2) * 1.7321; };
-  var W = 800, H = 600, DPR = 1, F = 700, F0 = 700, CX = 400, CY = 300, AJUSTE = 250, vuelo = null, focoPrevio = root;
+  var W = 800, H = 600, DPR = 1, F = 700, F0 = 700, CX = 400, CY = 300, AJUSTE = 250, vuelo = null, focoPrevio = root, sincro = false;
   var t = 0, pausa = !!o.reducir, autorot = !o.reducir, raf = 0, tPrev = 0, tocado = 0;
   var baja = false, modoCalidad = 'auto', ema = 16, lento = 0, rapido = 0, desdeBaja = 0, cambios = 0;   /* calidad adaptativa: si va lento pasa a «baja» (menos halos, polvo y enlaces; resolución 1×) */
   var cam = {yaw: .62, pitch: .4, dist: 1400, tx: 0, ty: 0, tz: 0}, meta = {yaw: .62, pitch: .4}, zoomMul = 1;
@@ -182,12 +182,13 @@ window.crearMapa3D = function (o) {
   function dibujar(dt) {
     var st = estado(), focus = st.focus, sel = st.sel, filtrando = st.filtrando, coincide = st.coincide || {}, conCoin = st.conCoincidencia || {};
     var ease = 1 - Math.exp(-dt * 6);
-    if (!pausa) t += dt * .7;
+    if (!pausa && !sincro) t += dt * .7;
     if (dentro && !arrastrando) { var h0 = elegir(cursor.x, cursor.y); if (h0 !== hover) { hover = h0; canvas.style.cursor = h0 ? 'pointer' : 'grab'; if (o.alHover) o.alHover(h0); } }
-    if (autorot && !pausa && !arrastrando && !hover && !vuelo) meta.yaw += dt * .02;
+    if (autorot && !pausa && !arrastrando && !hover && !vuelo && !sincro) meta.yaw += dt * .02;
     mundo();
-    var g = metaCamara(false), enVuelo = false;
-    if (o.reducir) { vuelo = null; cam.tx = g.x; cam.ty = g.y; cam.tz = g.z; cam.dist = g.d; cam.yaw = meta.yaw; cam.pitch = meta.pitch; F = F0; }
+    var g = metaCamara(false), enVuelo = sincro;
+    if (sincro) { F = F0; }                  /* la cámara la lleva el cerebro (ver sync) */
+    else if (o.reducir) { vuelo = null; cam.tx = g.x; cam.ty = g.y; cam.tz = g.z; cam.dist = g.d; cam.yaw = meta.yaw; cam.pitch = meta.pitch; F = F0; }
     else if (vuelo) {      /* vuelo: aceleración y frenado, el viaje se aleja a mitad de camino, gira y se inclina un poco */
       vuelo.t += dt; var u = Math.min(vuelo.t / vuelo.dur, 1), A = vuelo.a, sn = Math.sin(Math.PI * u);
       var e = u < .5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
@@ -546,6 +547,14 @@ window.crearMapa3D = function (o) {
       }
       sinTocar = 0; pedir();
     },
+    /* El cerebro maneja la cámara mientras se acerca a la galaxia, para que este mapa se vea ya durante el vuelo con la misma pose y escala.
+       sync({yaw, pitch, px: píxeles por unidad, t: tiempo}) la pone a mano; sync(null) la suelta y vuelve a ir sola. */
+    sync: function (s) {
+      if (!s) { sincro = false; sinTocar = 0; pedir(); return; }
+      sincro = true; vuelo = null; zoomMul = 1; F = F0; t = s.t;
+      cam.tx = cam.ty = cam.tz = 0; cam.yaw = s.yaw; cam.pitch = s.pitch; cam.dist = F0 / s.px; sinTocar = 0; pedir();
+    },
+    geometria: function () { return {extent: extentDe(root), px: AJUSTE / extentDe(root), t: t, yaw: cam.yaw, pitch: cam.pitch}; },   /* tamaño de la galaxia (unidades), escala de la vista general (px/unidad) y pose actual */
     recentrar: function () { meta.yaw = .62; meta.pitch = .4; zoomMul = 1; pedir(); },
     rotacion: function (v) { if (v === undefined) return !pausa; pausa = !v; autorot = !!v; pedir(); return !pausa; },
     pausar: function (v) { pausa = !!v; pedir(); },

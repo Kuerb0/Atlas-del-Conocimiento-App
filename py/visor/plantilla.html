@@ -428,29 +428,39 @@ function instancia(g) {
   $('#cerebro').parentNode.insertBefore(cv, $('#cerebro'));
   var m = crearMapa3D({
     canvas: cv, root: g.raiz, hojas: hojas.filter(function (h) { return esDesc(h, g.raiz); }), esDesc: esDesc, reducir: reducir,
-    estado: function () { return {focus: focus, sel: sel, filtrando: !!(query || soloSas || soloHuecos || soloAlta), coincide: coincide || {}, conCoincidencia: conCoincidencia}; },
+    estado: function () { return {focus: focus && esDesc(focus, g.raiz) ? focus : g.raiz, sel: sel, filtrando: !!(query || soloSas || soloHuecos || soloAlta), coincide: coincide || {}, conCoincidencia: conCoincidencia}; },
     alNodo: clicNodo,
     alFondo: function () { if (focus.parent) ir(focus.parent); }
   });
   if (window.ResizeObserver) new ResizeObserver(function () { m.medir(); }).observe(cv);
   return instancias[g.id] = {mapa: m, canvas: cv};
 }
-function entrarGalaxia(g) {                   /* deja el cerebro (o la galaxia anterior) y muestra el mapa de g, sin animación */
+function entrarGalaxia(g, suave) {            /* deja el cerebro (o la galaxia anterior) y muestra el mapa de g; suave = venimos de un vuelo: no se toca la cámara */
   if (vista === 'cerebro') { cerebro.ocultar(); $('#cerebro').hidden = true; }
   else if (galAct && galAct !== g) { instancias[galAct.id].canvas.hidden = true; mapa.rotacion(false); }
   var inst = instancia(g); inst.canvas.hidden = false; mapa = inst.mapa; galAct = g; vista = 'arbol';
-  $('#ctrls').hidden = false; mapa.medir(); mapa.rotacion(rotUsuario);
+  $('#ctrls').hidden = false; if (!suave) mapa.medir(); mapa.rotacion(rotUsuario);
   if (!focus || galaxiaDe(focus) !== g) focus = g.raiz;
-  mapa.ir(focus, true); migas();
+  if (!suave) mapa.ir(focus, true);
+  migas();
 }
-function irYa(n, g, instante) {
-  if (vista !== 'arbol' || galAct !== g) { focus = n; entrarGalaxia(g); }
+function irYa(n, g, instante, suave) {
+  if (vista !== 'arbol' || galAct !== g) { focus = suave ? g.raiz : n; entrarGalaxia(g, suave); }
   focus = n; mapa.ir(n, instante); migas();
 }
-function ir(n, instante) {                    /* desde el cerebro, antes de entrar hay un vuelo hasta la galaxia */
+/* Del cerebro a una galaxia: la cámara no cambia; se acerca hasta que la galaxia pequeña tiene el tamaño del mapa de dentro, que se ve ya (mismo sitio, misma escala, mismo giro) y la sustituye con un fundido. */
+function ir(n, instante) {
   var g = galaxiaDe(n);
-  if (vista === 'cerebro' && !instante) { cerebro.volar(g.id, function () { irYa(n, g, true); }); return; }
-  irYa(n, g, instante);
+  if (vista === 'cerebro' && !instante && !reducir) { despegar(n, g); return; }
+  irYa(n, g, instante || reducir);
+}
+function limpiarVuelo(inst) {
+  inst.mapa.sync(null); inst.canvas.style.opacity = ''; inst.canvas.style.transform = ''; $('#cerebro').style.opacity = '';
+}
+function despegar(n, g) {
+  var inst = instancia(g); inst.canvas.hidden = false; inst.canvas.style.opacity = 0; inst.mapa.medir(); inst.mapa.rotacion(false);
+  var geo = inst.mapa.geometria(); g.sistema.extent = geo.extent; g.sistema.px = geo.px;
+  cerebro.volar(g.id, function () { limpiarVuelo(inst); irYa(n, g, false, true); });
 }
 function pintar() { if (mapa) mapa.pintar(); }
 window.arbolDebug = {ir: ir, root: root, instancias: instancias};      /* para medir el rendimiento: arbolDebug.instancias.codigo.mapa.perfil(60, 0.5) */
@@ -472,18 +482,35 @@ var coleccionK = '', resArbol = {}, resK = {};
 function luces() {                            /* las galaxias con coincidencias (del árbol y de tus carpetas) se iluminan */
   var m = {}; [resArbol, resK].forEach(function (o) { Object.keys(o).forEach(function (k) { m[k] = Math.max(m[k] || 0, o[k]); }); }); cerebro.resaltar(m);
 }
-var cerebro = crearCerebro({canvas: $('#cerebro'), galaxias: GALAXIAS, reducir: reducir, alGalaxia: function (g) {
+var cerebro = crearCerebro({canvas: $('#cerebro'), galaxias: GALAXIAS, reducir: reducir,
+  alVuelo: function (i) {                    /* cada fotograma del vuelo: el mapa de dentro toma la cámara del cerebro y se funden */
+    var inst = instancias[i.id]; if (i.sync) inst.mapa.sync({yaw: i.yaw, pitch: i.pitch, px: i.px, t: i.t});
+    inst.canvas.style.transform = 'translate(' + i.dx.toFixed(1) + 'px,' + i.dy.toFixed(1) + 'px)'; inst.canvas.style.opacity = i.opMapa; $('#cerebro').style.opacity = i.opCerebro;
+  },
+  alGalaxia: function (g) {
   if (!g.solo) { ir(g.raiz); return; }
   coleccionK = g.id; $('#q').placeholder = 'Buscar en ' + g.nombre.toLowerCase() + '…'; migas(); $('#q').focus(); if (query) conocimiento(query);
   aviso('Buscas solo en «' + g.nombre + '». Escribe arriba' + (hayPython() ? '.' : ' (la búsqueda en tus carpetas funciona en la app).'));
 }});
 function mostrarCerebro() {
   if (vista === 'cerebro') return;
-  var desde = galAct && galAct.id;
-  instancias[desde].canvas.hidden = true; mapa.rotacion(false);
-  vista = 'cerebro'; $('#cerebro').hidden = false; $('#ctrls').hidden = true; cerebro.mostrar(desde); migas();
+  var g = galAct, inst = instancias[g.id];
+  function arrancar() {                       /* la cámara se aleja de la galaxia, sin cambiar de orientación, hasta ver el cerebro */
+    mapa.rotacion(false); var geo = mapa.geometria(); g.sistema.extent = geo.extent; g.sistema.px = geo.px;
+    vista = 'cerebro'; $('#cerebro').style.opacity = 0; $('#cerebro').hidden = false; $('#ctrls').hidden = true; migas();
+    cerebro.mostrar(g.id, {yaw: geo.yaw, pitch: geo.pitch, t: geo.t}, function () { limpiarVuelo(inst); inst.canvas.hidden = true; });
+  }
+  if (!reducir && focus !== g.raiz) { ir(g.raiz); setTimeout(arrancar, 1100); } else arrancar();
 }
 $('#cerebroBtn').onclick = mostrarCerebro;
+setTimeout(function () {                      /* los mapas de dentro se crean ya (en silencio): las galaxias pequeñas son su miniatura y los usan para el vuelo */
+  GALAXIAS.forEach(function (g) {
+    if (!g.raiz) return;
+    var inst = instancia(g); inst.mapa.rotacion(false);
+    g.sistema = {ramas: g.raiz.hijos.map(function (rn) { return rn.p3; }), extent: inst.mapa.geometria().extent, px: 1};
+  });
+  cerebro.resaltar(resK);
+}, 60);
 if (window.ResizeObserver) new ResizeObserver(function () { cerebro.medir(); }).observe($('#cerebro')); else window.addEventListener('resize', function () { cerebro.medir(); });
 window.addEventListener('pywebviewready', async function () {     /* cuántos ficheros hay en cada colección de tus carpetas (solo en la app, con el índice hecho) */
   if (!window.pywebview.api.estado_conocimiento) return;
