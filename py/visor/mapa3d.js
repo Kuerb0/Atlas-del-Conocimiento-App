@@ -2,6 +2,7 @@
    Canvas 2D con proyección en perspectiva escrita a mano: sin librerías, sin WebGL, sin internet.
    Lo incrusta py/construir_visor.py dentro de visor/plantilla.html (marcador MAPA3D_JS).
 
+   Es una galaxia: un núcleo y dos brazos en espiral donde se reparten las ramas (como las galaxias del cerebro, visor/cerebro.js).
    Qué dibuja (de dentro afuera):
      núcleo      el árbol entero (naranja incandescente)
      ramas       preprocesado, modelos, conceptos… orbitan el núcleo; cada una con su color y un anillo con su nº de elementos
@@ -55,19 +56,18 @@ window.crearMapa3D = function (o) {
   var cam = {yaw: .62, pitch: .4, dist: 1400, tx: 0, ty: 0, tz: 0}, meta = {yaw: .62, pitch: .4}, zoomMul = 1;
   var vineta = null, hover = null, arrastrando = false, cursor = {x: -99, y: -99}, dentro = false, items = [], sinTocar = 0;
   var cosY = 1, sinY = 0, cosP = 1, sinP = 0, PX = 0, PY = 0, PS = 1, PD = 1;
-  var ramas = root.hijos, ESCENA = 600;
+  var ramas = root.hijos, ESCENA = 600, ESPIRAL = .0095, GIRO = .04;   /* ESPIRAL: cuánto se enrolla el brazo (rad por unidad de radio) · GIRO: rotación rígida, para que los brazos no se deshagan */
 
   /* ================= construcción del mundo (determinista) ================= */
   var ordenadas = ramas.slice().sort(function (a, b) { return cuenta(b) - cuenta(a); });
-  var posiciones = []; for (var i = 0; i < ramas.length; i++) posiciones.push(fib(i, ramas.length));
-  posiciones.sort(function (a, b) { return Math.abs(a.y) - Math.abs(b.y); });
   var todas = [];                         /* hojas con su módulo y rama, para recorrerlas rápido */
   var enlaces = [];
 
   ordenadas.forEach(function (rn, i) {
-    var R = 400 + 80 * rnd(), f = posiciones[i], mods = rn.hijos;
+    /* una galaxia: las ramas (de mayor a menor) se reparten por dos brazos en espiral, de dentro afuera */
+    var R = 190 + 340 * Math.pow((i + .5) / ordenadas.length, .85) + 14 * (rnd() - .5), th = (i % 2) * Math.PI + (R - 190) * ESPIRAL + .2 * gauss(), mods = rn.hijos;
     var col = aRgb(rn.colorHex || PAL[rn.rama] || RESERVA[i % RESERVA.length]);
-    var p = rn.p3 = {rgb: col, bx: f.x * R, by: f.y * R * (ramas.length > 12 ? .8 : .55), bz: f.z * R, w: .05 * Math.pow(420 / R, 1.5), x: 0, y: 0, z: 0, a: 1, mods: mods, n: cuenta(rn)};
+    var p = rn.p3 = {rgb: col, bx: R * Math.cos(th), by: 60 * (rnd() - .5), bz: R * Math.sin(th), w: GIRO * (1 + .1 * (rnd() - .5)), x: 0, y: 0, z: 0, a: 1, mods: mods, n: cuenta(rn)};
     var M = mods.length, rls = mods.map(function (m) { return 16 + 5.6 * Math.sqrt(m.hijos.length); });
     var media = rls.reduce(function (a, b) { return a + b; }, 0) / Math.max(M, 1), sp = 2.15 * media;
     var Rm = M <= 1 ? 0 : M === 2 ? sp / 2 : sp / Math.sqrt(4 * Math.PI / M);
@@ -99,8 +99,8 @@ window.crearMapa3D = function (o) {
   [[255, 154, 46], [255, 196, 120], [255, 106, 31], [255, 230, 190]].forEach(function (c, k) {
     var g = grupoDe(c, 0), n = [850, 500, 440, 170][k];
     for (var i = 0; i < n; i++) {
-      var r = 38 + 640 * Math.pow(rnd(), 1.65), a = 2 * Math.PI * rnd(), esp = (rnd() + rnd() + rnd() - 1.5) * .34 * (30 + r * .22);
-      p(g, -1, r * Math.cos(a), esp, r * Math.sin(a), .05 * Math.pow(150 / Math.max(r, 50), 1.5), .8 + 1.2 * rnd(), .25 + .6 * rnd());
+      var r = 38 + 640 * Math.pow(rnd(), 1.65), a = r > 190 && rnd() < .85 ? (rnd() < .5 ? 0 : Math.PI) + (r - 190) * ESPIRAL + .3 * gauss() : 2 * Math.PI * rnd(), esp = (rnd() + rnd() + rnd() - 1.5) * .34 * (30 + r * .22);
+      p(g, -1, r * Math.cos(a), esp, r * Math.sin(a), GIRO, .8 + 1.2 * rnd(), .25 + .6 * rnd());
     }
   });
   ramas.forEach(function (rn, i) {

@@ -468,10 +468,6 @@ var coleccionK = '', resArbol = {}, resK = {};
   var n = {}; hojas.forEach(function (h) { var g = galaxiaDe(h); n[g.id] = (n[g.id] || 0) + 1; });
   GAL.codigo.base = n.codigo + ' funciones'; GAL.conceptos.base = n.conceptos + ' conceptos'; GAL.demos.base = n.demos + ' demos y guías'; GAL.finanzas.base = n.finanzas + ' funciones y conceptos';
   GALAXIAS.forEach(function (g) { g.sub = g.base || 'sin indexar'; });
-  function hexRgb(h) { var m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return [147, 163, 189]; var v = parseInt(m[1], 16); return [v >> 16 & 255, v >> 8 & 255, v & 255]; }
-  GALAXIAS.forEach(function (g) {            /* un planeta por rama, como el mapa de dentro */
-    if (g.raiz) g.planetas = g.raiz.hijos.map(function (rn) { return {rgb: hexRgb(rn.colorHex), n: rn.hijos.reduce(function (s, m) { return s + m.hijos.length; }, 0)}; });
-  });
 })();
 function luces() {                            /* las galaxias con coincidencias (del árbol y de tus carpetas) se iluminan */
   var m = {}; [resArbol, resK].forEach(function (o) { Object.keys(o).forEach(function (k) { m[k] = Math.max(m[k] || 0, o[k]); }); }); cerebro.resaltar(m);
