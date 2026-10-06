@@ -15,6 +15,9 @@ i.add_argument("-g", "--galaxia", help="codigo | conceptos | demos | finanzas | 
 i.add_argument("-s", "--subtema", help="p. ej. «Inferencia y contrastes» (por defecto, automático)")
 i.add_argument("-t", "--tipo", help="libro | articulo | apuntes | nota | otro (por defecto, automático)")
 i.add_argument("-G", "--genero", help="historia | economia | ensayo | estadistica | ciencia | novela | biografia | politica | tecnologia | psicologia | arte | otro (por defecto, automático)")
+t = sub.add_parser("telescopio", help="busca obras de acceso abierto (Gutenberg, arXiv, OpenAlex, Internet Archive); con --traer N descarga e importa la N-ésima")
+t.add_argument("consulta", nargs="+")
+t.add_argument("--traer", type=int, metavar="N", help="trae a la biblioteca el resultado número N")
 b = sub.add_parser("buscar", help="busca en todas las colecciones")
 b.add_argument("consulta", nargs="+")
 b.add_argument("-c", "--coleccion", help="codigo | conceptos | teoria | libros | finanzas | notas …")
@@ -34,6 +37,15 @@ elif a.orden == "importar":
     from .importar import importar
     for r in importar([{"ruta": f, "galaxia": a.galaxia, "subtema": a.subtema, "tipo": a.tipo, "genero": a.genero} for f in a.ficheros]):
         print(f"{r['estado']:10} {r['nombre']}  ->  {r.get('galaxia', '')} › {r.get('subtema', '')} ({r.get('tipo', '')})  {r['mensaje']}")
+elif a.orden == "telescopio":
+    from . import telescopio
+    r = telescopio.buscar(" ".join(a.consulta))
+    for i, x in enumerate(r["resultados"], 1):
+        print(f"{i:2}. [{x['fuente']}] {x['titulo'][:80]} — {', '.join(x['autores'][:2])} ({x['anio'] or '?'}) · {x['formato']} · {x['licencia']} · género: {x['genero']}")
+    for f, e in r["errores"].items():
+        print(f"   ✗ {f}: {e}")
+    if a.traer:
+        print(telescopio.traer(r["resultados"][a.traer - 1]))
 else:
     for i, x in enumerate(buscar(" ".join(a.consulta), a.coleccion, a.n), 1):
         print(f"{i:2}. [{x['coleccion']}] {x['titulo']}  {x['ubicacion']}\n    {x['fragmento'].replace(chr(10), ' ')}")

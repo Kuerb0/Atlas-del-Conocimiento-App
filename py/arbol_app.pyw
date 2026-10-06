@@ -147,6 +147,29 @@ class Api:
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}
 
+    def almacenaje(self):
+        """Pestaña «Eclipses»: lo que ocupa cada galaxia/tipo en disco y en GitHub frente a su límite."""
+        try:
+            from conocimiento import almacenaje
+            return almacenaje.medir()
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    # ---- telescopio (pestaña «Telescopio»): ver py/conocimiento/telescopio.py ----
+    def telescopio_buscar(self, consulta):
+        try:
+            from conocimiento import telescopio
+            return telescopio.buscar(str(consulta))
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    def telescopio_traer(self, item):
+        try:
+            from conocimiento import telescopio
+            return telescopio.traer(dict(item))
+        except Exception as e:
+            return {"estado": "error", "mensaje": f"{type(e).__name__}: {e}"}
+
     def resumen_biblioteca(self):
         try:
             from conocimiento import importar

@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.0.0 - Actualizar
+title Arbol de la estadistica 1.1.0 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=actualizar"
-set "ARBOL_VERSION=1.0.0"
+set "ARBOL_MODO=instalar"
+set "ARBOL_VERSION=1.1.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -494,7 +494,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.0.0
+1.1.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -645,6 +645,29 @@ class Api:
             return True
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}
+
+    def almacenaje(self):
+        """Pestaña «Eclipses»: lo que ocupa cada galaxia/tipo en disco y en GitHub frente a su límite."""
+        try:
+            from conocimiento import almacenaje
+            return almacenaje.medir()
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    # ---- telescopio (pestaña «Telescopio»): ver py/conocimiento/telescopio.py ----
+    def telescopio_buscar(self, consulta):
+        try:
+            from conocimiento import telescopio
+            return telescopio.buscar(str(consulta))
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    def telescopio_traer(self, item):
+        try:
+            from conocimiento import telescopio
+            return telescopio.traer(dict(item))
+        except Exception as e:
+            return {"estado": "error", "mensaje": f"{type(e).__name__}: {e}"}
 
     def resumen_biblioteca(self):
         try:
@@ -1377,8 +1400,9 @@ def ensamblar(datos: dict) -> str:
     cerebro_js = (CODIGO / "visor" / "cerebro.js").read_text(encoding="utf-8").replace("</", "<\\/")
     icono = "data:image/png;base64," + base64.b64encode((CODIGO.parent / "assets" / "icono.png").read_bytes()).decode()
     agujero_js = (CODIGO / "visor" / "agujero.js").read_text(encoding="utf-8").replace("</", "<\\/")
+    eclipses_js = (CODIGO / "visor" / "eclipses.js").read_text(encoding="utf-8").replace("</", "<\\/")
     js = json.dumps(datos, ensure_ascii=False).replace("</", "<\\/")
-    return (plantilla.replace("/*__DEMOS_JS__*/", demos_js).replace("/*__MAPA3D_JS__*/", mapa_js).replace("/*__CEREBRO_JS__*/", cerebro_js).replace("/*__AGUJERO_JS__*/", agujero_js)
+    return (plantilla.replace("/*__DEMOS_JS__*/", demos_js).replace("/*__MAPA3D_JS__*/", mapa_js).replace("/*__CEREBRO_JS__*/", cerebro_js).replace("/*__AGUJERO_JS__*/", agujero_js).replace("/*__ECLIPSES_JS__*/", eclipses_js)
             .replace("__ICONO__", icono).replace("__DATOS__", js))
 
 
@@ -2745,7 +2769,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.0.0"
+version = "1.1.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3425,7 +3449,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -14123,6 +14147,9 @@ i.add_argument("-g", "--galaxia", help="codigo | conceptos | demos | finanzas | 
 i.add_argument("-s", "--subtema", help="p. ej. «Inferencia y contrastes» (por defecto, automático)")
 i.add_argument("-t", "--tipo", help="libro | articulo | apuntes | nota | otro (por defecto, automático)")
 i.add_argument("-G", "--genero", help="historia | economia | ensayo | estadistica | ciencia | novela | biografia | politica | tecnologia | psicologia | arte | otro (por defecto, automático)")
+t = sub.add_parser("telescopio", help="busca obras de acceso abierto (Gutenberg, arXiv, OpenAlex, Internet Archive); con --traer N descarga e importa la N-ésima")
+t.add_argument("consulta", nargs="+")
+t.add_argument("--traer", type=int, metavar="N", help="trae a la biblioteca el resultado número N")
 b = sub.add_parser("buscar", help="busca en todas las colecciones")
 b.add_argument("consulta", nargs="+")
 b.add_argument("-c", "--coleccion", help="codigo | conceptos | teoria | libros | finanzas | notas …")
@@ -14142,9 +14169,102 @@ elif a.orden == "importar":
     from .importar import importar
     for r in importar([{"ruta": f, "galaxia": a.galaxia, "subtema": a.subtema, "tipo": a.tipo, "genero": a.genero} for f in a.ficheros]):
         print(f"{r['estado']:10} {r['nombre']}  ->  {r.get('galaxia', '')} › {r.get('subtema', '')} ({r.get('tipo', '')})  {r['mensaje']}")
+elif a.orden == "telescopio":
+    from . import telescopio
+    r = telescopio.buscar(" ".join(a.consulta))
+    for i, x in enumerate(r["resultados"], 1):
+        print(f"{i:2}. [{x['fuente']}] {x['titulo'][:80]} — {', '.join(x['autores'][:2])} ({x['anio'] or '?'}) · {x['formato']} · {x['licencia']} · género: {x['genero']}")
+    for f, e in r["errores"].items():
+        print(f"   ✗ {f}: {e}")
+    if a.traer:
+        print(telescopio.traer(r["resultados"][a.traer - 1]))
 else:
     for i, x in enumerate(buscar(" ".join(a.consulta), a.coleccion, a.n), 1):
         print(f"{i:2}. [{x['coleccion']}] {x['titulo']}  {x['ubicacion']}\n    {x['fragmento'].replace(chr(10), ' ')}")
+:::END
+:::BEGIN py/conocimiento/almacenaje.py|text
+"""Almacenaje: cuánto ocupa cada galaxia y cada tipo de archivo frente al límite de GitHub (pestaña «Eclipses»).
+
+Dos escenarios: «disco» (todo lo que hay en la carpeta) y «github» (lo que subiría un `git add`: respeta .gitignore).
+GitHub: se recomienda no pasar de 1 GB por repositorio (tope duro ~5 GB) y rechaza archivos de más de 100 MB.
+"""
+from __future__ import annotations
+
+import os
+import subprocess
+from pathlib import Path
+
+from . import RAIZ
+
+LIMITE = 1 << 30            # 1 GB recomendado por repositorio
+LIMITE_DURO = 5 << 30       # a partir de aquí GitHub puede bloquear el repo
+LIMITE_ARCHIVO = 100 << 20  # GitHub rechaza archivos de más de 100 MB
+
+GRUPOS = {"codigo": "Código", "conceptos": "Conceptos", "demos": "Demos y guías", "finanzas": "Finanzas", "libros": "Libros",
+          "notas": "Notas y enlaces", "visor": "Visor generado", "instaladores": "Instaladores", "copias": "Copias anteriores", "otros": "Otros"}
+_SALTAR = {".git", "__pycache__", ".pytest_cache"}
+
+
+def grupo(rel: str) -> str:
+    """Galaxia (o cubo) al que pertenece un archivo según su ruta relativa."""
+    p = rel.replace("\\", "/").split("/")
+    if p[0] == "conocimiento" and len(p) > 2 and p[1] == "biblioteca":
+        return p[2] if p[2] in GRUPOS else "otros"
+    if p[0] in ("conceptos", "teoria"):
+        return "conceptos"
+    if p[0] in ("ejemplos",) or p[:2] in (["py", "aprender"], ["py", "cuaderno"]) or rel.endswith("demos.js"):
+        return "demos"
+    if p[0] in ("py", "herramientas"):
+        return "codigo"
+    if p[0] == "instaladores":
+        return "instaladores"
+    if p[0] == "anteriores":
+        return "copias"
+    if p[0] == "visor_arbol.html":
+        return "visor"
+    return "otros"
+
+
+def _lista_disco(raiz: Path):
+    for d, ds, fs in os.walk(raiz):
+        ds[:] = [x for x in ds if x not in _SALTAR]
+        for f in fs:
+            yield str((Path(d) / f).relative_to(raiz))
+
+
+def _lista_github(raiz: Path):
+    """Archivos que subiría git (versionados + nuevos no ignorados). Sin git: None."""
+    try:
+        r = subprocess.run(["git", "-C", str(raiz), "ls-files", "-co", "--exclude-standard", "-z"], capture_output=True, timeout=60, check=True)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return [x.decode("utf-8", "replace") for x in r.stdout.split(b"\0") if x]
+
+
+def _escenario(rels, raiz: Path) -> dict:
+    por_g, por_t, grandes, total = {}, {}, [], 0
+    for rel in rels:
+        try:
+            n = (raiz / rel).stat().st_size
+        except OSError:
+            continue
+        total += n
+        por_g[grupo(rel)] = por_g.get(grupo(rel), 0) + n
+        t = (Path(rel).suffix.lower().lstrip(".") or "sin ext.")
+        por_t[t] = por_t.get(t, 0) + n
+        if n > LIMITE_ARCHIVO:
+            grandes.append({"ruta": rel, "bytes": n})
+    ordenar = lambda d, nombres=None: [{"id": k, "nombre": (nombres or {}).get(k, k), "bytes": v}
+                                       for k, v in sorted(d.items(), key=lambda kv: -kv[1]) if v > 0]
+    return {"total": total, "grupos": ordenar(por_g, GRUPOS), "tipos": ordenar(por_t), "grandes": grandes}
+
+
+def medir(raiz: Path | str = RAIZ) -> dict:
+    """{'limite','limite_duro','limite_archivo','disco':{…},'github':{…}|None}; cada escenario trae total, grupos, tipos y archivos de >100 MB."""
+    raiz = Path(raiz)
+    gh = _lista_github(raiz)
+    return {"limite": LIMITE, "limite_duro": LIMITE_DURO, "limite_archivo": LIMITE_ARCHIVO,
+            "disco": _escenario(_lista_disco(raiz), raiz), "github": _escenario(gh, raiz) if gh is not None else None}
 :::END
 :::BEGIN py/conocimiento/fuentes.ejemplo.json|text
 {
@@ -14755,6 +14875,145 @@ def borrar(rel: str, carpeta: Path | None = None, db: Path | None = None) -> boo
     con.execute("delete from ficheros where ruta = ?", (str(f),))
     con.commit(); con.close()
     return True
+:::END
+:::BEGIN py/conocimiento/telescopio.py|text
+"""Telescopio: busca obras de acceso abierto o dominio público, las trae a la biblioteca y las clasifica con los metadatos reales (materias).
+
+Fuentes (solo legales): Project Gutenberg (Gutendex), arXiv, OpenAlex (artículos en abierto con PDF) e Internet Archive
+(solo obras con licencia abierta o publicadas hasta 1929). Open Library aporta las materias para clasificar un título.
+Solo lectura de la web con la biblioteca estándar; lo descargado pasa por `importar.importar` como cualquier otro archivo.
+"""
+from __future__ import annotations
+
+import json
+import re
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+from . import CARPETA, _norm
+from .importar import _GEN_RE, GENEROS, importar
+
+AGENTE = "ArbolEstadistica/1.0 (biblioteca personal; telescopio)"
+MAX_BYTES = 200 << 20                       # no se descarga nada de más de 200 MB
+FUENTES = ("gutenberg", "arxiv", "openalex", "archive")
+_ATOM = "{http://www.w3.org/2005/Atom}"
+
+
+def _get(url: str, binario: bool = False, limite: int = MAX_BYTES):
+    """GET por https con tope de tamaño. Es el único punto de red (los tests lo sustituyen)."""
+    if not url.startswith("https://"):
+        raise ValueError(f"solo https: {url[:60]}")
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": AGENTE}), timeout=30) as r:
+        datos = r.read(limite + 1)
+    if len(datos) > limite:
+        raise ValueError(f"más de {limite >> 20} MB: no se descarga")
+    return datos if binario else datos.decode("utf-8", "replace")
+
+
+def _q(**kw) -> str:
+    return urllib.parse.urlencode(kw)
+
+
+def genero_desde_materias(materias: list[str]) -> str:
+    """Género (clave de GENEROS) que mejor casa con las materias de la obra; 'otro' si ninguna puntúa."""
+    t = " " + _norm(" ; ".join(materias)) + " "
+    p = {g: len(r.findall(t)) for g, r in _GEN_RE.items()}
+    g = max(p, key=p.get)
+    return g if p[g] else "otro"
+
+
+def _item(fuente, id_, titulo, autores, anio, url, formato, licencia, materias, resumen=""):
+    materias = [m for m in dict.fromkeys(materias) if m][:12]
+    return {"fuente": fuente, "id": str(id_), "titulo": re.sub(r"\s+", " ", titulo or "").strip(), "autores": [a for a in autores if a][:4], "anio": anio, "url": url,
+            "formato": formato, "licencia": licencia, "materias": materias, "genero": genero_desde_materias(materias + [titulo or ""]), "resumen": resumen[:300]}
+
+
+def _gutenberg(q, n):
+    for b in json.loads(_get("https://gutendex.com/books?" + _q(search=q)))["results"][:n]:
+        f = b.get("formats", {})
+        url = next((f[k] for k in f if k.startswith("application/epub+zip")), None)
+        if url and not b.get("copyright"):
+            yield _item("gutenberg", b["id"], b["title"], [a["name"] for a in b.get("authors", [])], None, url, "epub", "Dominio público", b.get("subjects", []) + b.get("bookshelves", []))
+
+
+def _arxiv(q, n):
+    raiz = ET.fromstring(_get("https://export.arxiv.org/api/query?" + _q(search_query="all:" + q, max_results=n)))
+    for e in raiz.findall(_ATOM + "entry"):
+        pdf = next((l.get("href") for l in e.findall(_ATOM + "link") if l.get("title") == "pdf"), None)
+        if pdf:
+            yield _item("arxiv", e.findtext(_ATOM + "id", ""), e.findtext(_ATOM + "title", ""), [a.findtext(_ATOM + "name") for a in e.findall(_ATOM + "author")],
+                        int((e.findtext(_ATOM + "published") or "0")[:4]) or None, pdf.replace("http://", "https://"), "pdf", "arXiv (descarga personal)",
+                        [c.get("term") for c in e.findall(_ATOM + "category")], e.findtext(_ATOM + "summary", ""))
+
+
+def _openalex(q, n):
+    r = json.loads(_get("https://api.openalex.org/works?" + _q(search=q, filter="open_access.is_oa:true", **{"per-page": n * 2})))
+    for w in r["results"]:
+        loc = w.get("best_oa_location") or {}
+        if loc.get("pdf_url"):
+            yield _item("openalex", w["id"], w.get("display_name"), [a["author"]["display_name"] for a in w.get("authorships", [])], w.get("publication_year"), loc["pdf_url"], "pdf",
+                        loc.get("license") or "acceso abierto", [c["display_name"] for c in w.get("concepts", [])][:8])
+
+
+def _archive(q, n):
+    r = json.loads(_get("https://archive.org/advancedsearch.php?" + _q(q=f"({q}) AND mediatype:texts AND NOT access-restricted-item:true", fl="identifier,title,creator,year,subject,licenseurl", rows=n * 3, output="json")))
+    for d in r["response"]["docs"]:
+        anio = int(str(d.get("year") or 0)[:4] or 0)
+        lic = str(d.get("licenseurl") or "")
+        if re.search(r"creativecommons|publicdomain", lic) or 0 < anio <= 1929:     # licencia abierta (CC / dominio público) o publicada hasta 1929
+            sub = d.get("subject", [])
+            yield _item("archive", d["identifier"], d.get("title", ""), [d["creator"]] if isinstance(d.get("creator"), str) else d.get("creator", []), anio or None, "", "pdf",
+                        lic or "Dominio público (≤ 1929)", [sub] if isinstance(sub, str) else sub)
+
+
+_BUSCADORES = {"gutenberg": _gutenberg, "arxiv": _arxiv, "openalex": _openalex, "archive": _archive}
+
+
+def buscar(consulta: str, n: int = 6, fuentes=FUENTES) -> dict:
+    """{'resultados': [item…], 'errores': {fuente: motivo}}: n por fuente; una fuente caída no impide las demás."""
+    res, err = [], {}
+    for f in fuentes:
+        try:
+            res += list(_BUSCADORES[f](consulta, n))[:n]
+        except Exception as e:
+            err[f] = f"{type(e).__name__}: {e}"
+    return {"resultados": res, "errores": err}
+
+
+def materias_de(titulo: str, autor: str = "") -> list[str]:
+    """Materias de un título según Open Library (para clasificar algo que ya tienes). [] si no lo encuentra."""
+    r = json.loads(_get("https://openlibrary.org/search.json?" + _q(title=titulo, author=autor, limit=3, fields="title,subject")))
+    return [s for d in r.get("docs", [])[:3] for s in d.get("subject", [])[:15]]
+
+
+def _url_archive(identificador: str) -> str:
+    """Archivo PDF/EPUB abierto de una obra de Internet Archive."""
+    files = json.loads(_get(f"https://archive.org/metadata/{urllib.parse.quote(identificador)}"))["files"]
+    for ext in ("epub", "pdf"):
+        for f in files:
+            if f["name"].lower().endswith("." + ext) and "ncrypted" not in f.get("format", ""):      # fuera los PDF cifrados (préstamo)
+                return f"https://archive.org/download/{urllib.parse.quote(identificador)}/{urllib.parse.quote(f['name'])}"
+    raise ValueError("la obra no tiene PDF ni EPUB descargable")
+
+
+def traer(item: dict, carpeta: Path = CARPETA) -> dict:
+    """Descarga la obra, comprueba que es un PDF/EPUB de verdad y la importa clasificada con el género de sus materias. Devuelve el resultado de importar()."""
+    url = item["url"] or _url_archive(item["id"])
+    datos = _get(url, binario=True)
+    ext = "pdf" if datos[:5] == b"%PDF-" else "epub" if datos[:2] == b"PK" else ""
+    if not ext:
+        raise ValueError("lo descargado no es un PDF ni un EPUB")
+    tmp = Path(carpeta) / "telescopio"
+    tmp.mkdir(parents=True, exist_ok=True)
+    f = tmp / (re.sub(r"[^A-Za-z0-9._-]+", "_", f"{item['fuente']}_{item['id'].rsplit('/', 1)[-1]}")[:60] + "." + ext)
+    f.write_bytes(datos)
+    gen = item.get("genero") if item.get("genero") in GENEROS else None
+    r = importar([{"ruta": f, "titulo": item["titulo"][:80], "genero": gen, "tipo": "articulo" if item["fuente"] in ("arxiv", "openalex") else "libro",
+                   "etiquetas": ", ".join(item.get("materias", [])[:6] + [item["fuente"]])}], Path(carpeta))[0]
+    f.unlink(missing_ok=True)                                              # la copia buena ya está en biblioteca/
+    return r
 :::END
 :::BEGIN py/cuaderno/__init__.py|text
 """Mini-cuaderno del visor: ejemplos ejecutables por celdas (ejemplos.py) y el ejecutor (ejecutor.py)."""
@@ -30784,6 +31043,36 @@ def test_demografia():
     ult = l["poblaciones"].iloc[-1].to_numpy()
     assert np.allclose(ult / ult.sum(), l["estructura_estable"], atol=1e-3)
 :::END
+:::BEGIN py/tests/test_almacenaje.py|text
+"""Almacenaje: reparto por galaxia y tipo, y diferencia entre Â«discoÂ» y Â«githubÂ» (.gitignore)."""
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conocimiento import almacenaje as a
+
+
+def test_grupo_por_ruta():
+    assert a.grupo("conocimiento/biblioteca/libros/historia/x.pdf") == "libros"
+    assert a.grupo("conocimiento/biblioteca/raro/x.pdf") == "otros"
+    assert a.grupo("py/arbol_estadistica/modelos/glm.py") == "codigo"
+    assert a.grupo("py/visor/demos.js") == "demos" and a.grupo("teoria/glm.md") == "conceptos"
+    assert a.grupo("visor_arbol.html") == "visor" and a.grupo("LEEME.txt") == "otros"
+
+
+def test_medir_disco_y_github(tmp_path):
+    (tmp_path / "py").mkdir(); (tmp_path / "py" / "a.py").write_bytes(b"x" * 100)
+    (tmp_path / "libro.pdf").write_bytes(b"y" * 1000)
+    (tmp_path / ".gitignore").write_bytes(b"*.pdf\n")
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    r = a.medir(tmp_path)
+    d = {g["id"]: g["bytes"] for g in r["disco"]["grupos"]}
+    assert d["codigo"] == 100 and d["otros"] == 1000 + len("*.pdf\n")
+    assert {t["id"] for t in r["disco"]["tipos"]} >= {"py", "pdf"}
+    assert r["github"]["total"] == 100 + len("*.pdf\n")                # el pdf ignorado no sube
+    assert r["github"]["total"] < r["disco"]["total"] and r["limite"] == 1 << 30
+:::END
 :::BEGIN py/tests/test_aprender.py|text
 """Guía de aprendizaje (py/aprender/*.json): estructura y enlaces válidos. El visor la muestra en la pestaña «Aprender»."""
 import importlib
@@ -33743,6 +34032,65 @@ def test_ajuste_no_respuesta_corrige_sesgo():
     sin = R.y.mean(); con = np.average(R.y, weights=R.peso_ajustado)
     assert abs(con - d.y.mean()) < 0.1 < abs(sin - d.y.mean()) and r["tasa_respuesta"] == pytest.approx(0.5, abs=0.02) and r["avisos"]
 :::END
+:::BEGIN py/tests/test_telescopio.py|text
+"""Telescopio sin red: las respuestas de las fuentes se simulan sustituyendo telescopio._get."""
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conocimiento import telescopio as t
+
+ARXIV = """<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>http://arxiv.org/abs/1</id><title>Bayesian regression</title><summary>x</summary>
+<published>2020-01-02T00:00:00Z</published><author><name>A. Gauss</name></author><category term="stat.ME"/>
+<link title="pdf" href="http://arxiv.org/pdf/1"/></entry></feed>"""
+RESP = {
+    "gutendex": {"results": [{"id": 7, "title": "Essai", "authors": [{"name": "Laplace"}], "subjects": ["Probabilities"], "formats": {"application/epub+zip": "https://g/7.epub"}, "copyright": False},
+                             {"id": 8, "title": "Con copyright", "formats": {"application/epub+zip": "https://g/8.epub"}, "copyright": True}]},
+    "arxiv": ARXIV,
+    "openalex": {"results": [{"id": "W1", "display_name": "Sin pdf", "best_oa_location": {}}, {"id": "W2", "display_name": "Con pdf", "publication_year": 2019,
+                 "best_oa_location": {"pdf_url": "https://x/a.pdf", "license": "cc-by"}, "concepts": [{"display_name": "Statistics"}], "authorships": []}]},
+    "archive.org/advancedsearch": {"response": {"docs": [{"identifier": "viejo", "title": "Old", "year": 1900}, {"identifier": "moderno", "title": "Prestado", "year": 2005},
+                                                           {"identifier": "cc", "title": "Abierto", "year": 2015, "licenseurl": "https://creativecommons.org/x"}]}},
+}
+
+
+def falso(url, binario=False, limite=0):
+    for k, v in RESP.items():
+        if k in url:
+            return v if isinstance(v, str) else json.dumps(v)
+    raise OSError("sin red")
+
+
+def test_buscar_filtra_lo_no_legal_y_tolera_fuentes_caidas(monkeypatch):
+    monkeypatch.setattr(t, "_get", falso)
+    r = t.buscar("probability")
+    por = {x["fuente"]: [y["id"] for y in r["resultados"] if y["fuente"] == x["fuente"]] for x in r["resultados"]}
+    assert por["gutenberg"] == ["7"]                                      # el de copyright, fuera
+    assert por["openalex"] == ["W2"]                                      # sin PDF abierto, fuera
+    assert sorted(por["archive"]) == ["cc", "viejo"]                      # solo licencia abierta o ≤ 1929
+    assert por["arxiv"] and next(x for x in r["resultados"] if x["fuente"] == "arxiv")["url"].startswith("https://")
+    assert r["errores"] == {} and "zzz" in t.buscar("x", fuentes=("zzz",))["errores"]       # una fuente que falla no tira las demás
+
+
+def test_genero_desde_materias():
+    assert t.genero_desde_materias(["Bayesian statistics", "Regression analysis"]) == "estadistica"
+    assert t.genero_desde_materias(["Rome -- History", "Ancient history"]) == "historia"
+    assert t.genero_desde_materias(["zzz qqq"]) == "otro"
+
+
+def test_get_solo_https():
+    with pytest.raises(ValueError):
+        t._get("http://ejemplo.com/a.pdf")
+
+
+def test_traer_rechaza_lo_que_no_es_pdf_ni_epub(monkeypatch, tmp_path):
+    monkeypatch.setattr(t, "_get", lambda *a, **k: b"<html>pago</html>")
+    with pytest.raises(ValueError, match="ni un EPUB"):
+        t.traer({"fuente": "arxiv", "id": "1", "url": "https://x/a.pdf", "titulo": "T"}, tmp_path)
+:::END
 :::BEGIN py/tests/test_visor.py|text
 import ast
 import importlib
@@ -35402,6 +35750,75 @@ D._estad = {tcdf: tcdf, tinv: tinv, Phi: Phi, colaNormal: colaNormal, potenciaT:
 return D;
 })();
 :::END
+:::BEGIN py/visor/eclipses.js|text
+/* eclipses.js — pestaña «Eclipses»: el Sol es el límite de GitHub y cada galaxia / tipo de archivo es una luna que lo eclipsa.
+   El área de cada luna es proporcional a lo que ocupa (radio = R·√(bytes/límite)), así que el Sol queda tapado en la misma proporción que el repositorio está lleno.
+   Canvas 2D sin librerías. API: crearEclipses({canvas, alPasar(id|null)}) -> {medir, mostrar, ocultar, datos(items, limite), resaltar(id|null)}
+   items = [{id, nombre, bytes, color:[r,g,b]}] */
+(function () {
+'use strict';
+window.crearEclipses = function (o) {
+  var cv = o.canvas, ctx = cv.getContext('2d'), W = 800, H = 460, DPR = 1, vivo = false, raf = 0, tPrev = 0, t = 0;
+  var lunas = [], limite = 1, resal = null, mx = -1, my = -1, estrellas = [];
+  for (var i = 0, a = 7; i < 220; i++) { a = (a * 16807) % 2147483647; var x = a / 2147483647; a = (a * 16807) % 2147483647; var y = a / 2147483647; estrellas.push([x, y, .5 + 1.4 * x * y]); }
+
+  function geom() { return {cx: W * .5, cy: H * .5, R: Math.min(W * .24, H * .36)}; }
+  function posicion(l, g) {                     /* cada luna cruza el Sol por su propio carril, con su propia velocidad y fase */
+    var rr = g.R * l.k, amp = g.R + rr * .9;
+    return {x: g.cx + Math.sin(t * l.w + l.fase) * amp, y: g.cy + l.carril * g.R * 1.05, r: rr};
+  }
+  function dibujar() {
+    var g = geom(), cx = g.cx, cy = g.cy, R = g.R;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.fillStyle = '#02030a'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fff'; estrellas.forEach(function (e) { ctx.globalAlpha = .12 + .5 * e[2] / 2; ctx.fillRect(e[0] * W, e[1] * H, e[2], e[2]); }); ctx.globalAlpha = 1;
+    var lleno = lunas.reduce(function (s, l) { return s + l.k * l.k; }, 0), brillo = Math.max(.25, 1 - Math.min(1, lleno) * .55);   /* el Sol se apaga un poco cuanto más lleno */
+    ctx.globalCompositeOperation = 'lighter';                                                             /* corona */
+    var co = ctx.createRadialGradient(cx, cy, R * .9, cx, cy, R * 2.1); co.addColorStop(0, 'rgba(255,170,70,' + (.45 * brillo) + ')'); co.addColorStop(.4, 'rgba(255,120,40,' + (.12 * brillo) + ')'); co.addColorStop(1, 'rgba(255,100,30,0)');
+    ctx.fillStyle = co; ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+    var so = ctx.createRadialGradient(cx, cy, 0, cx, cy, R); so.addColorStop(0, '#fff6d8'); so.addColorStop(.7, '#ffc864'); so.addColorStop(1, '#ff9a3c');
+    ctx.globalAlpha = .55 + .45 * brillo; ctx.fillStyle = so; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 6.2832); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = 'rgba(255,220,150,.55)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 6.2832); ctx.stroke();
+    lunas.forEach(function (l) {                                                                                 /* pequeñas debajo, grandes encima no: las pequeñas arriba para verlas */
+      var p = posicion(l, g), c = l.color.join(','), hot = resal === l.id;
+      l.px = p.x; l.py = p.y; l.pr = p.r;
+      ctx.fillStyle = hot ? 'rgba(18,16,26,.97)' : 'rgba(6,7,14,.94)'; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.2832); ctx.fill();
+      ctx.fillStyle = 'rgba(' + c + ',' + (hot ? .3 : .14) + ')'; ctx.fill();
+      ctx.strokeStyle = 'rgba(' + c + ',' + (hot ? 1 : .8) + ')'; ctx.lineWidth = hot ? 2.6 : 1.5; ctx.stroke();
+      if (p.r > 22 || hot) { ctx.fillStyle = 'rgba(235,240,255,.95)'; ctx.font = (hot ? 13 : 11) + 'px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(l.nombre, p.x, p.y + 4); }
+    });
+  }
+  function bucle(ts) {
+    if (!vivo) return; t += Math.min(.05, (ts - tPrev) / 1000 || 0); tPrev = ts; dibujar(); raf = requestAnimationFrame(bucle);
+  }
+  function medir() {
+    var r = cv.getBoundingClientRect(); if (!r.width) return; DPR = Math.min(2, window.devicePixelRatio || 1);
+    W = r.width; H = r.height; cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR); dibujar();
+  }
+  function bajo(e) {                                                                                             /* luna bajo el ratón (la más pequeña si se solapan) */
+    var r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, mejor = null;
+    lunas.forEach(function (l) { if (Math.hypot(x - l.px, y - l.py) <= l.pr && (!mejor || l.pr < mejor.pr)) mejor = l; });
+    return mejor;
+  }
+  cv.addEventListener('mousemove', function (e) { var l = bajo(e), id = l ? l.id : null; if (id !== resal) { resal = id; if (o.alPasar) o.alPasar(id); } });
+  cv.addEventListener('mouseleave', function () { if (resal !== null) { resal = null; if (o.alPasar) o.alPasar(null); } });
+  return {
+    medir: medir,
+    mostrar: function () { medir(); if (!vivo) { vivo = true; tPrev = performance.now(); raf = requestAnimationFrame(bucle); } },
+    ocultar: function () { vivo = false; cancelAnimationFrame(raf); },
+    resaltar: function (id) { resal = id; },
+    datos: function (items, lim) {
+      limite = lim || 1; var n = items.length;
+      lunas = items.map(function (it, i) {
+        var k = Math.min(1.5, Math.sqrt(it.bytes / limite));
+        return {id: it.id, nombre: it.nombre, color: it.color, k: Math.max(.035, k), w: .35 + .5 * ((i * 37) % 11) / 11, fase: i * 2.399, carril: n > 1 ? (i / (n - 1) - .5) * 1.5 : 0};
+      });
+      dibujar();
+    }
+  };
+};
+})();
+:::END
 :::BEGIN py/visor/mapa3d.js|text
 /* mapa3d.js — mapa 3D del árbol de la estadística.
    Canvas 2D con proyección en perspectiva escrita a mano: sin librerías, sin WebGL, sin internet.
@@ -36272,6 +36689,18 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 .caps{margin:0;padding:0;list-style:none;display:grid;gap:4px} .caps .btn{width:100%;text-align:left;white-space:normal;line-height:1.35}
 .biblioteca{min-height:0;overflow:auto;padding:12px 16px 40px;background:#02030a;color:#dfe6f5;display:flex;flex-direction:column;align-items:center;gap:10px}
 .biblioteca[hidden]{display:none} .app.modo-biblioteca .cuerpo{display:none}
+.eclipses[hidden]{display:none} .app.modo-eclipses .cuerpo{display:none}
+.eclipses{min-height:0;overflow:auto;padding:12px 16px 40px;background:#02030a;color:#dfe6f5;display:flex;flex-direction:column;align-items:center;gap:10px}
+.ecl-lienzo{width:100%;max-width:980px;height:min(46vh,430px);min-height:240px;flex:none} #eclipses-cv{width:100%;height:100%;display:block;border-radius:12px}
+.ecl-barra{width:100%;max-width:980px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ecl-barra .btn[aria-pressed=true]{outline:2px solid var(--accent)} .ecl-nota{color:#8ea0c0;font-size:12.5px}
+.ecl-lista{width:100%;max-width:980px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:6px 14px}
+.ecl-fila{display:grid;grid-template-columns:12px 1fr auto;gap:8px;align-items:center;font-size:12.5px;padding:3px 6px;border-radius:6px} .ecl-fila.hot{background:#121a33}
+.ecl-pto{width:10px;height:10px;border-radius:50%} .ecl-pct{color:#8ea0c0}
+.telescopio[hidden]{display:none} .app.modo-telescopio .cuerpo{display:none}
+.telescopio{min-height:0;overflow:auto;padding:12px 16px 40px;background:#02030a;color:#dfe6f5;display:flex;flex-direction:column;align-items:center;gap:10px}
+.tel-lista{width:100%;max-width:1040px;display:flex;flex-direction:column;gap:8px} .tel-card{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:10px 12px;border:1px solid #1c2646;border-radius:10px;background:#0b1224}
+.tel-card b{font-size:14px} .tel-meta{color:#8ea0c0;font-size:12.5px;grid-column:1} .tel-card .btn{grid-row:1/3;grid-column:2;align-self:center}
 .bib-barra{width:100%;max-width:1040px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .bib-barra input,.bib-barra select,.bib-card select,.bib-card input[type=text]{min-width:0;padding:6px 9px;border:1px solid #2a3558;border-radius:7px;background:#0b1224;color:#e6ecfa;font:inherit;font-size:12.5px}
 .bib-barra [hidden],.imp-resumen [hidden]{display:none!important}
@@ -36349,6 +36778,8 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
       <button class="pest" id="pestUniverso" role="tab" type="button" aria-selected="true" title="El universo: todo tu conocimiento">🌌 Universo</button>
       <button class="pest" id="pestImportar" role="tab" type="button" aria-selected="false" title="Importar archivos: un agujero negro que los clasifica">⚫ Importar</button>
       <button class="pest" id="pestBiblioteca" role="tab" type="button" aria-selected="false" title="El observatorio: lo que has importado; edita, reclasifica o borra">🔭 Observatorio</button>
+      <button class="pest" id="pestEclipses" role="tab" type="button" aria-selected="false" title="Almacenaje: lo que ocupa cada galaxia frente al límite de GitHub">🌘 Eclipses</button>
+      <button class="pest" id="pestTelescopio" role="tab" type="button" aria-selected="false" title="Telescopio: busca obras de acceso abierto y las trae a tu biblioteca, ya clasificadas">📡 Telescopio</button>
     </nav>
     <div class="search">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
@@ -36401,6 +36832,17 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
       <span id="bibN" class="bib-n"></span><button class="btn primario" id="bibAplicar" type="button" hidden>Actualizar el universo ahora</button></div>
     <div class="bib-lista" id="bibLista"></div>
   </section>
+  <section class="telescopio" id="telescopio" hidden aria-label="Telescopio">
+    <div class="imp-cabeza"><h2>Telescopio</h2><p>Busca libros de dominio público (Project Gutenberg, Internet Archive), artículos en abierto (arXiv, OpenAlex) y tráelos a tu biblioteca: se clasifican con las materias reales de la obra. Solo fuentes legales.</p></div>
+    <div class="bib-barra"><input id="telQ" type="search" placeholder="Título, autor o tema: «Laplace probability», «Keynes»…" aria-label="Buscar en el telescopio"><button class="btn primario" id="telBuscar" type="button">Buscar</button><span class="bib-n" id="telN" aria-live="polite"></span></div>
+    <div class="tel-lista" id="telLista"></div>
+  </section>
+  <section class="eclipses" id="eclipses" hidden aria-label="Eclipses">
+    <div class="imp-cabeza"><h2>Eclipses</h2><p>El Sol es el límite de GitHub (1 GB recomendado por repositorio); cada luna es una galaxia o un tipo de archivo y tapa el Sol en proporción a lo que ocupa.</p></div>
+    <div class="ecl-barra"><button class="btn" id="eclEsc" type="button" aria-pressed="false">En GitHub</button><button class="btn" id="eclVista" type="button" aria-pressed="false">Por tipo de archivo</button><span class="ecl-nota" id="eclNota" aria-live="polite"></span></div>
+    <div class="ecl-lienzo"><canvas id="eclipses-cv" aria-label="Sol eclipsado por lunas: una por galaxia o tipo de archivo"></canvas></div>
+    <div class="ecl-lista" id="eclLista"></div>
+  </section>
 </div>
 <div class="toast" id="toast" role="status"></div>
 <script type="application/json" id="datos">__DATOS__</script>
@@ -36408,6 +36850,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 <script>/*__MAPA3D_JS__*/</script>
 <script>/*__CEREBRO_JS__*/</script>
 <script>/*__AGUJERO_JS__*/</script>
+<script>/*__ECLIPSES_JS__*/</script>
 <script>
 (function () {
 'use strict';
@@ -37153,12 +37596,14 @@ function apPaso(r, i, cuerpo) {
 $('#aprenderBtn').onclick = function () { apMostrar(!apAbierta()); };
 /* ---------- pestañas: Universo (el mapa) · Importar (el agujero negro) · Aprender (la guía) ---------- */
 function impAbierta() { return $('.app').classList.contains('modo-importar'); }
+function telAbierta() { return $('.app').classList.contains('modo-telescopio'); }
+function eclAbierta() { return $('.app').classList.contains('modo-eclipses'); }
 function bibAbierta() { return $('.app').classList.contains('modo-biblioteca'); }
 function pintarPestanas() {
-  var u = !apAbierta() && !impAbierta() && !bibAbierta(); $('#pestUniverso').setAttribute('aria-selected', String(u));
+  var u = !apAbierta() && !impAbierta() && !bibAbierta() && !eclAbierta() && !telAbierta(); $('#pestTelescopio').setAttribute('aria-selected', String(telAbierta())); $('#pestEclipses').setAttribute('aria-selected', String(eclAbierta())); $('#pestUniverso').setAttribute('aria-selected', String(u));
   $('#pestImportar').setAttribute('aria-selected', String(impAbierta())); $('#pestBiblioteca').setAttribute('aria-selected', String(bibAbierta()));
 }
-function modoCerrar() { $('.app').classList.remove('modo-importar', 'modo-biblioteca'); $('#importar').hidden = true; $('#biblioteca').hidden = true; agujero.ocultar(); }
+function modoCerrar() { $('.app').classList.remove('modo-importar', 'modo-biblioteca', 'modo-eclipses', 'modo-telescopio'); $('#telescopio').hidden = true; $('#importar').hidden = true; $('#biblioteca').hidden = true; $('#eclipses').hidden = true; agujero.ocultar(); eclipses.ocultar(); }
 function impCerrar() { modoCerrar(); pintarPestanas(); }
 function pestana(p) {
   if (p === 'universo' && bibAbierta() && bib.sucio) { bibAplicar(); return; }          /* hay cambios en el observatorio: se actualiza el universo al volver a él */
@@ -37166,14 +37611,18 @@ function pestana(p) {
   modoCerrar();
   if (p === 'importar') { $('.app').classList.add('modo-importar'); $('#importar').hidden = false; agujero.mostrar(); impOpciones(); }
   else if (p === 'biblioteca') { $('.app').classList.add('modo-biblioteca'); $('#biblioteca').hidden = false; bibCargar(); }
+  else if (p === 'telescopio') { $('.app').classList.add('modo-telescopio'); $('#telescopio').hidden = false; $('#telQ').focus(); }
+  else if (p === 'eclipses') { $('.app').classList.add('modo-eclipses'); $('#eclipses').hidden = false; eclCargar(); }
   else pintar();
   pintarPestanas();
 }
 $('#pestUniverso').onclick = function () { pestana('universo'); };
 $('#pestImportar').onclick = function () { pestana('importar'); };
 $('#pestBiblioteca').onclick = function () { pestana('biblioteca'); };
+$('#pestEclipses').onclick = function () { pestana('eclipses'); };
+$('#pestTelescopio').onclick = function () { pestana('telescopio'); };
 var apMostrarOrig = apMostrar;
-apMostrar = function (on) { if (on && (impAbierta() || bibAbierta())) impCerrar(); apMostrarOrig(on); pintarPestanas(); };
+apMostrar = function (on) { if (on && (impAbierta() || bibAbierta() || eclAbierta() || telAbierta())) impCerrar(); apMostrarOrig(on); pintarPestanas(); };
 
 /* ---------- el importador: agujero negro + tarjetas de archivos con lo detectado, desplegables y progreso (el trabajo lo hace py/conocimiento/importar.py) ---------- */
 var imp = {archivos: [], opciones: null, ocupado: false, resultados: null, modo: 'copiar'};
@@ -37327,6 +37776,55 @@ async function impImportar() {
 
 /* ---------- Observatorio (la pestaña; internamente «biblioteca»): editar, reclasificar o borrar lo importado ---------- */
 var bib = {lista: null, sucio: false, filtro: '', gal: '', borrando: null};
+/* ---------- telescopio: busca obras abiertas y las trae a la biblioteca (py/conocimiento/telescopio.py) ---------- */
+var tel = {lista: []};
+async function telBuscar() {
+  var a = window.pywebview && window.pywebview.api, q = $('#telQ').value.trim();
+  if (!a || !a.telescopio_buscar) { $('#telN').textContent = 'El telescopio funciona desde la app («Árbol de la estadística» del Escritorio).'; return; }
+  if (!q) return; $('#telN').textContent = 'Buscando…'; $('#telBuscar').disabled = true;
+  var r = await a.telescopio_buscar(q); $('#telBuscar').disabled = false;
+  if (r.error) { $('#telN').textContent = r.error; return; }
+  tel.lista = r.resultados; var e = Object.keys(r.errores);
+  $('#telN').textContent = r.resultados.length + ' resultados' + (e.length ? ' · sin respuesta: ' + e.join(', ') : '');
+  $('#telLista').innerHTML = r.resultados.map(function (x, i) {
+    return '<div class="tel-card"><b>' + eclEsc(x.titulo) + '</b><span class="tel-meta">' + eclEsc(x.autores.join(', ')) + (x.anio ? ' · ' + x.anio : '') + ' · ' + eclEsc(x.fuente) + ' · ' + eclEsc(x.formato) + ' · ' + eclEsc(x.licencia) + ' · género: ' + eclEsc((IMP_GEN[x.genero] || x.genero)) + '</span>' +
+      '<button class="btn" type="button" data-i="' + i + '">Traer a mi biblioteca</button></div>'; }).join('');
+}
+var IMP_GEN = {historia: 'Historia', economia: 'Economía y finanzas', ensayo: 'Ensayo y filosofía', estadistica: 'Estadística y matemáticas', ciencia: 'Ciencia y divulgación', novela: 'Novela', biografia: 'Biografía', politica: 'Política y sociedad', tecnologia: 'Tecnología', psicologia: 'Psicología y salud', arte: 'Arte y cultura', otro: 'Otros'};
+$('#telBuscar').onclick = telBuscar;
+$('#telQ').addEventListener('keydown', function (e) { if (e.key === 'Enter') telBuscar(); });
+$('#telLista').addEventListener('click', async function (e) {
+  var b = e.target.closest('button[data-i]'); if (!b) return; var x = tel.lista[+b.dataset.i], a = window.pywebview.api;
+  b.disabled = true; b.textContent = 'Descargando…';
+  var r = await a.telescopio_traer(x);
+  if (r.estado === 'ok') { b.textContent = '✓ en ' + r.galaxia; bib.sucio = true; } else if (r.estado === 'duplicado') b.textContent = 'Ya la tenías'; else { b.disabled = false; b.textContent = 'Reintentar'; $('#telN').textContent = '✗ ' + (r.mensaje || r.error); }
+});
+/* ---------- eclipses: el Sol es el límite de GitHub; cada galaxia o tipo de archivo es una luna (py/conocimiento/almacenaje.py) ---------- */
+var ecl = {datos: null, github: false, tipos: false}, eclipses = crearEclipses({canvas: $('#eclipses-cv'), alPasar: function (id) { eclResaltar(id); }});
+var ECL_COL = [[90,160,255],[255,140,90],[120,210,140],[220,120,220],[240,210,90],[100,210,220],[230,110,130],[170,150,255],[160,200,90],[200,160,120]];
+if (window.ResizeObserver) new ResizeObserver(function () { eclipses.medir(); }).observe($('#eclipses-cv'));
+function eclMB(b) { return b >= 1073741824 ? (b / 1073741824).toFixed(2) + ' GB' : b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
+function eclEsc(s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
+function eclResaltar(id) { eclipses.resaltar(id); document.querySelectorAll('.ecl-fila').forEach(function (f) { f.classList.toggle('hot', f.dataset.id === id); }); }
+function eclRender() {
+  var d = ecl.datos, esc = ecl.github && d.github ? d.github : d.disco, lista = (ecl.tipos ? esc.tipos : esc.grupos).slice(0, 12), lim = d.limite;
+  var items = lista.map(function (x, i) { var c = !ecl.tipos && GAL[x.id] && GAL[x.id].color ? GAL[x.id].color : ECL_COL[i % ECL_COL.length]; return {id: x.id, nombre: x.nombre, bytes: x.bytes, color: c}; });
+  eclipses.datos(items, lim);
+  $('#eclLista').innerHTML = items.map(function (x) { return '<div class="ecl-fila" data-id="' + eclEsc(x.id) + '"><span class="ecl-pto" style="background:rgb(' + x.color.join(',') + ')"></span><span>' + eclEsc(x.nombre) + '</span><span class="ecl-pct">' + eclMB(x.bytes) + ' · ' + (100 * x.bytes / lim).toFixed(1) + ' %</span></div>'; }).join('');
+  document.querySelectorAll('.ecl-fila').forEach(function (f) { f.onmouseenter = function () { eclResaltar(f.dataset.id); }; f.onmouseleave = function () { eclResaltar(null); }; });
+  var aviso = esc.grandes.length ? ' · ⚠ ' + esc.grandes.length + ' archivo(s) de más de 100 MB: GitHub los rechaza' : '';
+  $('#eclNota').textContent = (ecl.github && d.github ? 'Lo que subiría a GitHub: ' : 'Todo lo que hay en disco: ') + eclMB(esc.total) + ' de ' + eclMB(lim) + ' (' + (100 * esc.total / lim).toFixed(1) + ' %)' + (esc.total > d.limite_duro ? ' · ⚠ pasa del tope duro de 5 GB' : '') + aviso;
+  $('#eclEsc').textContent = ecl.github ? 'En GitHub' : 'En disco'; $('#eclEsc').setAttribute('aria-pressed', String(ecl.github)); $('#eclEsc').hidden = !d.github;
+  $('#eclVista').textContent = ecl.tipos ? 'Por tipo de archivo' : 'Por galaxia'; $('#eclVista').setAttribute('aria-pressed', String(ecl.tipos));
+}
+async function eclCargar() {
+  var a = window.pywebview && window.pywebview.api;
+  if (!a || !a.almacenaje) { $('#eclNota').textContent = 'Los eclipses se miden desde la app («Árbol de la estadística» del Escritorio).'; return; }
+  var r = await a.almacenaje(); if (r.error) { $('#eclNota').textContent = r.error; return; }
+  ecl.datos = r; if (!r.github) ecl.github = false; eclRender(); eclipses.mostrar();
+}
+$('#eclEsc').onclick = function () { ecl.github = !ecl.github; eclRender(); };
+$('#eclVista').onclick = function () { ecl.tipos = !ecl.tipos; eclRender(); };
 async function bibCargar() {
   var a = impApi(), cont = $('#bibLista');
   if (!a || !a.biblioteca_listar) { cont.innerHTML = '<p class="imp-msg">El observatorio se gestiona desde la app («Árbol de la estadística» del Escritorio).</p>'; return; }
@@ -38628,6 +39126,8 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 5h. **Modo vivo (para ver los cambios mientras se trabaja):** el acceso directo con `--vivo` (`powershell -ExecutionPolicy Bypass -File herramientascceso_vivo.ps1 on|off` lo apunta a esta carpeta o lo restaura) recarga la app solo cuando se regenera `visor_arbol.html` y la coloca donde indique `.foco`. Para enseñar un cambio: `python herramientas/ver.py [destino]` regenera el visor y escribe el foco (`cerebro`, `galaxia:codigo|conceptos|demos|finanzas` o el nombre de una función/concepto/demo; el visor también lo admite como `#destino`).
 5i. **Pestañas e importador:** el visor tiene pestañas **🌌 Universo** (el mapa) y **⚫ Importar** (además de 🎓 Aprender). «Importar» es un agujero negro (`py/visor/agujero.js`): clic o soltar archivos abre el explorador de Windows (`Api.elegir_archivos`); `py/conocimiento/importar.py` analiza cada fichero (`clasificar`: galaxia finanzas/libros/notas, **género** —historia, economía, ensayo, estadística, ciencia, novela…—, subtema = tema del catálogo (palabras clave en inglés y español, peso del título) y solo para estadística/economía/tecnología —un libro de historia queda en «General»—, tipo, capítulos, vista previa, idioma, duplicado) y el panel muestra una tarjeta desplegable por archivo (barras con lo detectado: pulsar una fija el género o el subtema; desplegables de galaxia/género/tipo, título editable —los nombres largos se recortan con `titulo_corto`—, etiquetas, «Para todos»). Se importa archivo a archivo con progreso: `importar()` copia a `conocimiento/biblioteca/<galaxia>/<subtema>/` con nombre corto, guarda `biblioteca/metadatos.json` (hash: no duplica) y lo indexa; después `Api.actualizar_visor` regenera `visor_arbol.html` y el visor se recarga. `enriquecer()` completa capítulos/género/títulos de lo importado con versiones anteriores. Al final de la pestaña hay un desplegable «¿Cómo funciona la importación?». **Mapas con tu biblioteca** (`ramas_biblioteca` en `construir_visor.py`): Libros = una rama por género › un módulo por libro › un punto por capítulo (PDF: marcadores o tramos de 25 págs.; EPUB: su índice) con «Abrir en la página N»; los capítulos NO se dibujan hasta que pulsas el libro (`nivel()` en `mapa3d.js`; el panel del libro, `detalleLibro`, los lista siempre); el recuento de una rama son sus libros; Notas = una rama por subtema con un punto por documento; las demás galaxias reciben una rama «Documentos importados». Una galaxia sin nada no tiene mapa ni líneas (solo búsqueda). **Conceptos con vídeo:** los conceptos con fuentes de vídeo (Very Normal, Harvard, MIT, 3Blue1Brown…; `es_video`) llevan un ▶ en el mapa y la lista de vídeos arriba del panel (la cabecera ya no tiene filtros ni chips de ramas: solo buscador y perfil). **Observatorio (pestaña 🔭; internamente «biblioteca»: carpeta `conocimiento/biblioteca`, `biblioteca_*` en la API):** lista lo importado y deja editar título, galaxia, género, subtema, tipo y etiquetas (se guarda al momento; `importar.editar`), reclasificar (`reclasificar_uno`) y borrar (`borrar`: quita la copia de `biblioteca/`, nunca el original); lo que fijas se recuerda (`biblioteca/correcciones.json`: obras de nombre parecido se clasifican igual). El universo se regenera al volver a él. **Importar:** «Original: copiar/mover» (mover quita el original de su carpeta tras importar) y progreso real por páginas (`conocimiento.PROGRESO`, trabajo en segundo plano `Api.importar_archivos` + `estado_trabajo`). **Búsqueda con ámbito:** prefijos `libros:`, `código:`, `conceptos:`, `demos:`, `notas:`, `finanzas:`, `vídeo:` y géneros (`historia:`, `economía:`…), combinables; con la barra vacía salen los atajos; flechas/Enter sirven también para los resultados de tus carpetas y hay indicador de «buscando…».
 **Buscador:** la barra ocupa todo el espacio libre de la cabecera y cada resultado lleva un icono (`iconoNodo`/`iconoRes` en la plantilla): portada del libro (la del EPUB, la primera página del PDF con Poppler si está, o una generada por género; `importar.portada`, `DATA.portadas`), logo de Python (funciones y ejemplos), ∑ (conceptos; con ▶ si tienen vídeo), f(x) (demos), documento (guías) y la etiqueta del formato (PDF, DOCX, MD…). Al buscar, el universo reacciona: la galaxia con más coincidencias late y la cámara se acerca un poco (`cerebro.enfocar`), el resto se atenúa; los capítulos de un mismo libro se agrupan en un resultado. Los `*.pdf` y `*.epub` están en `.gitignore`. Por consola: `cd py && python -m conocimiento importar f.pdf [-g libros] [-G historia] [-s "Inferencia y contrastes"] [-t libro]`.
+5j. **Eclipses (almacenaje):** pestaña «🌘 Eclipses» (`py/visor/eclipses.js`, medición en `py/conocimiento/almacenaje.py`, API `Api.almacenaje`): el Sol es el límite de GitHub (1 GB recomendado, 5 GB tope, 100 MB por archivo) y cada galaxia o tipo de archivo es una luna cuya área es proporcional a lo que ocupa. Dos escenarios: «En disco» (todo) y «En GitHub» (`git ls-files -co --exclude-standard`: respeta `.gitignore`), y dos vistas (por galaxia / por tipo). Avisa de archivos >100 MB. Test: `tests/test_almacenaje.py`.
+5k. **Telescopio:** pestaña «📡 Telescopio» (`py/conocimiento/telescopio.py`, API `Api.telescopio_buscar/traer`, consola `python -m conocimiento telescopio <consulta> [--traer N]`). Busca **solo fuentes legales**: Project Gutenberg (Gutendex, dominio público), arXiv, OpenAlex (solo con PDF abierto) e Internet Archive (solo licencia CC/dominio público o publicado ≤ 1929). **No se añaden fuentes piratas (Anna's Archive, Z-Library, LibGen…) ni descargadores de ellas.** `traer` descarga (https, ≤ 200 MB, comprueba que es PDF/EPUB de verdad) y pasa por `importar.importar` con el género sacado de las materias de la obra (`genero_desde_materias`); `materias_de` consulta Open Library para clasificar un título que ya tienes. Tests sin red (`_get` se sustituye): `tests/test_telescopio.py`.
 6. **Conceptos:** `conceptos/catalogo.json` lista los conceptos del temario del máster y de Very Normal con las funciones que los implementan. Organización: `temas` (ramas del mapa, con color) > `areas` (módulos, con `ambito`) > conceptos (`area`, `prioridad` opcional, `area_fija` para que la actualización no lo mueva). La migración de 0.6.0 está en `herramientas/reorganizar_catalogo.py`.
    Si un concepto no tiene función (*hueco*), es que el árbol aún no lo cubre: impleméntalo (módulo + test), enlázalo en el catálogo (`funciones`) y regenera el visor.
    Al añadir una función nueva, enlázala al menos a un concepto (hay un test que lo exige).

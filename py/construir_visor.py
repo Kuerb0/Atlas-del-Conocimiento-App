@@ -590,8 +590,9 @@ def ensamblar(datos: dict) -> str:
     cerebro_js = (CODIGO / "visor" / "cerebro.js").read_text(encoding="utf-8").replace("</", "<\\/")
     icono = "data:image/png;base64," + base64.b64encode((CODIGO.parent / "assets" / "icono.png").read_bytes()).decode()
     agujero_js = (CODIGO / "visor" / "agujero.js").read_text(encoding="utf-8").replace("</", "<\\/")
+    eclipses_js = (CODIGO / "visor" / "eclipses.js").read_text(encoding="utf-8").replace("</", "<\\/")
     js = json.dumps(datos, ensure_ascii=False).replace("</", "<\\/")
-    return (plantilla.replace("/*__DEMOS_JS__*/", demos_js).replace("/*__MAPA3D_JS__*/", mapa_js).replace("/*__CEREBRO_JS__*/", cerebro_js).replace("/*__AGUJERO_JS__*/", agujero_js)
+    return (plantilla.replace("/*__DEMOS_JS__*/", demos_js).replace("/*__MAPA3D_JS__*/", mapa_js).replace("/*__CEREBRO_JS__*/", cerebro_js).replace("/*__AGUJERO_JS__*/", agujero_js).replace("/*__ECLIPSES_JS__*/", eclipses_js)
             .replace("__ICONO__", icono).replace("__DATOS__", js))
 
 

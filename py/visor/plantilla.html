@@ -288,6 +288,18 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 .caps{margin:0;padding:0;list-style:none;display:grid;gap:4px} .caps .btn{width:100%;text-align:left;white-space:normal;line-height:1.35}
 .biblioteca{min-height:0;overflow:auto;padding:12px 16px 40px;background:#02030a;color:#dfe6f5;display:flex;flex-direction:column;align-items:center;gap:10px}
 .biblioteca[hidden]{display:none} .app.modo-biblioteca .cuerpo{display:none}
+.eclipses[hidden]{display:none} .app.modo-eclipses .cuerpo{display:none}
+.eclipses{min-height:0;overflow:auto;padding:12px 16px 40px;background:#02030a;color:#dfe6f5;display:flex;flex-direction:column;align-items:center;gap:10px}
+.ecl-lienzo{width:100%;max-width:980px;height:min(46vh,430px);min-height:240px;flex:none} #eclipses-cv{width:100%;height:100%;display:block;border-radius:12px}
+.ecl-barra{width:100%;max-width:980px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ecl-barra .btn[aria-pressed=true]{outline:2px solid var(--accent)} .ecl-nota{color:#8ea0c0;font-size:12.5px}
+.ecl-lista{width:100%;max-width:980px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:6px 14px}
+.ecl-fila{display:grid;grid-template-columns:12px 1fr auto;gap:8px;align-items:center;font-size:12.5px;padding:3px 6px;border-radius:6px} .ecl-fila.hot{background:#121a33}
+.ecl-pto{width:10px;height:10px;border-radius:50%} .ecl-pct{color:#8ea0c0}
+.telescopio[hidden]{display:none} .app.modo-telescopio .cuerpo{display:none}
+.telescopio{min-height:0;overflow:auto;padding:12px 16px 40px;background:#02030a;color:#dfe6f5;display:flex;flex-direction:column;align-items:center;gap:10px}
+.tel-lista{width:100%;max-width:1040px;display:flex;flex-direction:column;gap:8px} .tel-card{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:10px 12px;border:1px solid #1c2646;border-radius:10px;background:#0b1224}
+.tel-card b{font-size:14px} .tel-meta{color:#8ea0c0;font-size:12.5px;grid-column:1} .tel-card .btn{grid-row:1/3;grid-column:2;align-self:center}
 .bib-barra{width:100%;max-width:1040px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .bib-barra input,.bib-barra select,.bib-card select,.bib-card input[type=text]{min-width:0;padding:6px 9px;border:1px solid #2a3558;border-radius:7px;background:#0b1224;color:#e6ecfa;font:inherit;font-size:12.5px}
 .bib-barra [hidden],.imp-resumen [hidden]{display:none!important}
@@ -365,6 +377,8 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
       <button class="pest" id="pestUniverso" role="tab" type="button" aria-selected="true" title="El universo: todo tu conocimiento">🌌 Universo</button>
       <button class="pest" id="pestImportar" role="tab" type="button" aria-selected="false" title="Importar archivos: un agujero negro que los clasifica">⚫ Importar</button>
       <button class="pest" id="pestBiblioteca" role="tab" type="button" aria-selected="false" title="El observatorio: lo que has importado; edita, reclasifica o borra">🔭 Observatorio</button>
+      <button class="pest" id="pestEclipses" role="tab" type="button" aria-selected="false" title="Almacenaje: lo que ocupa cada galaxia frente al límite de GitHub">🌘 Eclipses</button>
+      <button class="pest" id="pestTelescopio" role="tab" type="button" aria-selected="false" title="Telescopio: busca obras de acceso abierto y las trae a tu biblioteca, ya clasificadas">📡 Telescopio</button>
     </nav>
     <div class="search">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
@@ -417,6 +431,17 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
       <span id="bibN" class="bib-n"></span><button class="btn primario" id="bibAplicar" type="button" hidden>Actualizar el universo ahora</button></div>
     <div class="bib-lista" id="bibLista"></div>
   </section>
+  <section class="telescopio" id="telescopio" hidden aria-label="Telescopio">
+    <div class="imp-cabeza"><h2>Telescopio</h2><p>Busca libros de dominio público (Project Gutenberg, Internet Archive), artículos en abierto (arXiv, OpenAlex) y tráelos a tu biblioteca: se clasifican con las materias reales de la obra. Solo fuentes legales.</p></div>
+    <div class="bib-barra"><input id="telQ" type="search" placeholder="Título, autor o tema: «Laplace probability», «Keynes»…" aria-label="Buscar en el telescopio"><button class="btn primario" id="telBuscar" type="button">Buscar</button><span class="bib-n" id="telN" aria-live="polite"></span></div>
+    <div class="tel-lista" id="telLista"></div>
+  </section>
+  <section class="eclipses" id="eclipses" hidden aria-label="Eclipses">
+    <div class="imp-cabeza"><h2>Eclipses</h2><p>El Sol es el límite de GitHub (1 GB recomendado por repositorio); cada luna es una galaxia o un tipo de archivo y tapa el Sol en proporción a lo que ocupa.</p></div>
+    <div class="ecl-barra"><button class="btn" id="eclEsc" type="button" aria-pressed="false">En GitHub</button><button class="btn" id="eclVista" type="button" aria-pressed="false">Por tipo de archivo</button><span class="ecl-nota" id="eclNota" aria-live="polite"></span></div>
+    <div class="ecl-lienzo"><canvas id="eclipses-cv" aria-label="Sol eclipsado por lunas: una por galaxia o tipo de archivo"></canvas></div>
+    <div class="ecl-lista" id="eclLista"></div>
+  </section>
 </div>
 <div class="toast" id="toast" role="status"></div>
 <script type="application/json" id="datos">__DATOS__</script>
@@ -424,6 +449,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 <script>/*__MAPA3D_JS__*/</script>
 <script>/*__CEREBRO_JS__*/</script>
 <script>/*__AGUJERO_JS__*/</script>
+<script>/*__ECLIPSES_JS__*/</script>
 <script>
 (function () {
 'use strict';
@@ -1169,12 +1195,14 @@ function apPaso(r, i, cuerpo) {
 $('#aprenderBtn').onclick = function () { apMostrar(!apAbierta()); };
 /* ---------- pestañas: Universo (el mapa) · Importar (el agujero negro) · Aprender (la guía) ---------- */
 function impAbierta() { return $('.app').classList.contains('modo-importar'); }
+function telAbierta() { return $('.app').classList.contains('modo-telescopio'); }
+function eclAbierta() { return $('.app').classList.contains('modo-eclipses'); }
 function bibAbierta() { return $('.app').classList.contains('modo-biblioteca'); }
 function pintarPestanas() {
-  var u = !apAbierta() && !impAbierta() && !bibAbierta(); $('#pestUniverso').setAttribute('aria-selected', String(u));
+  var u = !apAbierta() && !impAbierta() && !bibAbierta() && !eclAbierta() && !telAbierta(); $('#pestTelescopio').setAttribute('aria-selected', String(telAbierta())); $('#pestEclipses').setAttribute('aria-selected', String(eclAbierta())); $('#pestUniverso').setAttribute('aria-selected', String(u));
   $('#pestImportar').setAttribute('aria-selected', String(impAbierta())); $('#pestBiblioteca').setAttribute('aria-selected', String(bibAbierta()));
 }
-function modoCerrar() { $('.app').classList.remove('modo-importar', 'modo-biblioteca'); $('#importar').hidden = true; $('#biblioteca').hidden = true; agujero.ocultar(); }
+function modoCerrar() { $('.app').classList.remove('modo-importar', 'modo-biblioteca', 'modo-eclipses', 'modo-telescopio'); $('#telescopio').hidden = true; $('#importar').hidden = true; $('#biblioteca').hidden = true; $('#eclipses').hidden = true; agujero.ocultar(); eclipses.ocultar(); }
 function impCerrar() { modoCerrar(); pintarPestanas(); }
 function pestana(p) {
   if (p === 'universo' && bibAbierta() && bib.sucio) { bibAplicar(); return; }          /* hay cambios en el observatorio: se actualiza el universo al volver a él */
@@ -1182,14 +1210,18 @@ function pestana(p) {
   modoCerrar();
   if (p === 'importar') { $('.app').classList.add('modo-importar'); $('#importar').hidden = false; agujero.mostrar(); impOpciones(); }
   else if (p === 'biblioteca') { $('.app').classList.add('modo-biblioteca'); $('#biblioteca').hidden = false; bibCargar(); }
+  else if (p === 'telescopio') { $('.app').classList.add('modo-telescopio'); $('#telescopio').hidden = false; $('#telQ').focus(); }
+  else if (p === 'eclipses') { $('.app').classList.add('modo-eclipses'); $('#eclipses').hidden = false; eclCargar(); }
   else pintar();
   pintarPestanas();
 }
 $('#pestUniverso').onclick = function () { pestana('universo'); };
 $('#pestImportar').onclick = function () { pestana('importar'); };
 $('#pestBiblioteca').onclick = function () { pestana('biblioteca'); };
+$('#pestEclipses').onclick = function () { pestana('eclipses'); };
+$('#pestTelescopio').onclick = function () { pestana('telescopio'); };
 var apMostrarOrig = apMostrar;
-apMostrar = function (on) { if (on && (impAbierta() || bibAbierta())) impCerrar(); apMostrarOrig(on); pintarPestanas(); };
+apMostrar = function (on) { if (on && (impAbierta() || bibAbierta() || eclAbierta() || telAbierta())) impCerrar(); apMostrarOrig(on); pintarPestanas(); };
 
 /* ---------- el importador: agujero negro + tarjetas de archivos con lo detectado, desplegables y progreso (el trabajo lo hace py/conocimiento/importar.py) ---------- */
 var imp = {archivos: [], opciones: null, ocupado: false, resultados: null, modo: 'copiar'};
@@ -1343,6 +1375,55 @@ async function impImportar() {
 
 /* ---------- Observatorio (la pestaña; internamente «biblioteca»): editar, reclasificar o borrar lo importado ---------- */
 var bib = {lista: null, sucio: false, filtro: '', gal: '', borrando: null};
+/* ---------- telescopio: busca obras abiertas y las trae a la biblioteca (py/conocimiento/telescopio.py) ---------- */
+var tel = {lista: []};
+async function telBuscar() {
+  var a = window.pywebview && window.pywebview.api, q = $('#telQ').value.trim();
+  if (!a || !a.telescopio_buscar) { $('#telN').textContent = 'El telescopio funciona desde la app («Árbol de la estadística» del Escritorio).'; return; }
+  if (!q) return; $('#telN').textContent = 'Buscando…'; $('#telBuscar').disabled = true;
+  var r = await a.telescopio_buscar(q); $('#telBuscar').disabled = false;
+  if (r.error) { $('#telN').textContent = r.error; return; }
+  tel.lista = r.resultados; var e = Object.keys(r.errores);
+  $('#telN').textContent = r.resultados.length + ' resultados' + (e.length ? ' · sin respuesta: ' + e.join(', ') : '');
+  $('#telLista').innerHTML = r.resultados.map(function (x, i) {
+    return '<div class="tel-card"><b>' + eclEsc(x.titulo) + '</b><span class="tel-meta">' + eclEsc(x.autores.join(', ')) + (x.anio ? ' · ' + x.anio : '') + ' · ' + eclEsc(x.fuente) + ' · ' + eclEsc(x.formato) + ' · ' + eclEsc(x.licencia) + ' · género: ' + eclEsc((IMP_GEN[x.genero] || x.genero)) + '</span>' +
+      '<button class="btn" type="button" data-i="' + i + '">Traer a mi biblioteca</button></div>'; }).join('');
+}
+var IMP_GEN = {historia: 'Historia', economia: 'Economía y finanzas', ensayo: 'Ensayo y filosofía', estadistica: 'Estadística y matemáticas', ciencia: 'Ciencia y divulgación', novela: 'Novela', biografia: 'Biografía', politica: 'Política y sociedad', tecnologia: 'Tecnología', psicologia: 'Psicología y salud', arte: 'Arte y cultura', otro: 'Otros'};
+$('#telBuscar').onclick = telBuscar;
+$('#telQ').addEventListener('keydown', function (e) { if (e.key === 'Enter') telBuscar(); });
+$('#telLista').addEventListener('click', async function (e) {
+  var b = e.target.closest('button[data-i]'); if (!b) return; var x = tel.lista[+b.dataset.i], a = window.pywebview.api;
+  b.disabled = true; b.textContent = 'Descargando…';
+  var r = await a.telescopio_traer(x);
+  if (r.estado === 'ok') { b.textContent = '✓ en ' + r.galaxia; bib.sucio = true; } else if (r.estado === 'duplicado') b.textContent = 'Ya la tenías'; else { b.disabled = false; b.textContent = 'Reintentar'; $('#telN').textContent = '✗ ' + (r.mensaje || r.error); }
+});
+/* ---------- eclipses: el Sol es el límite de GitHub; cada galaxia o tipo de archivo es una luna (py/conocimiento/almacenaje.py) ---------- */
+var ecl = {datos: null, github: false, tipos: false}, eclipses = crearEclipses({canvas: $('#eclipses-cv'), alPasar: function (id) { eclResaltar(id); }});
+var ECL_COL = [[90,160,255],[255,140,90],[120,210,140],[220,120,220],[240,210,90],[100,210,220],[230,110,130],[170,150,255],[160,200,90],[200,160,120]];
+if (window.ResizeObserver) new ResizeObserver(function () { eclipses.medir(); }).observe($('#eclipses-cv'));
+function eclMB(b) { return b >= 1073741824 ? (b / 1073741824).toFixed(2) + ' GB' : b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
+function eclEsc(s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
+function eclResaltar(id) { eclipses.resaltar(id); document.querySelectorAll('.ecl-fila').forEach(function (f) { f.classList.toggle('hot', f.dataset.id === id); }); }
+function eclRender() {
+  var d = ecl.datos, esc = ecl.github && d.github ? d.github : d.disco, lista = (ecl.tipos ? esc.tipos : esc.grupos).slice(0, 12), lim = d.limite;
+  var items = lista.map(function (x, i) { var c = !ecl.tipos && GAL[x.id] && GAL[x.id].color ? GAL[x.id].color : ECL_COL[i % ECL_COL.length]; return {id: x.id, nombre: x.nombre, bytes: x.bytes, color: c}; });
+  eclipses.datos(items, lim);
+  $('#eclLista').innerHTML = items.map(function (x) { return '<div class="ecl-fila" data-id="' + eclEsc(x.id) + '"><span class="ecl-pto" style="background:rgb(' + x.color.join(',') + ')"></span><span>' + eclEsc(x.nombre) + '</span><span class="ecl-pct">' + eclMB(x.bytes) + ' · ' + (100 * x.bytes / lim).toFixed(1) + ' %</span></div>'; }).join('');
+  document.querySelectorAll('.ecl-fila').forEach(function (f) { f.onmouseenter = function () { eclResaltar(f.dataset.id); }; f.onmouseleave = function () { eclResaltar(null); }; });
+  var aviso = esc.grandes.length ? ' · ⚠ ' + esc.grandes.length + ' archivo(s) de más de 100 MB: GitHub los rechaza' : '';
+  $('#eclNota').textContent = (ecl.github && d.github ? 'Lo que subiría a GitHub: ' : 'Todo lo que hay en disco: ') + eclMB(esc.total) + ' de ' + eclMB(lim) + ' (' + (100 * esc.total / lim).toFixed(1) + ' %)' + (esc.total > d.limite_duro ? ' · ⚠ pasa del tope duro de 5 GB' : '') + aviso;
+  $('#eclEsc').textContent = ecl.github ? 'En GitHub' : 'En disco'; $('#eclEsc').setAttribute('aria-pressed', String(ecl.github)); $('#eclEsc').hidden = !d.github;
+  $('#eclVista').textContent = ecl.tipos ? 'Por tipo de archivo' : 'Por galaxia'; $('#eclVista').setAttribute('aria-pressed', String(ecl.tipos));
+}
+async function eclCargar() {
+  var a = window.pywebview && window.pywebview.api;
+  if (!a || !a.almacenaje) { $('#eclNota').textContent = 'Los eclipses se miden desde la app («Árbol de la estadística» del Escritorio).'; return; }
+  var r = await a.almacenaje(); if (r.error) { $('#eclNota').textContent = r.error; return; }
+  ecl.datos = r; if (!r.github) ecl.github = false; eclRender(); eclipses.mostrar();
+}
+$('#eclEsc').onclick = function () { ecl.github = !ecl.github; eclRender(); };
+$('#eclVista').onclick = function () { ecl.tipos = !ecl.tipos; eclRender(); };
 async function bibCargar() {
   var a = impApi(), cont = $('#bibLista');
   if (!a || !a.biblioteca_listar) { cont.innerHTML = '<p class="imp-msg">El observatorio se gestiona desde la app («Árbol de la estadística» del Escritorio).</p>'; return; }
