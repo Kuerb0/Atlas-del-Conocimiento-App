@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 0.19.0 - Instalador
+title Arbol de la estadistica 0.20.0 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
 set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=0.19.0"
+set "ARBOL_VERSION=0.20.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -486,7 +486,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-0.19.0
+0.20.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -553,6 +553,46 @@ class Api:
 
     def reiniciar(self, sesion):
         return self._c().reiniciar(str(sesion))
+
+    # ---- importador (pestaña «Importar»): ver py/conocimiento/importar.py ----
+    def opciones_importador(self):
+        try:
+            from conocimiento import importar
+            return importar.opciones()
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    def elegir_archivos(self):
+        """Abre el explorador de archivos de Windows (varios a la vez) y devuelve las rutas elegidas."""
+        try:
+            import webview
+            tipos = ("Documentos (*.pdf;*.epub;*.docx;*.md;*.txt)", "Todos los archivos (*.*)")
+            modo = webview.FileDialog.OPEN if hasattr(webview, "FileDialog") else webview.OPEN_DIALOG
+            r = webview.windows[0].create_file_dialog(modo, allow_multiple=True, file_types=tipos)
+            return [str(x) for x in (r or [])]
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    def clasificar_archivos(self, rutas):
+        try:
+            from conocimiento import importar
+            return [{"ruta": str(r), **importar.clasificar(str(r))} for r in rutas]
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    def importar_archivos(self, items):
+        try:
+            from conocimiento import importar
+            return importar.importar(list(items))
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    def resumen_biblioteca(self):
+        try:
+            from conocimiento import importar
+            return importar.resumen()
+        except Exception:
+            return {}
 
     def estado_conocimiento(self):
         """{colección: nº de ficheros indexados}, para rotular las galaxias del cerebro."""
@@ -701,6 +741,7 @@ Qué lee:
                                       con enlace a las funciones del árbol cuando existen)
   * teoria/*.md, CLAUDE.md, ejemplos/*.py -> rama "Guías y ejemplos"
   * DEMOS (aquí) + visor/demos.js   -> rama "Cómo funciona" (demos interactivas, sin internet)
+  * visor/agujero.js                 -> pestaña «Importar»: el agujero negro (clic = explorador de archivos; clasifica y guarda en la biblioteca)
   * visor/mapa3d.js                 -> mapa 3D del árbol (canvas, sin librerías): núcleo, ramas en órbita, hojas y enlaces
   * propiedades/*.json              -> fichas de propiedades de cada función (barras 0-10, perfiles de proyecto):
                                       propiedades.json (definiciones y perfiles), fichas.json (notas estimadas, pros y
@@ -1191,8 +1232,9 @@ def ensamblar(datos: dict) -> str:
     mapa_js = (CODIGO / "visor" / "mapa3d.js").read_text(encoding="utf-8").replace("</", "<\\/")
     cerebro_js = (CODIGO / "visor" / "cerebro.js").read_text(encoding="utf-8").replace("</", "<\\/")
     icono = "data:image/png;base64," + base64.b64encode((CODIGO.parent / "assets" / "icono.png").read_bytes()).decode()
+    agujero_js = (CODIGO / "visor" / "agujero.js").read_text(encoding="utf-8").replace("</", "<\\/")
     js = json.dumps(datos, ensure_ascii=False).replace("</", "<\\/")
-    return (plantilla.replace("/*__DEMOS_JS__*/", demos_js).replace("/*__MAPA3D_JS__*/", mapa_js).replace("/*__CEREBRO_JS__*/", cerebro_js)
+    return (plantilla.replace("/*__DEMOS_JS__*/", demos_js).replace("/*__MAPA3D_JS__*/", mapa_js).replace("/*__CEREBRO_JS__*/", cerebro_js).replace("/*__AGUJERO_JS__*/", agujero_js)
             .replace("__ICONO__", icono).replace("__DATOS__", js))
 
 
@@ -2559,7 +2601,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "0.19.0"
+version = "0.20.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3239,7 +3281,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "0.19.0"
+__version__ = "0.20.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -13768,12 +13810,17 @@ def cargar_fuentes(carpeta: Path = CARPETA) -> dict:
     return json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
 
 
-def _unidades(fuentes: dict):
+def _unidades(fuentes: dict, carpeta: Path = CARPETA):
     for f in sorted((CODIGO / "arbol_estadistica").rglob("*.py")):
         yield "codigo", f
     yield "conceptos", RAIZ / "conceptos" / "catalogo.json"
     for f in sorted((RAIZ / "teoria").glob("*.md")):
         yield "teoria", f
+    base = Path(carpeta) / "biblioteca"                       # lo importado con el importador: biblioteca/<galaxia>/<subtema>/fichero
+    if base.is_dir():
+        for f in sorted(base.rglob("*")):
+            if f.is_file() and f.suffix.lower() in EXT and f.relative_to(base).parts[0] != f.name:
+                yield f.relative_to(base).parts[0], f
     for col, carpetas in fuentes.items():
         for c in carpetas:
             if not Path(c).is_dir():
@@ -13784,12 +13831,12 @@ def _unidades(fuentes: dict):
                     yield col, f
 
 
-def indexar(db: Path = DB, fuentes: dict | None = None) -> dict:
+def indexar(db: Path = DB, fuentes: dict | None = None, carpeta: Path = CARPETA) -> dict:
     """Indexa lo nuevo o modificado y borra lo que ya no existe. Devuelve {'nuevos', 'iguales', 'borrados', 'sin_leer'}."""
-    fuentes = cargar_fuentes() if fuentes is None else fuentes
+    fuentes = cargar_fuentes(carpeta) if fuentes is None else fuentes
     con = _abrir(db)
     vistos, r = set(), {"nuevos": 0, "iguales": 0, "borrados": 0, "sin_leer": []}
-    for col, f in _unidades(fuentes):
+    for col, f in _unidades(fuentes, carpeta):
         if not f.exists():
             continue
         ruta, st = str(f), f.stat()
@@ -13846,7 +13893,19 @@ def buscar(consulta: str, coleccion: str | None = None, n: int = 10, db: Path = 
     else:
         filas = []
     con.close()
-    return [dict(zip(("coleccion", "titulo", "ubicacion", "ruta", "fragmento"), f)) for f in filas]
+    base = Path(db).parent / "biblioteca"
+    meta = json.loads((base / "metadatos.json").read_text(encoding="utf-8")) if (base / "metadatos.json").exists() else {}
+    out = []
+    for f in filas:
+        r = dict(zip(("coleccion", "titulo", "ubicacion", "ruta", "fragmento"), f))
+        try:
+            m = meta.get(Path(r["ruta"]).relative_to(base).as_posix())
+        except ValueError:
+            m = None
+        r.update(subtema=(m or {}).get("subtema", ""), tipo=(m or {}).get("tipo", ""), etiquetas=(m or {}).get("etiquetas", ""))
+        r["interno"] = m is None and (r["coleccion"] in ("codigo", "teoria") or r["ruta"].endswith("catalogo.json"))   # código, teoría y catálogo del propio árbol: no son ficheros que abrir
+        out.append(r)
+    return out
 
 
 def estado(db: Path = DB) -> list[tuple]:
@@ -13876,6 +13935,11 @@ ap = argparse.ArgumentParser(prog="conocimiento")
 sub = ap.add_subparsers(dest="orden", required=True)
 sub.add_parser("indexar", help="indexa lo nuevo o modificado")
 sub.add_parser("estado", help="qué hay indexado")
+i = sub.add_parser("importar", help="copia ficheros a la biblioteca, los clasifica y los indexa")
+i.add_argument("ficheros", nargs="+")
+i.add_argument("-g", "--galaxia", help="codigo | conceptos | demos | finanzas | libros | notas (por defecto, automática)")
+i.add_argument("-s", "--subtema", help="p. ej. «Inferencia y contrastes» (por defecto, automático)")
+i.add_argument("-t", "--tipo", help="libro | articulo | apuntes | nota | otro (por defecto, automático)")
 b = sub.add_parser("buscar", help="busca en todas las colecciones")
 b.add_argument("consulta", nargs="+")
 b.add_argument("-c", "--coleccion", help="codigo | conceptos | teoria | libros | finanzas | notas …")
@@ -13891,6 +13955,10 @@ elif a.orden == "estado":
     for col, nf, nt in estado():
         print(f"{col:12} {nf:5} ficheros {nt:8} trozos")
     print(f"fuentes propias: {CARPETA / 'fuentes.json'}")
+elif a.orden == "importar":
+    from .importar import importar
+    for r in importar([{"ruta": f, "galaxia": a.galaxia, "subtema": a.subtema, "tipo": a.tipo} for f in a.ficheros]):
+        print(f"{r['estado']:10} {r['nombre']}  ->  {r.get('galaxia', '')} › {r.get('subtema', '')} ({r.get('tipo', '')})  {r['mensaje']}")
 else:
     for i, x in enumerate(buscar(" ".join(a.consulta), a.coleccion, a.n), 1):
         print(f"{i:2}. [{x['coleccion']}] {x['titulo']}  {x['ubicacion']}\n    {x['fragmento'].replace(chr(10), ' ')}")
@@ -13901,6 +13969,184 @@ else:
   "finanzas": ["D:/Finanzas/apuntes"],
   "notas": ["D:/Notas"]
 }
+:::END
+:::BEGIN py/conocimiento/importar.py|text
+"""Importador: copia ficheros a `conocimiento/biblioteca/<galaxia>/<subtema>/`, los clasifica (galaxia, subtema, tipo) y los indexa para el buscador.
+
+Por defecto lo decide solo (`clasificar`); cualquier dato que pases (galaxia, subtema, tipo, etiquetas) manda sobre lo automático.
+Galaxia automática: finanzas si domina el vocabulario financiero; si no, libros (PDF/EPUB largos) o notas. Subtema automático: el tema del catálogo de conceptos
+(«Inferencia y contrastes», «Regresión y GLM»…) con más coincidencias. Los metadatos van en `biblioteca/metadatos.json` (ruta relativa -> datos).
+
+Uso: `python -m conocimiento importar f1.pdf f2.docx [-g libros] [-s "Inferencia y contrastes"] [-t libro]`.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import shutil
+import unicodedata
+from datetime import datetime
+from pathlib import Path
+
+from . import CARPETA, DB, EXT, RAIZ, _extraer, _norm, indexar
+
+GALAXIAS = {"codigo": "Código", "conceptos": "Conceptos", "demos": "Demos y guías", "finanzas": "Finanzas", "libros": "Libros", "notas": "Notas y enlaces"}
+TIPOS = {"libro": "Libro", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "otro": "Otro"}
+FINANZAS = re.compile(r"\b(bonos?|carteras?|rentabilidad|volatilidad|derivados?|opcion(?:es)?|futuros?|tipos? de interes|capm|markowitz|renta fija|renta variable|tesoreria|"
+                      r"solvencia|var|valoracion|acciones|mercados?|activos?|pasivos?|riesgo de credito|fiscalidad|impuestos?|bancari[oa]s?|swaps?|duracion|rating)\b")
+
+
+def _catalogo() -> dict:
+    return json.loads((RAIZ / "conceptos" / "catalogo.json").read_text(encoding="utf-8"))
+
+
+def _temas_con_frases() -> list[tuple[str, str, list[str]]]:
+    """[(id_tema, nombre_tema, frases normalizadas)] con el nombre y los sinónimos de cada concepto."""
+    cat = _catalogo()
+    area_tema = {a["id"]: a["tema"] for a in cat["areas"]}
+    frases: dict[str, set] = {}
+    for c in cat["conceptos"]:
+        tema = area_tema.get(c.get("area"))
+        if tema:
+            frases.setdefault(tema, set()).update(f for f in (_norm(x) for x in [c["nombre"], *c.get("sinonimos", [])]) if len(f) >= 5)
+    return [(t["id"], t["nombre"], sorted(frases.get(t["id"], []))) for t in cat["temas"]]
+
+
+def opciones() -> dict:
+    """Lo que ofrecen los desplegables: galaxias, tipos y subtemas (los temas del catálogo, las ramas de código y 'General')."""
+    ramas = sorted(p.name for p in (RAIZ / "py" / "arbol_estadistica").iterdir() if p.is_dir() and not p.name.startswith("_")) if (RAIZ / "py" / "arbol_estadistica").is_dir() else []
+    temas = [t["nombre"] for t in _catalogo()["temas"]]
+    return {"galaxias": [{"id": k, "nombre": v} for k, v in GALAXIAS.items()], "tipos": [{"id": k, "nombre": v} for k, v in TIPOS.items()],
+            "subtemas": {"codigo": ramas + ["General"], "conceptos": temas + ["General"], "demos": ["Demos", "Guías", "General"],
+                         "finanzas": ["Carteras y riesgo", "Renta fija", "Derivados", "Actuarial y seguros", "General"] + [t for t in temas if "inanz" in t],
+                         "libros": temas + ["General"], "notas": temas + ["General"]}}
+
+
+def _muestra(f: Path, max_pag: int = 12) -> tuple[str, int]:
+    """(texto del principio, nº de páginas o 0). Para un PDF solo lee las primeras páginas."""
+    if f.suffix.lower() == ".pdf":
+        try:
+            from pypdf import PdfReader
+            r = PdfReader(str(f))
+            return "\n".join((p.extract_text() or "") for p in r.pages[:max_pag]), len(r.pages)
+        except Exception:
+            return "", 0
+    try:
+        trozos = _extraer("importar", f) or []
+    except Exception:
+        return "", 0
+    return "\n".join(x for _, x, _ in trozos[:30])[:30000], 0
+
+
+def clasificar(ruta: str | Path) -> dict:
+    """Propone galaxia, subtema, tipo y título de un fichero, con el motivo. {'galaxia','subtema','tipo','titulo','motivo','paginas'}"""
+    f = Path(ruta)
+    texto, paginas = _muestra(f)
+    t = " " + _norm(texto[:40000]) + " "
+    nombre = _norm(re.sub(r"[_\-.]+", " ", f.stem))
+    puntos = {}
+    for tid, tnombre, frases in _temas_con_frases():
+        p = sum(t.count(fr) for fr in frases) + 4 * sum(1 for fr in frases if fr in nombre)
+        if p:
+            puntos[(tid, tnombre)] = p
+    (tid, tnombre), p = max(puntos.items(), key=lambda kv: kv[1]) if puntos else ((None, "General"), 0)
+    fin = len(FINANZAS.findall(t)) + 4 * len(FINANZAS.findall(nombre))
+    ext = f.suffix.lower()
+    if ext == ".epub" or (ext == ".pdf" and paginas >= 60):
+        tipo = "libro"
+    elif ext == ".pdf":
+        tipo = "articulo"
+    elif ext in (".docx", ".md"):
+        tipo = "apuntes"
+    else:
+        tipo = "nota"
+    if fin >= 8 or tid == "t_fin" and p >= 3:
+        galaxia, motivo = "finanzas", f"vocabulario financiero ({fin} términos)"
+    elif tipo == "libro":
+        galaxia, motivo = "libros", f"{'EPUB' if ext == '.epub' else str(paginas) + ' páginas'}"
+    else:
+        galaxia, motivo = "notas", "documento corto o de apuntes"
+    subtema = tnombre if p >= 3 else "General"
+    if subtema != "General":
+        motivo += f"; el tema «{subtema}» sale {p} veces"
+    return {"galaxia": galaxia, "subtema": subtema, "tipo": tipo, "titulo": re.sub(r"\s+", " ", re.sub(r"[_]+", " ", f.stem)).strip(), "motivo": motivo, "paginas": paginas}
+
+
+def _slug(s: str) -> str:
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode()
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", s).strip("_")[:60] or "General"
+
+
+def _sha1(f: Path) -> str:
+    h = hashlib.sha1()
+    with open(f, "rb") as fh:
+        for b in iter(lambda: fh.read(1 << 20), b""):
+            h.update(b)
+    return h.hexdigest()
+
+
+def leer_metadatos(carpeta: Path = CARPETA) -> dict:
+    f = Path(carpeta) / "biblioteca" / "metadatos.json"
+    return json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+
+
+def resumen(carpeta: Path = CARPETA) -> dict:
+    """{galaxia: nº de documentos importados}."""
+    r: dict = {}
+    for m in leer_metadatos(carpeta).values():
+        r[m["galaxia"]] = r.get(m["galaxia"], 0) + 1
+    return r
+
+
+def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, indexar_ahora: bool = True) -> list[dict]:
+    """Importa ficheros. Cada item es una ruta o un dict {ruta, galaxia?, subtema?, tipo?, etiquetas?}; lo que falte se clasifica solo.
+    Devuelve por fichero {ruta, estado: 'ok'|'duplicado'|'error', galaxia, subtema, tipo, destino, mensaje}."""
+    carpeta = Path(carpeta)
+    base = carpeta / "biblioteca"
+    meta = leer_metadatos(carpeta)
+    hashes = {m["hash"]: rel for rel, m in meta.items()}
+    salida = []
+    for it in items:
+        d = {"ruta": it} if isinstance(it, (str, Path)) else dict(it)
+        f = Path(d["ruta"])
+        r = {"ruta": str(f), "nombre": f.name}
+        try:
+            if not f.is_file():
+                raise ValueError("no existe el fichero")
+            if f.suffix.lower() not in EXT:
+                raise ValueError(f"formato no admitido ({f.suffix or 'sin extensión'}); sirven {', '.join(sorted(EXT))}")
+            h = _sha1(f)
+            if h in hashes:
+                salida.append({**r, "estado": "duplicado", "mensaje": f"ya estaba importado ({hashes[h]})"})
+                continue
+            auto = clasificar(f)
+            galaxia = d.get("galaxia") if d.get("galaxia") in GALAXIAS else auto["galaxia"]
+            subtema = (d.get("subtema") or "").strip() or auto["subtema"]
+            tipo = d.get("tipo") if d.get("tipo") in TIPOS else auto["tipo"]
+            destino = base / galaxia / _slug(subtema)
+            destino.mkdir(parents=True, exist_ok=True)
+            fin, n = destino / f.name, 1
+            while fin.exists():
+                n += 1; fin = destino / f"{f.stem}_{n}{f.suffix}"
+            shutil.copy2(f, fin)
+            rel = fin.relative_to(base).as_posix()
+            meta[rel] = {"titulo": auto["titulo"], "galaxia": galaxia, "subtema": subtema, "tipo": tipo, "etiquetas": (d.get("etiquetas") or "").strip(), "origen": str(f), "hash": h,
+                         "fecha": datetime.now().isoformat(timespec="seconds"), "automatico": not (d.get("galaxia") or d.get("subtema") or d.get("tipo"))}
+            hashes[h] = rel
+            salida.append({**r, "estado": "ok", "galaxia": galaxia, "subtema": subtema, "tipo": tipo, "destino": str(fin), "mensaje": auto["motivo"]})
+        except Exception as e:
+            salida.append({**r, "estado": "error", "mensaje": str(e)})
+    if any(s["estado"] == "ok" for s in salida):
+        base.mkdir(parents=True, exist_ok=True)
+        (base / "metadatos.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+        if indexar_ahora:
+            ind = indexar(db or carpeta / "indice.db", {}, carpeta=carpeta)
+            sin = set(ind["sin_leer"])
+            for s in salida:
+                if s["estado"] == "ok" and s["destino"] in sin:
+                    s["mensaje"] += " · sin indexar (¿falta `pip install pypdf`?)"
+    return salida
 :::END
 :::BEGIN py/cuaderno/__init__.py|text
 """Mini-cuaderno del visor: ejemplos ejecutables por celdas (ejemplos.py) y el ejecutor (ejecutor.py)."""
@@ -31423,6 +31669,71 @@ def test_clustering_y_vif():
     textos = [t.get_text() for t in grafico_vif(v).axes[0].texts]
     assert any("ALTO" in t for t in textos)
 :::END
+:::BEGIN py/tests/test_importar.py|text
+"""Importador: clasificación automática, copia a la biblioteca, metadatos, índice y búsqueda."""
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import conocimiento as k
+from conocimiento import importar as imp
+
+
+def _frases_de_tema(nombre_tema, n=6):
+    cat = imp._catalogo()
+    tid = next(t["id"] for t in cat["temas"] if t["nombre"] == nombre_tema)
+    areas = {a["id"] for a in cat["areas"] if a["tema"] == tid}
+    return [c["nombre"] for c in cat["conceptos"] if c.get("area") in areas][:n]
+
+
+def test_clasifica_por_el_tema_del_catalogo(tmp_path):
+    f = tmp_path / "apuntes_contrastes.md"
+    f.write_text("# Apuntes\n\n" + "\n\n".join(f"Hoy repasamos {x}. " * 3 for x in _frases_de_tema("Inferencia y contrastes")), encoding="utf-8")
+    c = imp.clasificar(f)
+    assert c["subtema"] == "Inferencia y contrastes" and c["galaxia"] == "notas" and c["tipo"] == "apuntes"
+    g = tmp_path / "carteras.txt"
+    g.write_text("La cartera de bonos tiene volatilidad y rentabilidad; el riesgo de mercado y los derivados se cubren con opciones y futuros. " * 5, encoding="utf-8")
+    assert imp.clasificar(g)["galaxia"] == "finanzas"
+
+
+def test_importa_copia_indexa_y_no_duplica(tmp_path):
+    carpeta, db = tmp_path / "datos", tmp_path / "datos" / "i.db"
+    f = tmp_path / "mis_apuntes.md"
+    f.write_text("# Notas\n\nEl estimador de Kaplan-Meier estima la supervivenciaxyz con censura. " * 4, encoding="utf-8")
+    r = imp.importar([f], carpeta=carpeta, db=db)[0]
+    assert r["estado"] == "ok" and Path(r["destino"]).is_file() and "biblioteca" in r["destino"]
+    meta = json.loads((carpeta / "biblioteca" / "metadatos.json").read_text(encoding="utf-8"))
+    assert list(meta.values())[0]["galaxia"] == r["galaxia"] and imp.resumen(carpeta) == {r["galaxia"]: 1}
+    h = k.buscar("supervivenciaxyz", db=db)[0]                                  # ya se encuentra, con su galaxia y subtema
+    assert h["coleccion"] == r["galaxia"] and h["subtema"] == r["subtema"] and h["interno"] is False
+    assert imp.importar([f], carpeta=carpeta, db=db)[0]["estado"] == "duplicado"
+
+
+def test_lo_indicado_manda_sobre_lo_automatico_y_los_errores_no_paran(tmp_path):
+    carpeta, db = tmp_path / "datos", tmp_path / "datos" / "i.db"
+    f = tmp_path / "algo.txt"
+    f.write_text("texto cualquiera sobre nada en concreto " * 5, encoding="utf-8")
+    malo = tmp_path / "foto.jpg"
+    malo.write_bytes(b"\xff\xd8\xff")
+    r = imp.importar([{"ruta": f, "galaxia": "finanzas", "subtema": "Renta fija", "tipo": "libro", "etiquetas": "bonos"}, malo, tmp_path / "noexiste.pdf"], carpeta=carpeta, db=db)
+    assert (r[0]["estado"], r[0]["galaxia"], r[0]["subtema"], r[0]["tipo"]) == ("ok", "finanzas", "Renta fija", "libro")
+    assert r[0]["destino"].replace("\\", "/").endswith("biblioteca/finanzas/Renta_fija/algo.txt")
+    assert r[1]["estado"] == "error" and "formato" in r[1]["mensaje"] and r[2]["estado"] == "error"
+
+
+def test_opciones_para_los_desplegables():
+    o = imp.opciones()
+    assert {g["id"] for g in o["galaxias"]} == set(imp.GALAXIAS) and "General" in o["subtemas"]["conceptos"] and "Inferencia y contrastes" in o["subtemas"]["libros"]
+
+
+def test_el_visor_tiene_la_pestana_del_agujero_negro():
+    import construir_visor as cv
+    html = cv.ensamblar(cv.construir())
+    for pieza in ("window.crearAgujero", 'id="pestImportar"', 'id="impPanel"', "elegir_archivos", "clasificar_archivos", "importar_archivos", "modo-importar"):
+        assert pieza in html
+    assert "/*__AGUJERO_JS__*/" not in html and 'id="pestUniverso"' in html
+:::END
 :::BEGIN py/tests/test_instaladores.py|text
 """Los instaladores autoextraibles empaquetan lo correcto y se extraen identicos."""
 import importlib.util
@@ -32783,6 +33094,79 @@ def test_el_javascript_del_mapa_3d_es_sintacticamente_valido():
         pytest.skip("node no está instalado: no se puede comprobar la sintaxis del JS")
     r = subprocess.run(["node", "--check", str(CODIGO / "visor" / "mapa3d.js")], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
+:::END
+:::BEGIN py/visor/agujero.js|text
+/* agujero.js — el agujero negro de la pestaña «Importar»: disco de acreción en órbita, anillo de luz y halo curvado por la gravedad (como en Interstellar).
+   Canvas 2D sin librerías. Clic (o soltar archivos encima) = añadir archivos; al importar «traga» los archivos y lanza un destello del color de su galaxia.
+   API: crearAgujero({canvas, alClic()}) -> {medir, mostrar, ocultar, tragar([r,g,b]), ocupado(bool)} */
+(function () {
+'use strict';
+function azar(sem) { var a = sem >>> 0; return function () { a = (a + 0x6D2B79F5) >>> 0; var t = a; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+var spr = {};
+function sprite(c) {
+  var k = c.join(','); if (spr[k]) return spr[k];
+  var cv = document.createElement('canvas'); cv.width = cv.height = 32; var g = cv.getContext('2d'), gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+  gr.addColorStop(0, 'rgba(255,255,255,.95)'); gr.addColorStop(.25, 'rgba(' + k + ',.8)'); gr.addColorStop(.6, 'rgba(' + k + ',.15)'); gr.addColorStop(1, 'rgba(' + k + ',0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 32, 32); return spr[k] = cv;
+}
+function color(k) {            /* de blanco caliente (dentro) a naranja y a rojo oscuro (fuera) */
+  return k < .35 ? [255, Math.round(245 - 70 * k / .35), Math.round(220 - 130 * k / .35)] : [255, Math.round(175 - 95 * (k - .35) / .65), Math.round(90 - 70 * (k - .35) / .65)];
+}
+
+window.crearAgujero = function (o) {
+  var cv = o.canvas, ctx = cv.getContext('2d'), rnd = azar(5), W = 800, H = 500, DPR = 1, vivo = false, raf = 0, tPrev = 0, t = 0, hover = false, rapido = 0, ocup = false;
+  var disco = [], halo = [], estrellas = [], tragados = [];
+  for (var i = 0; i < 1500; i++) {                                /* disco: más denso hacia dentro, velocidad kepleriana */
+    var k = Math.pow(rnd(), 1.6), r = 1.35 + 2.6 * k;
+    disco.push({r: r, a: 2 * Math.PI * rnd(), w: 1.7 / Math.pow(r, 1.5), k: k, s: .8 + 1.6 * rnd(), al: .35 + .6 * rnd(), y: (rnd() - .5) * .04});
+  }
+  for (i = 0; i < 700; i++) { var kk = Math.pow(rnd(), 1.4); halo.push({r: 1.12 + 1.3 * kk, a: 2 * Math.PI * rnd(), w: 1.2 / Math.pow(1.12 + 1.3 * kk, 1.5), k: kk * .8, s: .7 + 1.2 * rnd(), al: .25 + .5 * rnd()}); }
+  for (i = 0; i < 260; i++) estrellas.push({x: rnd(), y: rnd(), s: .6 + 1.6 * rnd() * rnd(), a: .15 + .7 * rnd()});
+
+  function luz(c, x, y, tam, al) { ctx.globalAlpha = al > 1 ? 1 : al; ctx.drawImage(sprite(c), x - tam / 2, y - tam / 2, tam, tam); }
+  function dibujar() {
+    var cx = W / 2, cy = H / 2, R = Math.min(W * .17, H * .27), inc = .26;     /* R: radio del horizonte; inc: inclinación del disco */
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.fillStyle = '#02030a'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fff'; estrellas.forEach(function (e) { ctx.globalAlpha = e.a; ctx.fillRect(e.x * W, e.y * H, e.s, e.s); });
+    ctx.globalCompositeOperation = 'lighter'; var hot = hover ? 1.25 : 1, giro = t * (1 + rapido * 2.5);
+    var rad = Math.min(W, H) * .5, rg = ctx.createRadialGradient(cx, cy, R * .9, cx, cy, rad); rg.addColorStop(0, 'rgba(255,150,60,' + (.26 * hot) + ')'); rg.addColorStop(.55, 'rgba(255,110,40,' + (.07 * hot) + ')'); rg.addColorStop(1, 'rgba(255,100,30,0)');
+    ctx.globalAlpha = 1; ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+    /* 1) mitad trasera del disco y halo curvado: la luz de detrás del agujero se ve por encima y por debajo */
+    disco.forEach(function (p) { var a = p.a + p.w * giro, z = Math.sin(a); if (z > 0) return;
+      luz(color(p.k), cx + Math.cos(a) * p.r * R, cy + (z * inc * p.r + p.y) * R, p.s * 4 * hot, p.al * .85); });
+    halo.forEach(function (p) { var a = p.a + p.w * giro, rr = p.r * R;
+      luz(color(p.k), cx + Math.cos(a) * rr * .98, cy + Math.sin(a) * rr * .98 - (Math.sin(a) > 0 ? 0 : 0), p.s * 3.4 * hot, p.al * (Math.sin(a) < 0 ? .75 : .42)); });
+    /* 2) el horizonte de sucesos: negro, y el anillo de fotones alrededor */
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 6.2832); ctx.fill();
+    ctx.globalCompositeOperation = 'lighter'; ctx.lineWidth = 3 * hot; ctx.strokeStyle = 'rgba(255,225,170,' + (.8 * Math.min(1, hot)) + ')'; ctx.beginPath(); ctx.arc(cx, cy, R * 1.03, 0, 6.2832); ctx.stroke();
+    ctx.lineWidth = 9; ctx.strokeStyle = 'rgba(255,170,80,.16)'; ctx.beginPath(); ctx.arc(cx, cy, R * 1.07, 0, 6.2832); ctx.stroke();
+    /* 3) mitad delantera del disco, por delante del agujero */
+    disco.forEach(function (p) { var a = p.a + p.w * giro, z = Math.sin(a); if (z <= 0) return;
+      luz(color(p.k), cx + Math.cos(a) * p.r * R, cy + (z * inc * p.r + p.y) * R, p.s * 4.4 * hot, Math.min(1, p.al * 1.15)); });
+    /* 4) lo que se está tragando: espirales que caen al centro */
+    tragados = tragados.filter(function (q) { return q.r > .12; });
+    tragados.forEach(function (q) { q.a += q.w; q.r -= q.v; q.w *= 1.012; luz(q.c, cx + Math.cos(q.a) * q.r * R * 4, cy + Math.sin(q.a) * q.r * R * 4 * (.55 + .45 * q.r / 1.1), 6 + 8 * q.r, Math.min(1, q.r + .2)); });
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  }
+  function frame(ahora) {
+    var dt = Math.min(.05, (ahora - (tPrev || ahora)) / 1000); tPrev = ahora; t += dt;
+    rapido += ((ocup ? 1 : 0) - rapido) * Math.min(1, dt * 3);
+    dibujar(); raf = vivo ? requestAnimationFrame(frame) : 0;
+  }
+  function pintar() { if (vivo && !raf) { tPrev = 0; raf = requestAnimationFrame(frame); } }
+  function medir() { var r = cv.getBoundingClientRect(); if (!r.width) return; DPR = Math.min(window.devicePixelRatio || 1, 2); W = r.width; H = r.height; cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR); pintar(); }
+  function dentro(ev) { var r = cv.getBoundingClientRect(), x = ev.clientX - r.left - W / 2, y = ev.clientY - r.top - H / 2; return Math.hypot(x, y) < Math.min(W * .17, H * .27) * 4; }
+  cv.addEventListener('pointermove', function (ev) { var h = dentro(ev); if (h !== hover) { hover = h; cv.style.cursor = h ? 'pointer' : 'default'; } });
+  cv.addEventListener('pointerleave', function () { hover = false; });
+  cv.addEventListener('click', function (ev) { if (dentro(ev) && o.alClic) o.alClic(); });
+  cv.addEventListener('keydown', function (ev) { if ((ev.key === 'Enter' || ev.key === ' ') && o.alClic) { ev.preventDefault(); o.alClic(); } });
+  return {
+    medir: medir, mostrar: function () { vivo = true; medir(); }, ocultar: function () { vivo = false; if (raf) cancelAnimationFrame(raf); raf = 0; },
+    ocupado: function (b) { ocup = !!b; pintar(); },
+    tragar: function (c) { for (var i = 0; i < 70; i++) tragados.push({c: c, a: 6.2832 * rnd(), r: .9 + .35 * rnd(), v: .004 + .006 * rnd(), w: .02 + .03 * rnd()}); pintar(); }
+  };
+};
+})();
 :::END
 :::BEGIN py/visor/cerebro.js|text
 /* cerebro.js — primera capa del visor: el universo (todo tu conocimiento), con una galaxia por parte del árbol y por colección.
@@ -35072,12 +35456,39 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
   .detalle{overflow:visible}
 }
 @media (prefers-reduced-motion:reduce){ .toast{transition:none} }
+
+/* pestañas (Universo / Importar) */
+.pestanas{display:flex;gap:2px;flex:none;padding:2px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}
+.pest{border:0;background:none;color:var(--muted);font:600 12.5px var(--sans,inherit);padding:5px 11px;border-radius:7px;cursor:pointer;white-space:nowrap}
+.pest:hover{color:var(--ink)} .pest[aria-selected="true"]{background:var(--accent);color:#fff}
+/* importador: el agujero negro y el panel de archivos */
+.importar{min-height:0;overflow:auto;padding:12px 16px 40px;background:#02030a;color:#dfe6f5;display:flex;flex-direction:column;align-items:center;gap:8px}
+.importar[hidden]{display:none}
+.app.modo-importar .cuerpo{display:none}
+.imp-cabeza{text-align:center;max-width:720px} .imp-cabeza h2{margin:6px 0 2px;font-size:18px} .imp-cabeza p{margin:0;color:#9fb0cc;font-size:13px}
+.imp-agujero{width:100%;max-width:980px;height:min(46vh,430px);min-height:240px;flex:none}
+#agujero{width:100%;height:100%;display:block;outline:none;border-radius:12px} #agujero:focus-visible{outline:2px solid var(--accent)}
+.imp-msg{margin:0;min-height:1.2em;color:#9fb0cc;font-size:13px;text-align:center}
+.imp-panel{width:100%;max-width:980px;display:grid;gap:8px}
+.imp-panel[hidden]{display:none}
+.imp-fila,.imp-global{display:grid;grid-template-columns:minmax(150px,1.3fr) 150px minmax(130px,1fr) 120px minmax(90px,.7fr) 30px;gap:6px;align-items:center;padding:8px;border:1px solid #1d2742;border-radius:9px;background:rgba(14,20,38,.7)}
+.imp-global{border-style:dashed} .imp-global .imp-nom{font-weight:600}
+.imp-fila select,.imp-fila input,.imp-global select,.imp-global input{min-width:0;padding:6px 8px;border:1px solid #2a3558;border-radius:7px;background:#0b1224;color:#e6ecfa;font:inherit;font-size:12.5px}
+.imp-nom b{display:block;font-size:13px;overflow-wrap:anywhere} .imp-nom small{display:block;color:#8ea0c0;font-size:11.5px;line-height:1.35}
+.imp-acc{display:flex;gap:8px;justify-content:flex-end;align-items:center}
+.imp-res{display:flex;gap:8px;align-items:baseline;padding:6px 8px;border-radius:8px;background:rgba(14,20,38,.6);font-size:13px}
+.imp-res .ok{color:#7be08a} .imp-res .dup{color:#e5c06a} .imp-res .err{color:#ff8a73}
+@media (max-width:900px){ .imp-fila,.imp-global{grid-template-columns:1fr 1fr} .imp-nom{grid-column:1/-1} }
 </style>
 </head>
 <body>
 <div class="app">
   <header class="top">
     <div class="brand"><h1 id="titulo">Árbol</h1></div>
+    <nav class="pestanas" id="pestanas" role="tablist" aria-label="Pestañas">
+      <button class="pest" id="pestUniverso" role="tab" type="button" aria-selected="true" title="El universo: todo tu conocimiento">🌌 Universo</button>
+      <button class="pest" id="pestImportar" role="tab" type="button" aria-selected="false" title="Importar archivos: un agujero negro que los clasifica">⚫ Importar</button>
+    </nav>
     <div class="search">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
       <input id="q" type="search" placeholder="Buscar…  ( / )" autocomplete="off" spellcheck="false" aria-label="Buscar">
@@ -35114,12 +35525,19 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
     <aside class="detalle" id="detalle" aria-live="polite"></aside>
   </main>
   <section class="aprender" id="aprender" hidden aria-label="Guía de aprendizaje"></section>
+  <section class="importar" id="importar" hidden aria-label="Importador">
+    <div class="imp-cabeza"><h2>Importar</h2><p>Haz clic en el agujero negro (o suelta archivos encima): se abre el explorador de archivos. El importador los clasifica solo (galaxia, subtema y tipo) y puedes corregirlo antes de importar.</p></div>
+    <div class="imp-agujero"><canvas id="agujero" tabindex="0" role="button" aria-label="Agujero negro: haz clic para añadir archivos"></canvas></div>
+    <p class="imp-msg" id="impMsg" aria-live="polite"></p>
+    <div class="imp-panel" id="impPanel" hidden></div>
+  </section>
 </div>
 <div class="toast" id="toast" role="status"></div>
 <script type="application/json" id="datos">__DATOS__</script>
 <script>/*__DEMOS_JS__*/</script>
 <script>/*__MAPA3D_JS__*/</script>
 <script>/*__CEREBRO_JS__*/</script>
+<script>/*__AGUJERO_JS__*/</script>
 <script>
 (function () {
 'use strict';
@@ -35303,11 +35721,16 @@ setTimeout(function () {                      /* los mapas de dentro se crean ya
   cerebro.resaltar(resK);
 }, 60);
 if (window.ResizeObserver) new ResizeObserver(function () { cerebro.medir(); }).observe($('#cerebro')); else window.addEventListener('resize', function () { cerebro.medir(); });
-window.addEventListener('pywebviewready', async function () {     /* cuántos ficheros hay en cada colección de tus carpetas (solo en la app, con el índice hecho) */
-  if (!window.pywebview.api.estado_conocimiento) return;
-  try { var e = await window.pywebview.api.estado_conocimiento(), d = {};
-    ['libros', 'finanzas', 'notas'].forEach(function (c) { if (e[c]) d[c] = (GAL[c].base ? GAL[c].base + ' · ' : '') + e[c] + ' ficheros'; }); cerebro.datos(d); } catch (x) {}
-});
+async function actualizarColecciones() {      /* cuántos ficheros hay en cada galaxia (solo en la app, con el índice hecho) */
+  var api = window.pywebview && window.pywebview.api; if (!api) return;
+  try {
+    var e = api.estado_conocimiento ? await api.estado_conocimiento() : {}, b = api.resumen_biblioteca ? await api.resumen_biblioteca() : {}, d = {};
+    ['libros', 'finanzas', 'notas'].forEach(function (c) { if (e[c]) d[c] = (GAL[c].base ? GAL[c].base + ' · ' : '') + e[c] + ' ficheros'; });
+    ['codigo', 'conceptos', 'demos'].forEach(function (c) { if (b[c]) d[c] = GAL[c].base + ' · +' + b[c] + ' docs'; });
+    cerebro.datos(d);
+  } catch (x) {}
+}
+window.addEventListener('pywebviewready', actualizarColecciones);
 
 /* ---------- divisor: cambiar el ancho del mapa / panel ---------- */
 (function () {
@@ -35429,6 +35852,7 @@ function buscar() {
    lo demás (libros, finanzas, notas, teoría) se lista y se abre con su programa. */
 var temporizadorK = 0;
 function hojaDeResultado(x) {
+  if (!x.interno) return null;
   var tipo = x.coleccion === 'codigo' ? 'funcion' : x.coleccion === 'conceptos' ? 'concepto' : '';
   return tipo ? hojas.filter(function (h) { return h.tipo === tipo && h.nombre === x.titulo; })[0] : null;
 }
@@ -35448,9 +35872,9 @@ function conocimiento(q) {
       var h = hojaDeResultado(x);
       if (h) { coincide[h.id] = (coincide[h.id] || 0) + 5; for (var p = h.parent; p; p = p.parent) conCoincidencia[p.id] = (conCoincidencia[p.id] || 0) + 1; }
       var it = document.createElement('li'); it.className = 'k';
-      it.innerHTML = '<span class="pt" style="background:var(--muted)"></span><span class="n"><span class="col">' + esc(x.coleccion) + '</span>' + esc(x.titulo) +
+      it.innerHTML = '<span class="pt" style="background:var(--muted)"></span><span class="n"><span class="col">' + esc(x.coleccion + (x.subtema ? ' › ' + x.subtema : '')) + '</span>' + esc(x.titulo) +
         (x.ubicacion ? ' · ' + esc(x.ubicacion) : '') + '</span><span class="d">' + esc(x.fragmento.replace(/\s+/g, ' ')) + '</span>';
-      it.onmousedown = function (ev) { ev.preventDefault(); if (h) elegir(h); else if (x.coleccion !== 'codigo' && x.coleccion !== 'conceptos') window.pywebview.api.abrir_fuente(x.ruta, x.ubicacion); };
+      it.onmousedown = function (ev) { ev.preventDefault(); if (h) elegir(h); else if (!x.interno) window.pywebview.api.abrir_fuente(x.ruta, x.ubicacion); };
       ul.appendChild(it);
     });
     ul.hidden = false; pintar();
@@ -35773,6 +36197,120 @@ function apPaso(r, i, cuerpo) {
   };
 }
 $('#aprenderBtn').onclick = function () { apMostrar(!apAbierta()); };
+/* ---------- pestañas: Universo (el mapa) · Importar (el agujero negro) · Aprender (la guía) ---------- */
+function impAbierta() { return $('.app').classList.contains('modo-importar'); }
+function pintarPestanas() {
+  var u = !apAbierta() && !impAbierta(); $('#pestUniverso').setAttribute('aria-selected', String(u)); $('#pestImportar').setAttribute('aria-selected', String(impAbierta()));
+}
+function impCerrar() { $('.app').classList.remove('modo-importar'); $('#importar').hidden = true; agujero.ocultar(); pintarPestanas(); }
+function pestana(p) {
+  if (p === 'importar') {
+    if (apAbierta()) apMostrar(false);
+    $('.app').classList.add('modo-importar'); $('#importar').hidden = false; agujero.mostrar(); impOpciones(); pintarPestanas();
+  } else { impCerrar(); if (apAbierta()) apMostrar(false); pintar(); }
+}
+$('#pestUniverso').onclick = function () { pestana('universo'); };
+$('#pestImportar').onclick = function () { pestana('importar'); };
+var apMostrarOrig = apMostrar;
+apMostrar = function (on) { if (on && impAbierta()) impCerrar(); apMostrarOrig(on); pintarPestanas(); };
+
+/* ---------- el importador: agujero negro + panel de archivos con desplegables (el trabajo lo hace py/conocimiento/importar.py) ---------- */
+var imp = {archivos: [], opciones: null, ocupado: false, resultados: null};
+var agujero = crearAgujero({canvas: $('#agujero'), alClic: impClic});
+if (window.ResizeObserver) new ResizeObserver(function () { agujero.medir(); }).observe($('#agujero')); else window.addEventListener('resize', function () { agujero.medir(); });
+function impAviso(m) { $('#impMsg').textContent = m || ''; }
+function impApi() { var a = window.pywebview && window.pywebview.api; return a && a.elegir_archivos ? a : null; }
+async function impOpciones() {
+  var a = impApi(); if (!a || imp.opciones) return;
+  var o = await a.opciones_importador(); if (!o.error) { imp.opciones = o; impRender(); }
+}
+function impClic() {
+  if (imp.ocupado) return;
+  if (!impApi()) { impAviso('El importador funciona en la app («Árbol de la estadística» del Escritorio): necesita abrir el explorador de archivos y guardar en tu biblioteca.'); return; }
+  impElegir();
+}
+async function impElegir() {
+  var rs = await impApi().elegir_archivos();
+  if (rs && rs.error) { impAviso(rs.error); return; }
+  if (rs && rs.length) await impAnadir(rs);
+}
+async function impAnadir(rutas) {
+  rutas = rutas.filter(function (r) { return !imp.archivos.some(function (a) { return a.ruta === r; }); });
+  if (!rutas.length) return;
+  impAviso('Clasificando ' + rutas.length + ' archivo' + (rutas.length > 1 ? 's' : '') + '…'); agujero.ocupado(true);
+  var cl = await impApi().clasificar_archivos(rutas); agujero.ocupado(false);
+  if (cl.error) { impAviso(cl.error); return; }
+  imp.resultados = null; impAviso('');
+  cl.forEach(function (c) { imp.archivos.push({ruta: c.ruta, nombre: c.ruta.split(/[\\/]/).pop(), auto: c, galaxia: 'auto', subtema: '', tipo: 'auto', etiquetas: ''}); });
+  impRender();
+}
+function impOpt(lista, val, autoTxt) {
+  return '<option value="auto"' + (val === 'auto' ? ' selected' : '') + '>' + esc(autoTxt) + '</option>' +
+    lista.map(function (g) { return '<option value="' + esc(g.id) + '"' + (val === g.id ? ' selected' : '') + '>' + esc(g.nombre) + '</option>'; }).join('');
+}
+function impRender() {
+  var p = $('#impPanel'), o = imp.opciones || {galaxias: GALAXIAS, tipos: [], subtemas: {}};
+  if (!imp.archivos.length && !imp.resultados) { p.hidden = true; p.innerHTML = ''; return; }
+  p.hidden = false;
+  var subs = {}; Object.keys(o.subtemas).forEach(function (g) { o.subtemas[g].forEach(function (s) { subs[s] = 1; }); });
+  var h = '<datalist id="impSub">' + Object.keys(subs).map(function (s) { return '<option value="' + esc(s) + '">'; }).join('') + '</datalist>';
+  if (imp.archivos.length) {
+    h += '<div class="imp-global"><div class="imp-nom"><b>Para todos</b><small>Déjalo en «Automático» para que lo decida el importador.</small></div>' +
+      '<select id="gGal">' + impOpt(o.galaxias, 'auto', 'Galaxia: automática') + '</select><input id="gSub" list="impSub" placeholder="Subtema: automático">' +
+      '<select id="gTipo">' + impOpt(o.tipos, 'auto', 'Tipo: automático') + '</select><input id="gEti" placeholder="Etiquetas"><span></span></div>';
+    imp.archivos.forEach(function (a, i) {
+      var c = a.auto, gn = (o.galaxias.filter(function (g) { return g.id === c.galaxia; })[0] || {}).nombre || c.galaxia, tn = (o.tipos.filter(function (g) { return g.id === c.tipo; })[0] || {}).nombre || c.tipo;
+      h += '<div class="imp-fila" data-i="' + i + '"><div class="imp-nom"><b>' + esc(a.nombre) + '</b><small>Automático: ' + esc(gn) + ' › ' + esc(c.subtema) + ' · ' + esc(tn) +
+        (c.paginas ? ' · ' + c.paginas + ' págs.' : '') + ' — ' + esc(c.motivo) + '</small></div>' +
+        '<select data-c="galaxia">' + impOpt(o.galaxias, a.galaxia, 'Automática (' + gn + ')') + '</select>' +
+        '<input data-c="subtema" list="impSub" placeholder="Automático (' + esc(c.subtema) + ')" value="' + esc(a.subtema) + '">' +
+        '<select data-c="tipo">' + impOpt(o.tipos, a.tipo, 'Automático (' + tn + ')') + '</select>' +
+        '<input data-c="etiquetas" placeholder="Etiquetas" value="' + esc(a.etiquetas) + '"><button class="btn ic" data-q type="button" title="Quitar de la lista">✕</button></div>';
+    });
+    h += '<div class="imp-acc"><button class="btn" id="impMas" type="button">+ Añadir más</button><button class="btn primario" id="impGo" type="button">Importar ' + imp.archivos.length + ' archivo' + (imp.archivos.length > 1 ? 's' : '') + '</button></div>';
+  }
+  if (imp.resultados) {
+    h += imp.resultados.map(function (r) {
+      var g = r.galaxia && GAL[r.galaxia] ? GAL[r.galaxia].nombre : '';
+      return '<div class="imp-res"><span class="' + (r.estado === 'ok' ? 'ok' : r.estado === 'duplicado' ? 'dup' : 'err') + '">' + (r.estado === 'ok' ? '✓' : r.estado === 'duplicado' ? '＝' : '✗') + '</span><b>' + esc(r.nombre) + '</b><span>' +
+        (r.estado === 'ok' ? '→ ' + esc(g) + ' › ' + esc(r.subtema) + ' (' + esc(r.tipo) + ')' : esc(r.mensaje)) + '</span></div>';
+    }).join('');
+  }
+  p.innerHTML = h;
+}
+$('#impPanel').addEventListener('input', function (ev) {
+  var f = ev.target.closest('.imp-fila'), c = ev.target.dataset.c; if (f && c) imp.archivos[+f.dataset.i][c] = ev.target.value;
+});
+$('#impPanel').addEventListener('click', function (ev) {
+  var q = ev.target.closest('[data-q]'), f = ev.target.closest('.imp-fila');
+  if (q && f) { imp.archivos.splice(+f.dataset.i, 1); impRender(); }
+  else if (ev.target.id === 'impMas') impElegir();
+  else if (ev.target.id === 'impGo') impImportar();
+});
+$('#impPanel').addEventListener('change', function (ev) {      /* «Para todos»: lo que elijas aquí se aplica a todas las filas */
+  var m = {gGal: 'galaxia', gSub: 'subtema', gTipo: 'tipo', gEti: 'etiquetas'}[ev.target.id]; if (!m) return;
+  imp.archivos.forEach(function (a) { a[m] = ev.target.value; }); var g = {gGal: $('#gGal').value, gSub: $('#gSub').value, gTipo: $('#gTipo').value, gEti: $('#gEti').value}; impRender();
+  $('#gGal').value = g.gGal; $('#gSub').value = g.gSub; $('#gTipo').value = g.gTipo; $('#gEti').value = g.gEti;
+});
+async function impImportar() {
+  if (imp.ocupado || !imp.archivos.length) return;
+  imp.ocupado = true; agujero.ocupado(true); impAviso('Importando… los PDF largos tardan un poco (se copian, se leen y se indexan).'); $('#impGo').disabled = true;
+  var items = imp.archivos.map(function (a) { return {ruta: a.ruta, galaxia: a.galaxia === 'auto' ? null : a.galaxia, subtema: a.subtema || null, tipo: a.tipo === 'auto' ? null : a.tipo, etiquetas: a.etiquetas}; });
+  var r = await impApi().importar_archivos(items);
+  imp.ocupado = false; agujero.ocupado(false);
+  if (r.error) { impAviso(r.error); impRender(); return; }
+  var ok = r.filter(function (x) { return x.estado === 'ok'; });
+  ok.forEach(function (x) { if (GAL[x.galaxia]) agujero.tragar(GAL[x.galaxia].color); });
+  impAviso(ok.length + ' de ' + r.length + ' importado' + (ok.length === 1 ? '' : 's') + '. Ya se pueden buscar desde el universo.');
+  imp.resultados = r; imp.archivos = []; impRender(); actualizarColecciones();
+}
+document.addEventListener('dragover', function (ev) { if (impAbierta()) ev.preventDefault(); });
+document.addEventListener('drop', function (ev) {                /* soltar archivos sobre la pestaña (la app da la ruta completa; un navegador no) */
+  if (!impAbierta()) return; ev.preventDefault();
+  var fs = Array.prototype.slice.call(ev.dataTransfer.files || []), rutas = fs.map(function (f) { return f.pywebviewFullPath || f.path; }).filter(Boolean);
+  if (rutas.length && impApi()) impAnadir(rutas); else impAviso('Para soltar archivos hace falta la app; con clic en el agujero negro funciona siempre.');
+});
+
 if (!RUTAS.length) $('#aprenderBtn').hidden = true;
 
 /* ---------- propiedades: barras 0-10, perfiles de proyecto, alternativas y comparador ---------- */
@@ -36995,6 +37533,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 5g. **Universo (primera capa del visor):** el visor se abre en un universo 3D (`py/visor/cerebro.js`; el fichero y las variables se siguen llamando «cerebro» por historia) con paisaje (estrellas con paralaje, nebulosas, galaxias lejanas, hilos entre galaxias) y una galaxia en espiral por parte: **Código** (las ramas de funciones), **Conceptos** (los temas `t_*` salvo finanzas), **Demos y guías**, **Finanzas** (rama `finanzas` + `t_fin`) —cada una con su propio mapa 3D, que es también una galaxia: núcleo, polvo y dos brazos espirales (`ESPIRAL`/`GIRO` en `mapa3d.js`), con su color (`color` en `crearMapa3D`)— y **Libros** y **Notas** (solo ámbitos de búsqueda del gestor). El reparto está en `GALAXIAS` de `plantilla.html`; la galaxia pequeña del universo es una miniatura exacta de la de dentro. El buscador ilumina las galaxias con coincidencias y, al elegir un resultado, vuela a su galaxia. **Vuelo:** un único movimiento continuo hasta el destino (galaxia o nodo), sin parada en la vista general: la cámara no cambia de orientación, el mapa de dentro se dibuja ya por debajo con la cámara del universo (`mapa.sync()`, `camaraDe()`, `geometria()`) y toma el relevo con un fundido; al volver (🌌) es lo mismo al revés, desde el nodo en el que estés. Icono (una galaxia): `python herramientas/generar_icono.py`. `indexar_conocimiento.bat` crea `conocimiento/fuentes.json` (tus carpetas) e indexa.
 5f. **Gestor de conocimiento:** `py/conocimiento/` es un buscador único (SQLite FTS5, BM25, sinónimos del catálogo) sobre código, conceptos, teoría y tus libros/finanzas/notas (`conocimiento/fuentes.json`, no se publica). `cd py && python -m conocimiento indexar | buscar "consulta" [-c colección] | estado`. Antes de buscar a mano en `Manuales Estadística` o en `teoria/`, usa `buscar`.
 5h. **Modo vivo (para ver los cambios mientras se trabaja):** el acceso directo con `--vivo` (`powershell -ExecutionPolicy Bypass -File herramientascceso_vivo.ps1 on|off` lo apunta a esta carpeta o lo restaura) recarga la app solo cuando se regenera `visor_arbol.html` y la coloca donde indique `.foco`. Para enseñar un cambio: `python herramientas/ver.py [destino]` regenera el visor y escribe el foco (`cerebro`, `galaxia:codigo|conceptos|demos|finanzas` o el nombre de una función/concepto/demo; el visor también lo admite como `#destino`).
+5i. **Pestañas e importador:** el visor tiene pestañas **🌌 Universo** (el mapa) y **⚫ Importar** (además de 🎓 Aprender). «Importar» es un agujero negro (`py/visor/agujero.js`): clic o soltar archivos abre el explorador de Windows (`Api.elegir_archivos`); `py/conocimiento/importar.py` clasifica cada fichero solo (`clasificar`: galaxia finanzas/libros/notas, subtema = el tema del catálogo con más coincidencias, tipo) y el panel deja corregir galaxia, subtema, tipo y etiquetas con desplegables (lo que indiques manda). `importar()` copia a `conocimiento/biblioteca/<galaxia>/<subtema>/`, guarda `biblioteca/metadatos.json` (con hash: no duplica) y lo indexa; la búsqueda devuelve `subtema`/`tipo` y abre el fichero. También por consola: `cd py && python -m conocimiento importar f.pdf [-g libros] [-s "Inferencia y contrastes"] [-t libro]`.
 6. **Conceptos:** `conceptos/catalogo.json` lista los conceptos del temario del máster y de Very Normal con las funciones que los implementan. Organización: `temas` (ramas del mapa, con color) > `areas` (módulos, con `ambito`) > conceptos (`area`, `prioridad` opcional, `area_fija` para que la actualización no lo mueva). La migración de 0.6.0 está en `herramientas/reorganizar_catalogo.py`.
    Si un concepto no tiene función (*hueco*), es que el árbol aún no lo cubre: impleméntalo (módulo + test), enlázalo en el catálogo (`funciones`) y regenera el visor.
    Al añadir una función nueva, enlázala al menos a un concepto (hay un test que lo exige).

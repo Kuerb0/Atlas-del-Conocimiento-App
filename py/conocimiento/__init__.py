@@ -146,12 +146,17 @@ def cargar_fuentes(carpeta: Path = CARPETA) -> dict:
     return json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
 
 
-def _unidades(fuentes: dict):
+def _unidades(fuentes: dict, carpeta: Path = CARPETA):
     for f in sorted((CODIGO / "arbol_estadistica").rglob("*.py")):
         yield "codigo", f
     yield "conceptos", RAIZ / "conceptos" / "catalogo.json"
     for f in sorted((RAIZ / "teoria").glob("*.md")):
         yield "teoria", f
+    base = Path(carpeta) / "biblioteca"                       # lo importado con el importador: biblioteca/<galaxia>/<subtema>/fichero
+    if base.is_dir():
+        for f in sorted(base.rglob("*")):
+            if f.is_file() and f.suffix.lower() in EXT and f.relative_to(base).parts[0] != f.name:
+                yield f.relative_to(base).parts[0], f
     for col, carpetas in fuentes.items():
         for c in carpetas:
             if not Path(c).is_dir():
@@ -162,12 +167,12 @@ def _unidades(fuentes: dict):
                     yield col, f
 
 
-def indexar(db: Path = DB, fuentes: dict | None = None) -> dict:
+def indexar(db: Path = DB, fuentes: dict | None = None, carpeta: Path = CARPETA) -> dict:
     """Indexa lo nuevo o modificado y borra lo que ya no existe. Devuelve {'nuevos', 'iguales', 'borrados', 'sin_leer'}."""
-    fuentes = cargar_fuentes() if fuentes is None else fuentes
+    fuentes = cargar_fuentes(carpeta) if fuentes is None else fuentes
     con = _abrir(db)
     vistos, r = set(), {"nuevos": 0, "iguales": 0, "borrados": 0, "sin_leer": []}
-    for col, f in _unidades(fuentes):
+    for col, f in _unidades(fuentes, carpeta):
         if not f.exists():
             continue
         ruta, st = str(f), f.stat()
@@ -224,7 +229,19 @@ def buscar(consulta: str, coleccion: str | None = None, n: int = 10, db: Path = 
     else:
         filas = []
     con.close()
-    return [dict(zip(("coleccion", "titulo", "ubicacion", "ruta", "fragmento"), f)) for f in filas]
+    base = Path(db).parent / "biblioteca"
+    meta = json.loads((base / "metadatos.json").read_text(encoding="utf-8")) if (base / "metadatos.json").exists() else {}
+    out = []
+    for f in filas:
+        r = dict(zip(("coleccion", "titulo", "ubicacion", "ruta", "fragmento"), f))
+        try:
+            m = meta.get(Path(r["ruta"]).relative_to(base).as_posix())
+        except ValueError:
+            m = None
+        r.update(subtema=(m or {}).get("subtema", ""), tipo=(m or {}).get("tipo", ""), etiquetas=(m or {}).get("etiquetas", ""))
+        r["interno"] = m is None and (r["coleccion"] in ("codigo", "teoria") or r["ruta"].endswith("catalogo.json"))   # código, teoría y catálogo del propio árbol: no son ficheros que abrir
+        out.append(r)
+    return out
 
 
 def estado(db: Path = DB) -> list[tuple]:

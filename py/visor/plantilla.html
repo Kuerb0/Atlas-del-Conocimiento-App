@@ -283,12 +283,39 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
   .detalle{overflow:visible}
 }
 @media (prefers-reduced-motion:reduce){ .toast{transition:none} }
+
+/* pestañas (Universo / Importar) */
+.pestanas{display:flex;gap:2px;flex:none;padding:2px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}
+.pest{border:0;background:none;color:var(--muted);font:600 12.5px var(--sans,inherit);padding:5px 11px;border-radius:7px;cursor:pointer;white-space:nowrap}
+.pest:hover{color:var(--ink)} .pest[aria-selected="true"]{background:var(--accent);color:#fff}
+/* importador: el agujero negro y el panel de archivos */
+.importar{min-height:0;overflow:auto;padding:12px 16px 40px;background:#02030a;color:#dfe6f5;display:flex;flex-direction:column;align-items:center;gap:8px}
+.importar[hidden]{display:none}
+.app.modo-importar .cuerpo{display:none}
+.imp-cabeza{text-align:center;max-width:720px} .imp-cabeza h2{margin:6px 0 2px;font-size:18px} .imp-cabeza p{margin:0;color:#9fb0cc;font-size:13px}
+.imp-agujero{width:100%;max-width:980px;height:min(46vh,430px);min-height:240px;flex:none}
+#agujero{width:100%;height:100%;display:block;outline:none;border-radius:12px} #agujero:focus-visible{outline:2px solid var(--accent)}
+.imp-msg{margin:0;min-height:1.2em;color:#9fb0cc;font-size:13px;text-align:center}
+.imp-panel{width:100%;max-width:980px;display:grid;gap:8px}
+.imp-panel[hidden]{display:none}
+.imp-fila,.imp-global{display:grid;grid-template-columns:minmax(150px,1.3fr) 150px minmax(130px,1fr) 120px minmax(90px,.7fr) 30px;gap:6px;align-items:center;padding:8px;border:1px solid #1d2742;border-radius:9px;background:rgba(14,20,38,.7)}
+.imp-global{border-style:dashed} .imp-global .imp-nom{font-weight:600}
+.imp-fila select,.imp-fila input,.imp-global select,.imp-global input{min-width:0;padding:6px 8px;border:1px solid #2a3558;border-radius:7px;background:#0b1224;color:#e6ecfa;font:inherit;font-size:12.5px}
+.imp-nom b{display:block;font-size:13px;overflow-wrap:anywhere} .imp-nom small{display:block;color:#8ea0c0;font-size:11.5px;line-height:1.35}
+.imp-acc{display:flex;gap:8px;justify-content:flex-end;align-items:center}
+.imp-res{display:flex;gap:8px;align-items:baseline;padding:6px 8px;border-radius:8px;background:rgba(14,20,38,.6);font-size:13px}
+.imp-res .ok{color:#7be08a} .imp-res .dup{color:#e5c06a} .imp-res .err{color:#ff8a73}
+@media (max-width:900px){ .imp-fila,.imp-global{grid-template-columns:1fr 1fr} .imp-nom{grid-column:1/-1} }
 </style>
 </head>
 <body>
 <div class="app">
   <header class="top">
     <div class="brand"><h1 id="titulo">Árbol</h1></div>
+    <nav class="pestanas" id="pestanas" role="tablist" aria-label="Pestañas">
+      <button class="pest" id="pestUniverso" role="tab" type="button" aria-selected="true" title="El universo: todo tu conocimiento">🌌 Universo</button>
+      <button class="pest" id="pestImportar" role="tab" type="button" aria-selected="false" title="Importar archivos: un agujero negro que los clasifica">⚫ Importar</button>
+    </nav>
     <div class="search">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
       <input id="q" type="search" placeholder="Buscar…  ( / )" autocomplete="off" spellcheck="false" aria-label="Buscar">
@@ -325,12 +352,19 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
     <aside class="detalle" id="detalle" aria-live="polite"></aside>
   </main>
   <section class="aprender" id="aprender" hidden aria-label="Guía de aprendizaje"></section>
+  <section class="importar" id="importar" hidden aria-label="Importador">
+    <div class="imp-cabeza"><h2>Importar</h2><p>Haz clic en el agujero negro (o suelta archivos encima): se abre el explorador de archivos. El importador los clasifica solo (galaxia, subtema y tipo) y puedes corregirlo antes de importar.</p></div>
+    <div class="imp-agujero"><canvas id="agujero" tabindex="0" role="button" aria-label="Agujero negro: haz clic para añadir archivos"></canvas></div>
+    <p class="imp-msg" id="impMsg" aria-live="polite"></p>
+    <div class="imp-panel" id="impPanel" hidden></div>
+  </section>
 </div>
 <div class="toast" id="toast" role="status"></div>
 <script type="application/json" id="datos">__DATOS__</script>
 <script>/*__DEMOS_JS__*/</script>
 <script>/*__MAPA3D_JS__*/</script>
 <script>/*__CEREBRO_JS__*/</script>
+<script>/*__AGUJERO_JS__*/</script>
 <script>
 (function () {
 'use strict';
@@ -514,11 +548,16 @@ setTimeout(function () {                      /* los mapas de dentro se crean ya
   cerebro.resaltar(resK);
 }, 60);
 if (window.ResizeObserver) new ResizeObserver(function () { cerebro.medir(); }).observe($('#cerebro')); else window.addEventListener('resize', function () { cerebro.medir(); });
-window.addEventListener('pywebviewready', async function () {     /* cuántos ficheros hay en cada colección de tus carpetas (solo en la app, con el índice hecho) */
-  if (!window.pywebview.api.estado_conocimiento) return;
-  try { var e = await window.pywebview.api.estado_conocimiento(), d = {};
-    ['libros', 'finanzas', 'notas'].forEach(function (c) { if (e[c]) d[c] = (GAL[c].base ? GAL[c].base + ' · ' : '') + e[c] + ' ficheros'; }); cerebro.datos(d); } catch (x) {}
-});
+async function actualizarColecciones() {      /* cuántos ficheros hay en cada galaxia (solo en la app, con el índice hecho) */
+  var api = window.pywebview && window.pywebview.api; if (!api) return;
+  try {
+    var e = api.estado_conocimiento ? await api.estado_conocimiento() : {}, b = api.resumen_biblioteca ? await api.resumen_biblioteca() : {}, d = {};
+    ['libros', 'finanzas', 'notas'].forEach(function (c) { if (e[c]) d[c] = (GAL[c].base ? GAL[c].base + ' · ' : '') + e[c] + ' ficheros'; });
+    ['codigo', 'conceptos', 'demos'].forEach(function (c) { if (b[c]) d[c] = GAL[c].base + ' · +' + b[c] + ' docs'; });
+    cerebro.datos(d);
+  } catch (x) {}
+}
+window.addEventListener('pywebviewready', actualizarColecciones);
 
 /* ---------- divisor: cambiar el ancho del mapa / panel ---------- */
 (function () {
@@ -640,6 +679,7 @@ function buscar() {
    lo demás (libros, finanzas, notas, teoría) se lista y se abre con su programa. */
 var temporizadorK = 0;
 function hojaDeResultado(x) {
+  if (!x.interno) return null;
   var tipo = x.coleccion === 'codigo' ? 'funcion' : x.coleccion === 'conceptos' ? 'concepto' : '';
   return tipo ? hojas.filter(function (h) { return h.tipo === tipo && h.nombre === x.titulo; })[0] : null;
 }
@@ -659,9 +699,9 @@ function conocimiento(q) {
       var h = hojaDeResultado(x);
       if (h) { coincide[h.id] = (coincide[h.id] || 0) + 5; for (var p = h.parent; p; p = p.parent) conCoincidencia[p.id] = (conCoincidencia[p.id] || 0) + 1; }
       var it = document.createElement('li'); it.className = 'k';
-      it.innerHTML = '<span class="pt" style="background:var(--muted)"></span><span class="n"><span class="col">' + esc(x.coleccion) + '</span>' + esc(x.titulo) +
+      it.innerHTML = '<span class="pt" style="background:var(--muted)"></span><span class="n"><span class="col">' + esc(x.coleccion + (x.subtema ? ' › ' + x.subtema : '')) + '</span>' + esc(x.titulo) +
         (x.ubicacion ? ' · ' + esc(x.ubicacion) : '') + '</span><span class="d">' + esc(x.fragmento.replace(/\s+/g, ' ')) + '</span>';
-      it.onmousedown = function (ev) { ev.preventDefault(); if (h) elegir(h); else if (x.coleccion !== 'codigo' && x.coleccion !== 'conceptos') window.pywebview.api.abrir_fuente(x.ruta, x.ubicacion); };
+      it.onmousedown = function (ev) { ev.preventDefault(); if (h) elegir(h); else if (!x.interno) window.pywebview.api.abrir_fuente(x.ruta, x.ubicacion); };
       ul.appendChild(it);
     });
     ul.hidden = false; pintar();
@@ -984,6 +1024,120 @@ function apPaso(r, i, cuerpo) {
   };
 }
 $('#aprenderBtn').onclick = function () { apMostrar(!apAbierta()); };
+/* ---------- pestañas: Universo (el mapa) · Importar (el agujero negro) · Aprender (la guía) ---------- */
+function impAbierta() { return $('.app').classList.contains('modo-importar'); }
+function pintarPestanas() {
+  var u = !apAbierta() && !impAbierta(); $('#pestUniverso').setAttribute('aria-selected', String(u)); $('#pestImportar').setAttribute('aria-selected', String(impAbierta()));
+}
+function impCerrar() { $('.app').classList.remove('modo-importar'); $('#importar').hidden = true; agujero.ocultar(); pintarPestanas(); }
+function pestana(p) {
+  if (p === 'importar') {
+    if (apAbierta()) apMostrar(false);
+    $('.app').classList.add('modo-importar'); $('#importar').hidden = false; agujero.mostrar(); impOpciones(); pintarPestanas();
+  } else { impCerrar(); if (apAbierta()) apMostrar(false); pintar(); }
+}
+$('#pestUniverso').onclick = function () { pestana('universo'); };
+$('#pestImportar').onclick = function () { pestana('importar'); };
+var apMostrarOrig = apMostrar;
+apMostrar = function (on) { if (on && impAbierta()) impCerrar(); apMostrarOrig(on); pintarPestanas(); };
+
+/* ---------- el importador: agujero negro + panel de archivos con desplegables (el trabajo lo hace py/conocimiento/importar.py) ---------- */
+var imp = {archivos: [], opciones: null, ocupado: false, resultados: null};
+var agujero = crearAgujero({canvas: $('#agujero'), alClic: impClic});
+if (window.ResizeObserver) new ResizeObserver(function () { agujero.medir(); }).observe($('#agujero')); else window.addEventListener('resize', function () { agujero.medir(); });
+function impAviso(m) { $('#impMsg').textContent = m || ''; }
+function impApi() { var a = window.pywebview && window.pywebview.api; return a && a.elegir_archivos ? a : null; }
+async function impOpciones() {
+  var a = impApi(); if (!a || imp.opciones) return;
+  var o = await a.opciones_importador(); if (!o.error) { imp.opciones = o; impRender(); }
+}
+function impClic() {
+  if (imp.ocupado) return;
+  if (!impApi()) { impAviso('El importador funciona en la app («Árbol de la estadística» del Escritorio): necesita abrir el explorador de archivos y guardar en tu biblioteca.'); return; }
+  impElegir();
+}
+async function impElegir() {
+  var rs = await impApi().elegir_archivos();
+  if (rs && rs.error) { impAviso(rs.error); return; }
+  if (rs && rs.length) await impAnadir(rs);
+}
+async function impAnadir(rutas) {
+  rutas = rutas.filter(function (r) { return !imp.archivos.some(function (a) { return a.ruta === r; }); });
+  if (!rutas.length) return;
+  impAviso('Clasificando ' + rutas.length + ' archivo' + (rutas.length > 1 ? 's' : '') + '…'); agujero.ocupado(true);
+  var cl = await impApi().clasificar_archivos(rutas); agujero.ocupado(false);
+  if (cl.error) { impAviso(cl.error); return; }
+  imp.resultados = null; impAviso('');
+  cl.forEach(function (c) { imp.archivos.push({ruta: c.ruta, nombre: c.ruta.split(/[\\/]/).pop(), auto: c, galaxia: 'auto', subtema: '', tipo: 'auto', etiquetas: ''}); });
+  impRender();
+}
+function impOpt(lista, val, autoTxt) {
+  return '<option value="auto"' + (val === 'auto' ? ' selected' : '') + '>' + esc(autoTxt) + '</option>' +
+    lista.map(function (g) { return '<option value="' + esc(g.id) + '"' + (val === g.id ? ' selected' : '') + '>' + esc(g.nombre) + '</option>'; }).join('');
+}
+function impRender() {
+  var p = $('#impPanel'), o = imp.opciones || {galaxias: GALAXIAS, tipos: [], subtemas: {}};
+  if (!imp.archivos.length && !imp.resultados) { p.hidden = true; p.innerHTML = ''; return; }
+  p.hidden = false;
+  var subs = {}; Object.keys(o.subtemas).forEach(function (g) { o.subtemas[g].forEach(function (s) { subs[s] = 1; }); });
+  var h = '<datalist id="impSub">' + Object.keys(subs).map(function (s) { return '<option value="' + esc(s) + '">'; }).join('') + '</datalist>';
+  if (imp.archivos.length) {
+    h += '<div class="imp-global"><div class="imp-nom"><b>Para todos</b><small>Déjalo en «Automático» para que lo decida el importador.</small></div>' +
+      '<select id="gGal">' + impOpt(o.galaxias, 'auto', 'Galaxia: automática') + '</select><input id="gSub" list="impSub" placeholder="Subtema: automático">' +
+      '<select id="gTipo">' + impOpt(o.tipos, 'auto', 'Tipo: automático') + '</select><input id="gEti" placeholder="Etiquetas"><span></span></div>';
+    imp.archivos.forEach(function (a, i) {
+      var c = a.auto, gn = (o.galaxias.filter(function (g) { return g.id === c.galaxia; })[0] || {}).nombre || c.galaxia, tn = (o.tipos.filter(function (g) { return g.id === c.tipo; })[0] || {}).nombre || c.tipo;
+      h += '<div class="imp-fila" data-i="' + i + '"><div class="imp-nom"><b>' + esc(a.nombre) + '</b><small>Automático: ' + esc(gn) + ' › ' + esc(c.subtema) + ' · ' + esc(tn) +
+        (c.paginas ? ' · ' + c.paginas + ' págs.' : '') + ' — ' + esc(c.motivo) + '</small></div>' +
+        '<select data-c="galaxia">' + impOpt(o.galaxias, a.galaxia, 'Automática (' + gn + ')') + '</select>' +
+        '<input data-c="subtema" list="impSub" placeholder="Automático (' + esc(c.subtema) + ')" value="' + esc(a.subtema) + '">' +
+        '<select data-c="tipo">' + impOpt(o.tipos, a.tipo, 'Automático (' + tn + ')') + '</select>' +
+        '<input data-c="etiquetas" placeholder="Etiquetas" value="' + esc(a.etiquetas) + '"><button class="btn ic" data-q type="button" title="Quitar de la lista">✕</button></div>';
+    });
+    h += '<div class="imp-acc"><button class="btn" id="impMas" type="button">+ Añadir más</button><button class="btn primario" id="impGo" type="button">Importar ' + imp.archivos.length + ' archivo' + (imp.archivos.length > 1 ? 's' : '') + '</button></div>';
+  }
+  if (imp.resultados) {
+    h += imp.resultados.map(function (r) {
+      var g = r.galaxia && GAL[r.galaxia] ? GAL[r.galaxia].nombre : '';
+      return '<div class="imp-res"><span class="' + (r.estado === 'ok' ? 'ok' : r.estado === 'duplicado' ? 'dup' : 'err') + '">' + (r.estado === 'ok' ? '✓' : r.estado === 'duplicado' ? '＝' : '✗') + '</span><b>' + esc(r.nombre) + '</b><span>' +
+        (r.estado === 'ok' ? '→ ' + esc(g) + ' › ' + esc(r.subtema) + ' (' + esc(r.tipo) + ')' : esc(r.mensaje)) + '</span></div>';
+    }).join('');
+  }
+  p.innerHTML = h;
+}
+$('#impPanel').addEventListener('input', function (ev) {
+  var f = ev.target.closest('.imp-fila'), c = ev.target.dataset.c; if (f && c) imp.archivos[+f.dataset.i][c] = ev.target.value;
+});
+$('#impPanel').addEventListener('click', function (ev) {
+  var q = ev.target.closest('[data-q]'), f = ev.target.closest('.imp-fila');
+  if (q && f) { imp.archivos.splice(+f.dataset.i, 1); impRender(); }
+  else if (ev.target.id === 'impMas') impElegir();
+  else if (ev.target.id === 'impGo') impImportar();
+});
+$('#impPanel').addEventListener('change', function (ev) {      /* «Para todos»: lo que elijas aquí se aplica a todas las filas */
+  var m = {gGal: 'galaxia', gSub: 'subtema', gTipo: 'tipo', gEti: 'etiquetas'}[ev.target.id]; if (!m) return;
+  imp.archivos.forEach(function (a) { a[m] = ev.target.value; }); var g = {gGal: $('#gGal').value, gSub: $('#gSub').value, gTipo: $('#gTipo').value, gEti: $('#gEti').value}; impRender();
+  $('#gGal').value = g.gGal; $('#gSub').value = g.gSub; $('#gTipo').value = g.gTipo; $('#gEti').value = g.gEti;
+});
+async function impImportar() {
+  if (imp.ocupado || !imp.archivos.length) return;
+  imp.ocupado = true; agujero.ocupado(true); impAviso('Importando… los PDF largos tardan un poco (se copian, se leen y se indexan).'); $('#impGo').disabled = true;
+  var items = imp.archivos.map(function (a) { return {ruta: a.ruta, galaxia: a.galaxia === 'auto' ? null : a.galaxia, subtema: a.subtema || null, tipo: a.tipo === 'auto' ? null : a.tipo, etiquetas: a.etiquetas}; });
+  var r = await impApi().importar_archivos(items);
+  imp.ocupado = false; agujero.ocupado(false);
+  if (r.error) { impAviso(r.error); impRender(); return; }
+  var ok = r.filter(function (x) { return x.estado === 'ok'; });
+  ok.forEach(function (x) { if (GAL[x.galaxia]) agujero.tragar(GAL[x.galaxia].color); });
+  impAviso(ok.length + ' de ' + r.length + ' importado' + (ok.length === 1 ? '' : 's') + '. Ya se pueden buscar desde el universo.');
+  imp.resultados = r; imp.archivos = []; impRender(); actualizarColecciones();
+}
+document.addEventListener('dragover', function (ev) { if (impAbierta()) ev.preventDefault(); });
+document.addEventListener('drop', function (ev) {                /* soltar archivos sobre la pestaña (la app da la ruta completa; un navegador no) */
+  if (!impAbierta()) return; ev.preventDefault();
+  var fs = Array.prototype.slice.call(ev.dataTransfer.files || []), rutas = fs.map(function (f) { return f.pywebviewFullPath || f.path; }).filter(Boolean);
+  if (rutas.length && impApi()) impAnadir(rutas); else impAviso('Para soltar archivos hace falta la app; con clic en el agujero negro funciona siempre.');
+});
+
 if (!RUTAS.length) $('#aprenderBtn').hidden = true;
 
 /* ---------- propiedades: barras 0-10, perfiles de proyecto, alternativas y comparador ---------- */

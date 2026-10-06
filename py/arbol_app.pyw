@@ -63,6 +63,46 @@ class Api:
     def reiniciar(self, sesion):
         return self._c().reiniciar(str(sesion))
 
+    # ---- importador (pestaña «Importar»): ver py/conocimiento/importar.py ----
+    def opciones_importador(self):
+        try:
+            from conocimiento import importar
+            return importar.opciones()
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    def elegir_archivos(self):
+        """Abre el explorador de archivos de Windows (varios a la vez) y devuelve las rutas elegidas."""
+        try:
+            import webview
+            tipos = ("Documentos (*.pdf;*.epub;*.docx;*.md;*.txt)", "Todos los archivos (*.*)")
+            modo = webview.FileDialog.OPEN if hasattr(webview, "FileDialog") else webview.OPEN_DIALOG
+            r = webview.windows[0].create_file_dialog(modo, allow_multiple=True, file_types=tipos)
+            return [str(x) for x in (r or [])]
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    def clasificar_archivos(self, rutas):
+        try:
+            from conocimiento import importar
+            return [{"ruta": str(r), **importar.clasificar(str(r))} for r in rutas]
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    def importar_archivos(self, items):
+        try:
+            from conocimiento import importar
+            return importar.importar(list(items))
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    def resumen_biblioteca(self):
+        try:
+            from conocimiento import importar
+            return importar.resumen()
+        except Exception:
+            return {}
+
     def estado_conocimiento(self):
         """{colección: nº de ficheros indexados}, para rotular las galaxias del cerebro."""
         try:
