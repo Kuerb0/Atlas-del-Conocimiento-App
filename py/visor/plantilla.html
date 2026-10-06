@@ -1384,7 +1384,7 @@ async function telBuscar() {
   var r = await a.telescopio_buscar(q); $('#telBuscar').disabled = false;
   if (r.error) { $('#telN').textContent = r.error; return; }
   tel.lista = r.resultados; var e = Object.keys(r.errores);
-  $('#telN').textContent = r.resultados.length + ' resultados' + (e.length ? ' · sin respuesta: ' + e.join(', ') : '');
+  $('#telN').textContent = r.resultados.length + ' resultados' + (e.length ? ' · sin respuesta: ' + e.map(function (k) { return k + ' (' + String(r.errores[k]).replace(/^\w+: /, '').slice(0, 60) + ')'; }).join('; ') : '');
   $('#telLista').innerHTML = r.resultados.map(function (x, i) {
     return '<div class="tel-card"><b>' + eclEsc(x.titulo) + '</b><span class="tel-meta">' + eclEsc(x.autores.join(', ')) + (x.anio ? ' · ' + x.anio : '') + ' · ' + eclEsc(x.fuente) + ' · ' + eclEsc(x.formato) + ' · ' + eclEsc(x.licencia) + ' · género: ' + eclEsc((IMP_GEN[x.genero] || x.genero)) + '</span>' +
       '<span class="tel-acc">' + (x.url || x.fuente === 'archive' ? '<button class="btn" type="button" data-i="' + i + '">Traer a mi biblioteca</button>' : '') + (x.enlace ? '<button class="btn" type="button" data-e="' + i + '">Abrir ficha ↗</button>' : '') + '</span></div>'; }).join('');

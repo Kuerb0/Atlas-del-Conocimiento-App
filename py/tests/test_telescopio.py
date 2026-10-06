@@ -18,8 +18,10 @@ GB = {"items": [
      "accessInfo": {"publicDomain": False, "pdf": {"isAvailable": True, "downloadLink": "https://books.google.com/g2.pdf"}}}]}
 RESP = {
     "googleapis.com/books": GB,
-    "gutendex": {"results": [{"id": 7, "title": "Essai", "authors": [{"name": "Laplace"}], "subjects": ["Probabilities"], "formats": {"application/epub+zip": "https://g/7.epub"}, "copyright": False},
-                             {"id": 8, "title": "Con copyright", "formats": {"application/epub+zip": "https://g/8.epub"}, "copyright": True}]},
+    "gutenberg.org/ebooks/search.opds": '<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>https://www.gutenberg.org/ebooks/subjects/search.opds/?query=x</id><title>Subjects</title></entry>'
+                                        '<entry><id>https://www.gutenberg.org/ebooks/7.opds</id><title>Essai</title><content>Laplace</content></entry></feed>',
+    "openlibrary.org/search.json": {"docs": [{"key": "/works/OL1W", "title": "Abierto", "ebook_access": "public", "ia": ["abierto00x"], "subject": ["Statistics"]},
+                                             {"key": "/works/OL2W", "title": "Prestado", "ebook_access": "borrowable", "ia": ["p"]}, {"key": "/works/OL3W", "title": "Sin ebook", "ebook_access": "no_ebook"}]},
     "arxiv": ARXIV,
     "openalex": {"results": [{"id": "W1", "display_name": "Sin pdf", "best_oa_location": {}}, {"id": "W2", "display_name": "Con pdf", "publication_year": 2019,
                  "best_oa_location": {"pdf_url": "https://x/a.pdf", "license": "cc-by"}, "concepts": [{"display_name": "Statistics"}], "authorships": []}]},
@@ -42,9 +44,11 @@ def test_buscar_filtra_lo_no_legal_y_tolera_fuentes_caidas(monkeypatch):
     gb = {x["id"]: x for x in r["resultados"] if x["fuente"] == "googlebooks"}
     assert gb["g1"]["url"].endswith(".epub") and gb["g1"]["enlace"].startswith("https://")      # dominio público: descargable
     assert gb["g2"]["url"] == "" and gb["g2"]["enlace"]                                        # con copyright: solo la ficha, aunque Google dé un PDF
-    assert por["gutenberg"] == ["7"]                                      # el de copyright, fuera
+    assert por["gutenberg"] == ["7"]                                      # la entrada «Subjects» del catálogo, fuera
+    ol = {x["id"]: x for x in r["resultados"] if x["fuente"] in ("openlibrary", "archive") and x["enlace"].startswith("https://openlibrary.org")}
+    assert ol["abierto00x"]["fuente"] == "archive" and ol["/works/OL2W"]["url"] == "" and ol["/works/OL3W"]["fuente"] == "openlibrary"   # solo la lectura abierta se puede traer
     assert por["openalex"] == ["W2"]                                      # sin PDF abierto, fuera
-    assert sorted(por["archive"]) == ["cc", "viejo"]                      # solo licencia abierta o ≤ 1929
+    assert sorted(i for i in por["archive"] if i != "abierto00x") == ["cc", "viejo"]                      # solo licencia abierta o ≤ 1929
     assert por["arxiv"] and next(x for x in r["resultados"] if x["fuente"] == "arxiv")["url"].startswith("https://")
     assert r["errores"] == {} and "zzz" in t.buscar("x", fuentes=("zzz",))["errores"]       # una fuente que falla no tira las demás
 

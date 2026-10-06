@@ -1,0 +1,21 @@
+{
+ "libros/Economia_y_finanzas/The_wealth_of_nations.epub": {
+  "capitulos": [
+   {
+    "titulo": "The_wealth_of_nations",
+    "pagina": null
+   }
+  ],
+  "paginas": 0,
+  "titulo": "The wealth of nations",
+  "galaxia": "libros",
+  "subtema": "General",
+  "genero": "economia",
+  "tipo": "libro",
+  "etiquetas": "Economics, archive",
+  "hash": "0b77c4ecd124af910c695953c78db3494b0508f2",
+  "fecha": "2026-10-06T18:58:37",
+  "automatico": false,
+  "portada": "portadas/0b77c4ecd1.jpg"
+ }
+}

@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.3.1 - Actualizar
+title Arbol de la estadistica 1.3.2 - Actualizar
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
 set "ARBOL_MODO=actualizar"
-set "ARBOL_VERSION=1.3.1"
+set "ARBOL_VERSION=1.3.2"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -494,7 +494,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.3.1
+1.3.2
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -2782,7 +2782,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.3.1"
+version = "1.3.2"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3462,7 +3462,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.3.1"
+__version__ = "1.3.2"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -14974,7 +14974,7 @@ def borrar(rel: str, carpeta: Path | None = None, db: Path | None = None) -> boo
 :::BEGIN py/conocimiento/telescopio.py|text
 """Telescopio: busca obras de acceso abierto o dominio público, las trae a la biblioteca y las clasifica con los metadatos reales (materias).
 
-Fuentes (solo legales): Google Books (catálogo: ficha y enlace; descarga solo si es dominio público), Project Gutenberg (Gutendex), arXiv, OpenAlex (artículos en abierto con PDF) e Internet Archive
+Fuentes (solo legales): Google Books y Open Library (catálogo: ficha y enlace; descarga solo si es dominio público o préstamo abierto), Project Gutenberg (catálogo OPDS), arXiv, OpenAlex (artículos en abierto con PDF) e Internet Archive
 (solo obras con licencia abierta o publicadas hasta 1929). Open Library aporta las materias para clasificar un título.
 Solo lectura de la web con la biblioteca estándar; lo descargado pasa por `importar.importar` como cualquier otro archivo.
 """
@@ -14993,7 +14993,7 @@ from .importar import _GEN_RE, GENEROS, importar
 
 AGENTE = "ArbolEstadistica/1.0 (biblioteca personal; telescopio)"
 MAX_BYTES = 200 << 20                       # no se descarga nada de más de 200 MB
-FUENTES = ("googlebooks", "gutenberg", "arxiv", "openalex", "archive")
+FUENTES = ("googlebooks", "openlibrary", "gutenberg", "arxiv", "openalex", "archive")
 _ATOM = "{http://www.w3.org/2005/Atom}"
 
 
@@ -15001,7 +15001,7 @@ def _get(url: str, binario: bool = False, limite: int = MAX_BYTES):
     """GET por https con tope de tamaño. Es el único punto de red (los tests lo sustituyen)."""
     if not url.startswith("https://"):
         raise ValueError(f"solo https: {url[:60]}")
-    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": AGENTE}), timeout=30) as r:
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": AGENTE}), timeout=20) as r:
         datos = r.read(limite + 1)
     if len(datos) > limite:
         raise ValueError(f"más de {limite >> 20} MB: no se descarga")
@@ -15027,11 +15027,15 @@ def _item(fuente, id_, titulo, autores, anio, url, formato, licencia, materias, 
 
 
 def _gutenberg(q, n):
-    for b in json.loads(_get("https://gutendex.com/books?" + _q(search=q)))["results"][:n]:
-        f = b.get("formats", {})
-        url = next((f[k] for k in f if k.startswith("application/epub+zip")), None)
-        if url and not b.get("copyright"):
-            yield _item("gutenberg", b["id"], b["title"], [a["name"] for a in b.get("authors", [])], None, url, "epub", "Dominio público", b.get("subjects", []) + b.get("bookshelves", []), enlace=f"https://www.gutenberg.org/ebooks/{b['id']}")
+    """Catálogo OPDS oficial de Project Gutenberg (todo es dominio público). Gutendex se descartó: tardaba más de 30 s."""
+    raiz = ET.fromstring(_get("https://www.gutenberg.org/ebooks/search.opds/?" + _q(query=q)).encode("utf-8"))
+    hay = 0
+    for e in raiz.findall(_ATOM + "entry"):
+        m = re.search(r"/ebooks/(\d+)\.opds$", e.findtext(_ATOM + "id", ""))
+        if m and hay < n:
+            hay += 1
+            yield _item("gutenberg", m.group(1), e.findtext(_ATOM + "title", ""), [e.findtext(_ATOM + "content", "")], None, f"https://www.gutenberg.org/ebooks/{m.group(1)}.epub3.images", "epub",
+                        "Dominio público", [], enlace=f"https://www.gutenberg.org/ebooks/{m.group(1)}")
 
 
 def _arxiv(q, n):
@@ -15064,9 +15068,27 @@ def _archive(q, n):
                         lic or "Dominio público (≤ 1929)", [sub] if isinstance(sub, str) else sub, enlace="https://archive.org/details/" + d["identifier"])
 
 
+def _clave_google() -> str:
+    """Clave de la API de Google Books (opcional; sin ella la cuota diaria compartida suele estar agotada): variable GOOGLE_BOOKS_KEY o fichero conocimiento/google_books.key."""
+    f = Path(CARPETA) / "google_books.key"
+    return os.environ.get("GOOGLE_BOOKS_KEY") or (f.read_text(encoding="utf-8").strip() if f.exists() else "")
+
+
+def _openlibrary(q, n):
+    """Open Library (sin clave): ficha con materias; si es de lectura abierta en Internet Archive se puede traer."""
+    r = json.loads(_get("https://openlibrary.org/search.json?" + _q(q=q, limit=n, fields="key,title,author_name,first_publish_year,subject,ebook_access,ia")))
+    for d in r.get("docs", []):
+        enlace = "https://openlibrary.org" + d["key"]
+        args = (d.get("title", ""), d.get("author_name", []), d.get("first_publish_year"))
+        if d.get("ebook_access") == "public" and d.get("ia"):                      # lectura abierta: se descarga por Internet Archive
+            yield _item("archive", d["ia"][0], *args, "", "pdf", "Lectura abierta (Open Library)", d.get("subject", []), enlace=enlace)
+        else:
+            yield _item("openlibrary", d["key"], *args, "", "web", "Solo ficha / préstamo", d.get("subject", []), enlace=enlace)
+
+
 def _googlebooks(q, n):
     """Catálogo de Google Books: ficha, categorías y enlace para verlo. Solo es descargable si Google lo marca como dominio público y da enlace de PDF/EPUB."""
-    r = json.loads(_get("https://www.googleapis.com/books/v1/volumes?" + _q(q=q, maxResults=n, printType="books", **({"key": os.environ["GOOGLE_BOOKS_KEY"]} if os.environ.get("GOOGLE_BOOKS_KEY") else {}))))
+    r = json.loads(_get("https://www.googleapis.com/books/v1/volumes?" + _q(q=q, maxResults=n, printType="books", **({"key": _clave_google()} if _clave_google() else {}))))
     for v in r.get("items", []):
         i, a = v.get("volumeInfo", {}), v.get("accessInfo", {})
         url, formato = "", "web"
@@ -15079,7 +15101,7 @@ def _googlebooks(q, n):
                     url, formato, "Dominio público" if url else "Solo vista previa / compra", i.get("categories", []), i.get("description", ""), i.get("infoLink", "").replace("http://", "https://"))
 
 
-_BUSCADORES = {"googlebooks": _googlebooks, "gutenberg": _gutenberg, "arxiv": _arxiv, "openalex": _openalex, "archive": _archive}
+_BUSCADORES = {"googlebooks": _googlebooks, "openlibrary": _openlibrary, "gutenberg": _gutenberg, "arxiv": _arxiv, "openalex": _openalex, "archive": _archive}
 
 
 def buscar(consulta: str, n: int = 6, fuentes=FUENTES) -> dict:
@@ -34264,8 +34286,10 @@ GB = {"items": [
      "accessInfo": {"publicDomain": False, "pdf": {"isAvailable": True, "downloadLink": "https://books.google.com/g2.pdf"}}}]}
 RESP = {
     "googleapis.com/books": GB,
-    "gutendex": {"results": [{"id": 7, "title": "Essai", "authors": [{"name": "Laplace"}], "subjects": ["Probabilities"], "formats": {"application/epub+zip": "https://g/7.epub"}, "copyright": False},
-                             {"id": 8, "title": "Con copyright", "formats": {"application/epub+zip": "https://g/8.epub"}, "copyright": True}]},
+    "gutenberg.org/ebooks/search.opds": '<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>https://www.gutenberg.org/ebooks/subjects/search.opds/?query=x</id><title>Subjects</title></entry>'
+                                        '<entry><id>https://www.gutenberg.org/ebooks/7.opds</id><title>Essai</title><content>Laplace</content></entry></feed>',
+    "openlibrary.org/search.json": {"docs": [{"key": "/works/OL1W", "title": "Abierto", "ebook_access": "public", "ia": ["abierto00x"], "subject": ["Statistics"]},
+                                             {"key": "/works/OL2W", "title": "Prestado", "ebook_access": "borrowable", "ia": ["p"]}, {"key": "/works/OL3W", "title": "Sin ebook", "ebook_access": "no_ebook"}]},
     "arxiv": ARXIV,
     "openalex": {"results": [{"id": "W1", "display_name": "Sin pdf", "best_oa_location": {}}, {"id": "W2", "display_name": "Con pdf", "publication_year": 2019,
                  "best_oa_location": {"pdf_url": "https://x/a.pdf", "license": "cc-by"}, "concepts": [{"display_name": "Statistics"}], "authorships": []}]},
@@ -34288,9 +34312,11 @@ def test_buscar_filtra_lo_no_legal_y_tolera_fuentes_caidas(monkeypatch):
     gb = {x["id"]: x for x in r["resultados"] if x["fuente"] == "googlebooks"}
     assert gb["g1"]["url"].endswith(".epub") and gb["g1"]["enlace"].startswith("https://")      # dominio público: descargable
     assert gb["g2"]["url"] == "" and gb["g2"]["enlace"]                                        # con copyright: solo la ficha, aunque Google dé un PDF
-    assert por["gutenberg"] == ["7"]                                      # el de copyright, fuera
+    assert por["gutenberg"] == ["7"]                                      # la entrada «Subjects» del catálogo, fuera
+    ol = {x["id"]: x for x in r["resultados"] if x["fuente"] in ("openlibrary", "archive") and x["enlace"].startswith("https://openlibrary.org")}
+    assert ol["abierto00x"]["fuente"] == "archive" and ol["/works/OL2W"]["url"] == "" and ol["/works/OL3W"]["fuente"] == "openlibrary"   # solo la lectura abierta se puede traer
     assert por["openalex"] == ["W2"]                                      # sin PDF abierto, fuera
-    assert sorted(por["archive"]) == ["cc", "viejo"]                      # solo licencia abierta o ≤ 1929
+    assert sorted(i for i in por["archive"] if i != "abierto00x") == ["cc", "viejo"]                      # solo licencia abierta o ≤ 1929
     assert por["arxiv"] and next(x for x in r["resultados"] if x["fuente"] == "arxiv")["url"].startswith("https://")
     assert r["errores"] == {} and "zzz" in t.buscar("x", fuentes=("zzz",))["errores"]       # una fuente que falla no tira las demás
 
@@ -37997,7 +38023,7 @@ async function telBuscar() {
   var r = await a.telescopio_buscar(q); $('#telBuscar').disabled = false;
   if (r.error) { $('#telN').textContent = r.error; return; }
   tel.lista = r.resultados; var e = Object.keys(r.errores);
-  $('#telN').textContent = r.resultados.length + ' resultados' + (e.length ? ' · sin respuesta: ' + e.join(', ') : '');
+  $('#telN').textContent = r.resultados.length + ' resultados' + (e.length ? ' · sin respuesta: ' + e.map(function (k) { return k + ' (' + String(r.errores[k]).replace(/^\w+: /, '').slice(0, 60) + ')'; }).join('; ') : '');
   $('#telLista').innerHTML = r.resultados.map(function (x, i) {
     return '<div class="tel-card"><b>' + eclEsc(x.titulo) + '</b><span class="tel-meta">' + eclEsc(x.autores.join(', ')) + (x.anio ? ' · ' + x.anio : '') + ' · ' + eclEsc(x.fuente) + ' · ' + eclEsc(x.formato) + ' · ' + eclEsc(x.licencia) + ' · género: ' + eclEsc((IMP_GEN[x.genero] || x.genero)) + '</span>' +
       '<span class="tel-acc">' + (x.url || x.fuente === 'archive' ? '<button class="btn" type="button" data-i="' + i + '">Traer a mi biblioteca</button>' : '') + (x.enlace ? '<button class="btn" type="button" data-e="' + i + '">Abrir ficha ↗</button>' : '') + '</span></div>'; }).join('');
@@ -39347,7 +39373,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 5j. **Eclipses (almacenaje):** pestaña «🌘 Eclipses» (`py/visor/eclipses.js`, medición en `py/conocimiento/almacenaje.py`, API `Api.almacenaje`): el Sol es el límite de GitHub (1 GB recomendado, 5 GB tope, 100 MB por archivo) y cada galaxia o tipo de archivo es una luna de su color, ESTÁTICA (sin órbitas ni animación: decisión de Mario), cuya área es proporcional a lo que ocupa y que tapa el Sol. Dos escenarios: «En disco» (todo) y «En GitHub» (`git ls-files -co --exclude-standard`: respeta `.gitignore`), y dos vistas (por galaxia / por tipo). Avisa de archivos >100 MB. Test: `tests/test_almacenaje.py`.
 5m. **Referencias que viajan:** los PDF/EPUB no suben a GitHub, pero `conocimiento/biblioteca/referencias.json` (los metadatos sin rutas del equipo: título, galaxia, género, capítulos, hash) y `biblioteca/portadas/` sí (`.gitignore`; `importar._guardar` los escribe junto a `metadatos.json`, que sigue siendo local). `leer_metadatos` fusiona ambos, así que en otro equipo el mapa y el Observatorio muestran los libros como referencias vacías («sin el archivo en este equipo»); al importar un archivo con el mismo hash se restaura en su sitio.
 5l. **Comprimir la biblioteca:** botón «Comprimir sin pérdida» del Observatorio y `python -m conocimiento comprimir` (`importar.comprimir`/`comprimir_todo`). Reescribe PDF (flujos de contenido recomprimidos, objetos idénticos fusionados) y EPUB (deflate 9) **sin tocar el contenido**; antes de sustituir comprueba mismas páginas y mismo texto y que la copia sea ≥ 2 % menor. No se recomprimen ni reducen imágenes (decisión de Mario: el libro debe quedar idéntico).
-5k. **Telescopio:** pestaña «📡 Telescopio» (`py/conocimiento/telescopio.py`, API `Api.telescopio_buscar/traer`, consola `python -m conocimiento telescopio <consulta> [--traer N]`). Busca **solo fuentes legales**: Project Gutenberg (Gutendex, dominio público), arXiv, OpenAlex (solo con PDF abierto) e Internet Archive (solo licencia CC/dominio público o publicado ≤ 1929). **No se añaden fuentes piratas (Anna's Archive, Z-Library, LibGen…) ni descargadores de ellas.** `traer` descarga (https, ≤ 200 MB, comprueba que es PDF/EPUB de verdad) y pasa por `importar.importar` con el género sacado de las materias de la obra (`genero_desde_materias`); `materias_de` consulta Open Library para clasificar un título que ya tienes. Tests sin red (`_get` se sustituye): `tests/test_telescopio.py`.
+5k. **Telescopio:** pestaña «📡 Telescopio» (`py/conocimiento/telescopio.py`, API `Api.telescopio_buscar/traer`, consola `python -m conocimiento telescopio <consulta> [--traer N]`). Busca **solo fuentes legales**: Project Gutenberg (catálogo OPDS oficial, dominio público; Gutendex se descartó por lento), Google Books y Open Library (catálogo: ficha y enlace; descarga solo si es dominio público o lectura abierta; Google necesita clave en `GOOGLE_BOOKS_KEY` o `conocimiento/google_books.key` porque la cuota anónima diaria suele estar agotada), arXiv, OpenAlex (solo con PDF abierto) e Internet Archive (solo licencia CC/dominio público o publicado ≤ 1929). **No se añaden fuentes piratas (Anna's Archive, Z-Library, LibGen…) ni descargadores de ellas.** `traer` descarga (https, ≤ 200 MB, comprueba que es PDF/EPUB de verdad) y pasa por `importar.importar` con el género sacado de las materias de la obra (`genero_desde_materias`); `materias_de` consulta Open Library para clasificar un título que ya tienes. Tests sin red (`_get` se sustituye): `tests/test_telescopio.py`.
 6. **Conceptos:** `conceptos/catalogo.json` lista los conceptos del temario del máster y de Very Normal con las funciones que los implementan. Organización: `temas` (ramas del mapa, con color) > `areas` (módulos, con `ambito`) > conceptos (`area`, `prioridad` opcional, `area_fija` para que la actualización no lo mueva). La migración de 0.6.0 está en `herramientas/reorganizar_catalogo.py`.
    Si un concepto no tiene función (*hueco*), es que el árbol aún no lo cubre: impleméntalo (módulo + test), enlázalo en el catálogo (`funciones`) y regenera el visor.
    Al añadir una función nueva, enlázala al menos a un concepto (hay un test que lo exige).
