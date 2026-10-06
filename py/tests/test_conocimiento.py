@@ -53,3 +53,11 @@ def test_visor_incluye_cerebro_e_icono():
     html = cv.ensamblar(cv.construir())
     assert "window.crearCerebro" in html and 'id="cerebro"' in html
     assert "__ICONO__" not in html and "CEREBRO_JS" not in html and 'href="data:image/png;base64,' in html
+
+
+def test_cerebro_reparte_el_arbol_en_galaxias():
+    import construir_visor as cv
+    html = cv.ensamblar(cv.construir())
+    for g in ("codigo", "conceptos", "demos", "finanzas", "libros", "notas"):
+        assert f"{{id: '{g}'" in html                                   # una galaxia por parte del árbol y por colección
+    assert "volar: function" in html and "cerebro.volar(" in html        # animación de vuelo antes de entrar

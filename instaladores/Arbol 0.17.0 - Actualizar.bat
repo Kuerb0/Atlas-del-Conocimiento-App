@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 0.16.2 - Instalador
+title Arbol de la estadistica 0.17.0 - Actualizar
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=0.16.2"
+set "ARBOL_MODO=actualizar"
+set "ARBOL_VERSION=0.17.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -483,7 +483,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-0.16.2
+0.17.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -2517,7 +2517,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "0.16.2"
+version = "0.17.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3197,7 +3197,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "0.16.2"
+__version__ = "0.17.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -30082,6 +30082,14 @@ def test_visor_incluye_cerebro_e_icono():
     html = cv.ensamblar(cv.construir())
     assert "window.crearCerebro" in html and 'id="cerebro"' in html
     assert "__ICONO__" not in html and "CEREBRO_JS" not in html and 'href="data:image/png;base64,' in html
+
+
+def test_cerebro_reparte_el_arbol_en_galaxias():
+    import construir_visor as cv
+    html = cv.ensamblar(cv.construir())
+    for g in ("codigo", "conceptos", "demos", "finanzas", "libros", "notas"):
+        assert f"{{id: '{g}'" in html                                   # una galaxia por parte del árbol y por colección
+    assert "volar: function" in html and "cerebro.volar(" in html        # animación de vuelo antes de entrar
 :::END
 :::BEGIN py/tests/test_contrastes_extra.py|text
 """Contrastes añadidos en 0.9: apareados, no paramétricos, permutación, intervalos y bootstrap."""
@@ -32714,7 +32722,7 @@ def test_un_concepto_con_funcion_inexistente_avisa_sin_romper_el_visor(monkeypat
 # ---------- mapa 3D (py/visor/mapa3d.js) ----------
 def test_el_mapa_3d_esta_incrustado_y_sin_marcadores_sin_sustituir():
     html = construir_visor.ensamblar(construir_visor.construir())
-    assert "crearMapa3D" in html and '<canvas id="mapa"' in html
+    assert "crearMapa3D" in html and "cv.className = 'mapa3d'" in html     # un canvas por galaxia, creado al entrar
     assert "/*__MAPA3D_JS__*/" not in html and "/*__DEMOS_JS__*/" not in html and "__DATOS__" not in html
     assert "<svg id=\"mapa\"" not in html                                    # ya no es el mapa de burbujas en SVG
 
@@ -32746,7 +32754,8 @@ function sprite(c) {                                  /* mancha de luz de 32 px 
   g.fillStyle = gr; g.fillRect(0, 0, 32, 32); return spr[k] = cv;
 }
 var CEREBRO = [[240, 140, 192], [210, 130, 235], [170, 140, 250], [130, 160, 255]];   /* rosa → violeta → azul */
-var SITIOS = [[-46, 24, 54], [50, 20, 44], [-50, -4, -40], [48, 0, -44], [0, 46, 0], [0, -24, 70]];
+var SITIOS = [[-46, 24, 54], [50, 20, 44], [-52, -4, -34], [50, 0, -42], [0, 50, -4], [0, -26, 72], [0, 8, 6], [-20, 46, -50]];
+function suave(x) { return x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x); }
 
 window.crearCerebro = function (o) {
   var cv = o.canvas, ctx = cv.getContext('2d'), G = o.galaxias, rnd = azar(11), gauss = function () { return (rnd() + rnd() + rnd() - 1.5) * 1.15; };
@@ -32773,17 +32782,18 @@ window.crearCerebro = function (o) {
   }
   /* ---- las galaxias: dos brazos en espiral logarítmica, inclinadas y girando ---- */
   G.forEach(function (g, i) {
-    var s = SITIOS[i] || [0, 0, 0], R = i === 0 ? 48 : 38, pts = [], N = i === 0 ? 300 : 230, tilt = (rnd() - .5) * 1.1;
+    var s = SITIOS[i] || [0, 0, 0], R = 30 + 18 * (g.peso || 0), pts = [], N = 170 + Math.round(150 * (g.peso || 0)), tilt = (rnd() - .5) * 1.1;
     for (var k = 0; k < N; k++) { var r = 3 + R * Math.pow(rnd(), .75), brazo = k % 2 ? Math.PI : 0;
       pts.push({r: r, a: r * .17 + brazo + gauss() * .22, y: gauss() * 2.2 * (1 - r / R * .6), s: .7 + 1.1 * rnd(), al: .35 + .6 * rnd()}); }
     mundo.push({g: g, s: s, R: R, pts: pts, tilt: tilt, w: .25 + .2 * rnd(), sx: 0, sy: 0, sr: 40, rgb: g.color});
   });
 
   /* ---- proyección ---- */
-  var cY, sY, cP, sP, CX, CY, F, DIST = 470;
+  var cY, sY, cP, sP, CX, CY, F, DIST = 470, dist = DIST, foco = {x: 0, y: 0, z: 0}, an = null, vel = 1;
   function prep() { cY = Math.cos(yaw); sY = Math.sin(yaw); cP = Math.cos(pitch); sP = Math.sin(pitch); CX = W / 2; CY = H / 2 + 10; F = 760 * Math.min(W / 800, H / 600) * zoom; }
   function pr(x, y, z, out) {
-    var x1 = x * cY + z * sY, z1 = -x * sY + z * cY, y2 = y * cP - z1 * sP, z2 = y * sP + z1 * cP, d = z2 + DIST; if (d < 40) return false;
+    x -= foco.x; y -= foco.y; z -= foco.z;
+    var x1 = x * cY + z * sY, z1 = -x * sY + z * cY, y2 = y * cP - z1 * sP, z2 = y * sP + z1 * cP, d = z2 + dist; if (d < 30) return false;
     var s = F / d; out.x = CX + x1 * s; out.y = CY - y2 * s; out.s = s; out.d = d; return true;
   }
   var O = {};
@@ -32796,7 +32806,7 @@ window.crearCerebro = function (o) {
     L.forEach(function (e) { var A = {}, B = {}; if (pr(e[0].x, e[0].y, e[0].z, A) && pr(e[1].x, e[1].y, e[1].z, B)) { ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); } });
     ctx.stroke();
     for (var i = 0; i < P.length; i++) { var p = P[i]; if (!pr(p.x, p.y, p.z, O)) continue;
-      var prof = 1.15 - (O.d - DIST + 130) / 520; luz(CEREBRO[p.c < 0 ? 0 : p.c], O.x, O.y, (1.2 + 1.5 * p.s) * O.s * 1.5, p.a * .55 * (prof < .3 ? .3 : prof)); }
+      var prof = 1.15 - (O.d - dist + 130) / 520; luz(CEREBRO[p.c < 0 ? 0 : p.c], O.x, O.y, (1.2 + 1.5 * p.s) * O.s * 1.5, p.a * .55 * (prof < .3 ? .3 : prof)); }
     mundo.forEach(function (m, gi) {
       var hot = gi === hover || res[m.g.id], ct = Math.cos(m.tilt), st = Math.sin(m.tilt), c0 = [255, 255, 255];
       m.pts.forEach(function (p) { var a = p.a + t * m.w, x = p.r * Math.cos(a), z = p.r * Math.sin(a), y = p.y * ct - z * st, z2 = p.y * st + z * ct;
@@ -32804,6 +32814,7 @@ window.crearCerebro = function (o) {
       if (pr(m.s[0], m.s[1], m.s[2], O)) { m.sx = O.x; m.sy = O.y; m.sr = (m.R + 6) * O.s; luz(m.rgb, O.x, O.y, m.R * 1.5 * O.s * (hot ? 1.6 : 1.1), hot ? .9 : .55); luz(c0, O.x, O.y, 9 * O.s, .9); }
     });
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.textAlign = 'center';
+    if (an) { var ov = an.sale ? 1 - suave(an.p / .4) : suave((an.p - .72) / .28); ctx.fillStyle = 'rgba(3,4,10,' + ov.toFixed(3) + ')'; ctx.fillRect(0, 0, W, H); return; }
     var puestas = [];                               /* etiquetas: de arriba abajo, bajando la que se pise con otra */
     mundo.map(function (m, gi) { return {m: m, gi: gi, y: m.sy + m.sr + 14}; }).sort(function (a, b) { return a.y - b.y; }).forEach(function (e) {
       puestas.forEach(function (q) { if (Math.abs(e.m.sx - q.m.sx) < 130 && e.y < q.y + 28) e.y = q.y + 28; });
@@ -32818,7 +32829,16 @@ window.crearCerebro = function (o) {
   }
   function frame(ahora) {
     var dt = Math.min(.05, (ahora - (tPrev || ahora)) / 1000); tPrev = ahora;
-    if (!o.reducir && !arr) yaw += dt * .13; t += dt; dibujar(); raf = vivo && !o.reducir ? requestAnimationFrame(frame) : 0;
+    if (an) {                                               /* vuelo: la cámara se acerca a la galaxia (o se aleja de ella al volver) */
+      an.p = Math.min(1, (ahora - an.t0) / an.dur); var e = suave(an.p), k = an.sale ? 1 - e : e;
+      foco = {x: an.s[0] * k, y: an.s[1] * k, z: an.s[2] * k}; dist = DIST + (95 - DIST) * k; pitch += (an.pitch0 - pitch) * .04 * (1 - k);
+      if (an.p >= 1) { var fin = an.fin; an = null; foco = {x: 0, y: 0, z: 0}; dist = DIST; if (fin) fin(); }
+    } else if (!o.reducir && !arr) yaw += dt * .13 * vel;
+    t += dt; dibujar(); raf = vivo && (!o.reducir || an) ? requestAnimationFrame(frame) : 0;
+  }
+  function ocupado() {                                    /* ¿hay un vuelo en curso? (uno que lleva mucho más de su duración se da por muerto: pestaña sin fotogramas) */
+    if (an && performance.now() - an.t0 > an.dur + 500) { var fin = an.fin; an = null; foco = {x: 0, y: 0, z: 0}; dist = DIST; if (fin) fin(); }
+    return !!an;
   }
   function pintar() { if (vivo && !raf) raf = requestAnimationFrame(frame); }
   function medir() { var r = cv.getBoundingClientRect(); if (!r.width) return; DPR = Math.min(window.devicePixelRatio || 1, 2); W = r.width; H = r.height; cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR); pintar(); }
@@ -32826,8 +32846,9 @@ window.crearCerebro = function (o) {
   /* ---- ratón ---- */
   function lugar(ev) { var r = cv.getBoundingClientRect(); return {x: ev.clientX - r.left, y: ev.clientY - r.top}; }
   function bajo(p) { var mejor = -1, md = 1e9; mundo.forEach(function (m, i) { var d = Math.hypot(p.x - m.sx, p.y - m.sy); if (d < m.sr * 1.15 && d < md) { md = d; mejor = i; } }); return mejor; }
-  cv.addEventListener('pointerdown', function (ev) { cv.setPointerCapture(ev.pointerId); arr = {x: ev.clientX, y: ev.clientY, mov: 0}; });
+  cv.addEventListener('pointerdown', function (ev) { if (ocupado()) return; cv.setPointerCapture(ev.pointerId); arr = {x: ev.clientX, y: ev.clientY, mov: 0}; });
   cv.addEventListener('pointermove', function (ev) {
+    if (ocupado()) return;
     if (arr) { var dx = ev.clientX - arr.x, dy = ev.clientY - arr.y; arr.mov += Math.abs(dx) + Math.abs(dy); arr.x = ev.clientX; arr.y = ev.clientY;
       yaw -= dx * .006; pitch = Math.max(-1.2, Math.min(1.2, pitch + dy * .006)); cv.style.cursor = 'grabbing'; }
     else { var h = bajo(lugar(ev)); if (h !== hover) { hover = h; cv.style.cursor = h >= 0 ? 'pointer' : 'grab'; } }
@@ -32835,11 +32856,20 @@ window.crearCerebro = function (o) {
   });
   cv.addEventListener('pointerup', function (ev) { var clic = arr && arr.mov < 5; arr = null; cv.style.cursor = 'grab'; if (clic) { var h = bajo(lugar(ev)); if (h >= 0) o.alGalaxia(mundo[h].g); } pintar(); });
   cv.addEventListener('pointerleave', function () { if (!arr) { hover = -1; pintar(); } });
-  cv.addEventListener('wheel', function (ev) { ev.preventDefault(); zoom = Math.max(.6, Math.min(2.6, zoom * (ev.deltaY < 0 ? 1.1 : 1 / 1.1))); pintar(); }, {passive: false});
+  cv.addEventListener('wheel', function (ev) { ev.preventDefault(); if (ocupado()) return; zoom = Math.max(.6, Math.min(2.6, zoom * (ev.deltaY < 0 ? 1.1 : 1 / 1.1))); pintar(); }, {passive: false});
   cv.style.cursor = 'grab'; cv.style.touchAction = 'none';
 
   return {
-    mostrar: function () { vivo = true; medir(); },
+    mostrar: function (desde) {                             /* desde = id de la galaxia de la que se vuelve: la cámara se aleja de ella */
+      vivo = true; an = null; foco = {x: 0, y: 0, z: 0}; dist = DIST; medir();
+      var m = desde && !o.reducir ? mundo.filter(function (q) { return q.g.id === desde; })[0] : null;
+      if (m) { an = {s: m.s, sale: true, t0: performance.now(), dur: 900, p: 0, pitch0: pitch}; pintar(); }
+    },
+    volar: function (id, fin) {                             /* acerca la cámara a la galaxia y llama a fin() al llegar */
+      var m = mundo.filter(function (q) { return q.g.id === id; })[0];
+      if (!m || o.reducir || ocupado()) { if (fin) fin(); return; }
+      hover = -1; an = {s: m.s, sale: false, t0: performance.now(), dur: 1150, p: 0, fin: fin, pitch0: pitch}; if (!vivo) vivo = true; pintar();
+    },
     ocultar: function () { vivo = false; if (raf) cancelAnimationFrame(raf); raf = 0; },
     medir: medir,
     resaltar: function (m) { res = m || {}; pintar(); },
@@ -34760,8 +34790,9 @@ code,pre{font-family:var(--mono)}
 #cerebro{position:absolute;inset:0;width:100%;height:100%;z-index:1;display:block;background:#03040a;outline:none}
 #cerebro[hidden]{display:none}
 .mapa-ctrls[hidden]{display:none}
-#mapa{flex:1;min-height:0;width:100%;display:block;cursor:grab;background:#03040a;outline:none}
-#mapa:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.mapa3d{flex:1;min-height:0;width:100%;display:block;cursor:grab;background:#03040a;outline:none}
+.mapa3d[hidden]{display:none}
+.mapa3d:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .mapa-ctrls{position:absolute;right:10px;bottom:10px;z-index:5;display:flex;gap:6px}
 .mapa-ctrls .btn{background:rgba(8,10,18,.72);border-color:#2a3550;color:#c9d3e6;backdrop-filter:blur(3px)}
 .mapa-ctrls .btn:hover{background:rgba(30,40,64,.85)}
@@ -34982,9 +35013,8 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
   <main class="cuerpo">
     <section class="lienzo">
       <div class="migas" id="migas"></div>
-      <canvas id="mapa" role="img" aria-label="Mapa 3D del árbol de la estadística: el núcleo en el centro y las ramas orbitando a su alrededor. Arrastra para girar, rueda para acercar; las flechas del teclado también giran."></canvas>
       <canvas id="cerebro" role="img" aria-label="Cerebro 3D: tu conocimiento. Dentro, una galaxia por colección: estadística (el árbol), libros, finanzas y notas. Clic en una galaxia para entrar."></canvas>
-      <div class="mapa-ctrls" id="ctrls">
+      <div class="mapa-ctrls" id="ctrls" hidden>
         <button class="btn ic" id="cerebroBtn" type="button" title="Volver al cerebro (todo tu conocimiento)">🧠</button>
         <button class="btn ic" id="rot" type="button" title="Pausar / reanudar el movimiento" aria-pressed="false">⏸</button>
         <button class="btn ic" id="vista" type="button" title="Vista general: volver al núcleo y recentrar">⌂</button>
@@ -35037,6 +35067,21 @@ DATA.ramas.forEach(function (rm) {
   });
   root.hijos.push(rn);
 });
+/* ---------- galaxias: cada una es una parte del árbol con su propio mapa 3D (Libros y Notas son solo ámbitos de búsqueda) ---------- */
+var GALAXIAS = [
+  {id: 'codigo', nombre: 'Código', color: [255, 150, 40], peso: 1},
+  {id: 'conceptos', nombre: 'Conceptos', color: [177, 140, 240], peso: .9},
+  {id: 'demos', nombre: 'Demos y guías', color: [79, 195, 220], peso: .45},
+  {id: 'finanzas', nombre: 'Finanzas', color: [111, 207, 123], peso: .6},
+  {id: 'libros', nombre: 'Libros', color: [111, 162, 255], peso: .4, solo: true},
+  {id: 'notas', nombre: 'Notas y enlaces', color: [240, 140, 192], peso: .25, solo: true}];
+var GAL = {}, COL_GAL = {codigo: 'codigo', conceptos: 'conceptos', teoria: 'demos'};
+GALAXIAS.forEach(function (g) { GAL[g.id] = g; if (!g.solo) g.raiz = {id: 'g-' + g.id, nombre: g.nombre, kind: 'raiz', hijos: [], depth: 0, parent: null, galaxia: g}; });
+root.hijos.forEach(function (rn) {
+  var g = GAL[rn.rama === 'finanzas' || rn.rama === 't_fin' ? 'finanzas' : rn.grupo === 'conceptos' ? 'conceptos' : rn.rama === 'demos' || rn.rama === 'guias' ? 'demos' : 'codigo'];
+  rn.parent = g.raiz; g.raiz.hijos.push(rn);
+});
+function galaxiaDe(n) { for (var p = n; p.parent; p = p.parent); return p.galaxia || null; }
 var porId = {}, hojas = [];
 (function reg(n) { porId[n.id] = n; if (n.kind === 'hoja') {
   hojas.push(n);
@@ -35060,7 +35105,7 @@ function cuenta(n) { return n.kind === 'hoja' ? 1 : n.hijos.reduce(function (a, 
 /* ---------- mapa 3D (el motor está en visor/mapa3d.js; aquí solo se conecta con el resto del visor) ----------
    Núcleo = el árbol; ramas = nodos con anillo que orbitan; módulos y hojas = puntos alrededor de su rama.
    `focus` es el nivel en el que estamos (raíz, rama o módulo); la cámara vuela hasta él. */
-var focus = root, sel = null, query = '', soloSas = false, soloHuecos = false, soloAlta = false, coincide = null, conCoincidencia = {};
+var focus = null, sel = null, query = '', soloSas = false, soloHuecos = false, soloAlta = false, coincide = null, conCoincidencia = {};
 function esDesc(n, a) { for (var p = n; p; p = p.parent) if (p === a) return true; return false; }
 function moduloPrincipal(rn) {      /* el «planeta» de la rama: su módulo con más elementos */
   return rn.hijos.reduce(function (m, c) { return !m || c.hijos.length > m.hijos.length ? c : m; }, null) || rn;
@@ -35068,58 +35113,82 @@ function moduloPrincipal(rn) {      /* el «planeta» de la rama: su módulo con
 function clicNodo(n, ev) {
   var ctrl = !!(ev && (ev.ctrlKey || ev.metaKey));
   if (n.kind === 'hoja') { seleccionar(n, false); if (focus !== n.parent) ir(n.parent); return; }
-  if (n.kind === 'raiz') { if (focus !== root) ir(root); return; }
+  if (n.kind === 'raiz') { if (focus !== galAct.raiz) ir(galAct.raiz); return; }
   if (ctrl && n.kind === 'rama') { var mp = moduloPrincipal(n); if (mp !== focus) ir(mp); return; }   /* Ctrl+clic: directo al módulo principal */
-  if (n === focus) { ir(focus.parent || root); return; }
+  if (n === focus) { ir(focus.parent || galAct.raiz); return; }
   ir(n);
   if ((n.kind === 'modulo' || n.kind === 'rama') && typeof detalleGrupoFunciones === 'function') detalleGrupoFunciones(n);
 }
-var mapa = crearMapa3D({
-  canvas: $('#mapa'), root: root, hojas: hojas, esDesc: esDesc, reducir: reducir,
-  estado: function () { return {focus: focus, sel: sel, filtrando: !!(query || soloSas || soloHuecos || soloAlta), coincide: coincide || {}, conCoincidencia: conCoincidencia}; },
-  alNodo: clicNodo,
-  alFondo: function () { if (focus.parent) ir(focus.parent); }
-});
-function ir(n, instante) { if (vista !== 'arbol') mostrarArbol(); focus = n; mapa.ir(n, instante); migas(); }
-function pintar() { mapa.pintar(); }
-window.arbolDebug = {mapa: mapa, ir: ir, root: root};      /* para medir el rendimiento desde la consola: arbolDebug.mapa.perfil(60, 0.5) */
-function medir() { mapa.medir(); }
-if (window.ResizeObserver) new ResizeObserver(medir).observe($('#mapa')); else window.addEventListener('resize', medir);
+/* Un mapa 3D por galaxia, creado al entrar por primera vez; `mapa` es el de la galaxia en la que estamos. */
+var mapa = null, galAct = null, instancias = {}, rotUsuario = !reducir, vista = 'cerebro';
+function instancia(g) {
+  if (instancias[g.id]) return instancias[g.id];
+  var cv = document.createElement('canvas'); cv.className = 'mapa3d'; cv.hidden = true; cv.setAttribute('role', 'img');
+  cv.setAttribute('aria-label', 'Mapa 3D de «' + g.nombre + '»: el núcleo en el centro y las ramas orbitando. Arrastra para girar, rueda para acercar; las flechas del teclado también giran.');
+  $('#cerebro').parentNode.insertBefore(cv, $('#cerebro'));
+  var m = crearMapa3D({
+    canvas: cv, root: g.raiz, hojas: hojas.filter(function (h) { return esDesc(h, g.raiz); }), esDesc: esDesc, reducir: reducir,
+    estado: function () { return {focus: focus, sel: sel, filtrando: !!(query || soloSas || soloHuecos || soloAlta), coincide: coincide || {}, conCoincidencia: conCoincidencia}; },
+    alNodo: clicNodo,
+    alFondo: function () { if (focus.parent) ir(focus.parent); }
+  });
+  if (window.ResizeObserver) new ResizeObserver(function () { m.medir(); }).observe(cv);
+  return instancias[g.id] = {mapa: m, canvas: cv};
+}
+function entrarGalaxia(g) {                   /* deja el cerebro (o la galaxia anterior) y muestra el mapa de g, sin animación */
+  if (vista === 'cerebro') { cerebro.ocultar(); $('#cerebro').hidden = true; }
+  else if (galAct && galAct !== g) { instancias[galAct.id].canvas.hidden = true; mapa.rotacion(false); }
+  var inst = instancia(g); inst.canvas.hidden = false; mapa = inst.mapa; galAct = g; vista = 'arbol';
+  $('#ctrls').hidden = false; mapa.medir(); mapa.rotacion(rotUsuario);
+  if (!focus || galaxiaDe(focus) !== g) focus = g.raiz;
+  mapa.ir(focus, true); migas();
+}
+function irYa(n, g, instante) {
+  if (vista !== 'arbol' || galAct !== g) { focus = n; entrarGalaxia(g); }
+  focus = n; mapa.ir(n, instante); migas();
+}
+function ir(n, instante) {                    /* desde el cerebro, antes de entrar hay un vuelo hasta la galaxia */
+  var g = galaxiaDe(n);
+  if (vista === 'cerebro' && !instante) { cerebro.volar(g.id, function () { irYa(n, g, true); }); return; }
+  irYa(n, g, instante);
+}
+function pintar() { if (mapa) mapa.pintar(); }
+window.arbolDebug = {ir: ir, root: root, instancias: instancias};      /* para medir el rendimiento: arbolDebug.instancias.codigo.mapa.perfil(60, 0.5) */
+function medir() { if (mapa) mapa.medir(); }
 (function () {
   var b = $('#rot');
-  function texto() { var mov = mapa.rotacion(); b.textContent = mov ? '⏸' : '▶'; b.setAttribute('aria-pressed', String(!mov)); }
-  b.onclick = function () { mapa.rotacion(!mapa.rotacion()); texto(); }; texto();
-  $('#vista').onclick = function () { mapa.recentrar(); ir(root); };
+  function texto() { b.textContent = rotUsuario ? '⏸' : '▶'; b.setAttribute('aria-pressed', String(!rotUsuario)); }
+  b.onclick = function () { rotUsuario = !rotUsuario; if (mapa) mapa.rotacion(rotUsuario); texto(); }; texto();
+  $('#vista').onclick = function () { if (mapa) { mapa.recentrar(); ir(galAct.raiz); } };
 })();
 
-/* ---------- cerebro: primera capa (motor en visor/cerebro.js). Galaxia «arbol» = el mapa 3D de siempre; el resto son colecciones del gestor de conocimiento ---------- */
-var vista = 'arbol', coleccionK = '', rotPrev = true;
-var COL_GAL = {codigo: 'arbol', conceptos: 'arbol', teoria: 'arbol'};
-var GALAXIAS = [
-  {id: 'arbol', nombre: 'Estadística', color: [255, 150, 40], sub: hojas.length + ' elementos · el árbol'},
-  {id: 'libros', nombre: 'Libros', color: [111, 162, 255], sub: 'sin indexar'},
-  {id: 'finanzas', nombre: 'Finanzas', color: [111, 207, 123], sub: 'sin indexar'},
-  {id: 'notas', nombre: 'Notas y enlaces', color: [240, 140, 192], sub: 'sin indexar'}];
+/* ---------- cerebro: primera capa (motor en visor/cerebro.js). Cada galaxia es una parte del árbol (Código, Conceptos, Demos, Finanzas) o una colección del gestor de conocimiento ---------- */
+var coleccionK = '', resArbol = {}, resK = {};
+(function () {                                /* el rótulo de cada galaxia: cuántos elementos tiene */
+  var n = {}; hojas.forEach(function (h) { var g = galaxiaDe(h); n[g.id] = (n[g.id] || 0) + 1; });
+  GAL.codigo.base = n.codigo + ' funciones'; GAL.conceptos.base = n.conceptos + ' conceptos'; GAL.demos.base = n.demos + ' demos y guías'; GAL.finanzas.base = n.finanzas + ' funciones y conceptos';
+  GALAXIAS.forEach(function (g) { g.sub = g.base || 'sin indexar'; });
+})();
+function luces() {                            /* las galaxias con coincidencias (del árbol y de tus carpetas) se iluminan */
+  var m = {}; [resArbol, resK].forEach(function (o) { Object.keys(o).forEach(function (k) { m[k] = Math.max(m[k] || 0, o[k]); }); }); cerebro.resaltar(m);
+}
 var cerebro = crearCerebro({canvas: $('#cerebro'), galaxias: GALAXIAS, reducir: reducir, alGalaxia: function (g) {
-  if (g.id === 'arbol') { mostrarArbol(); ir(root); return; }
+  if (!g.solo) { ir(g.raiz); return; }
   coleccionK = g.id; $('#q').placeholder = 'Buscar en ' + g.nombre.toLowerCase() + '…'; migas(); $('#q').focus(); if (query) conocimiento(query);
   aviso('Buscas solo en «' + g.nombre + '». Escribe arriba' + (hayPython() ? '.' : ' (la búsqueda en tus carpetas funciona en la app).'));
 }});
 function mostrarCerebro() {
   if (vista === 'cerebro') return;
-  rotPrev = mapa.rotacion(); mapa.rotacion(false); vista = 'cerebro';
-  $('#cerebro').hidden = false; $('#ctrls').hidden = true; cerebro.mostrar(); migas();
-}
-function mostrarArbol() {
-  if (vista === 'arbol') return;
-  vista = 'arbol'; cerebro.ocultar(); $('#cerebro').hidden = true; $('#ctrls').hidden = false; mapa.rotacion(rotPrev); migas();
+  var desde = galAct && galAct.id;
+  instancias[desde].canvas.hidden = true; mapa.rotacion(false);
+  vista = 'cerebro'; $('#cerebro').hidden = false; $('#ctrls').hidden = true; cerebro.mostrar(desde); migas();
 }
 $('#cerebroBtn').onclick = mostrarCerebro;
 if (window.ResizeObserver) new ResizeObserver(function () { cerebro.medir(); }).observe($('#cerebro')); else window.addEventListener('resize', function () { cerebro.medir(); });
-window.addEventListener('pywebviewready', async function () {     /* cuántos ficheros hay en cada colección (solo en la app, con el índice hecho) */
+window.addEventListener('pywebviewready', async function () {     /* cuántos ficheros hay en cada colección de tus carpetas (solo en la app, con el índice hecho) */
   if (!window.pywebview.api.estado_conocimiento) return;
   try { var e = await window.pywebview.api.estado_conocimiento(), d = {};
-    Object.keys(e).forEach(function (c) { if (!COL_GAL[c]) d[c] = e[c] + ' ficheros'; }); cerebro.datos(d); } catch (x) {}
+    ['libros', 'finanzas', 'notas'].forEach(function (c) { if (e[c]) d[c] = (GAL[c].base ? GAL[c].base + ' · ' : '') + e[c] + ' ficheros'; }); cerebro.datos(d); } catch (x) {}
 });
 
 /* ---------- divisor: cambiar el ancho del mapa / panel ---------- */
@@ -35176,7 +35245,7 @@ $('#resumen').textContent = hojas.filter(function (h) { return h.tipo === 'funci
 root.hijos.forEach(function (rn) {
   var b = document.createElement('button'); b.type = 'button'; b.className = 'chip b-' + rn.rama; b.dataset.id = rn.id;
   b.innerHTML = '<i style="background:var(--c)"></i>' + esc(rn.nombre) + ' <b>' + cuenta(rn) + '</b>';
-  b.onclick = function () { var dst = focus === rn ? root : rn; ir(dst); if (dst === rn) detalleGrupoFunciones(rn); }; $('#chips').appendChild(b);
+  b.onclick = function () { var dst = focus === rn ? rn.parent : rn; ir(dst); if (dst === rn) detalleGrupoFunciones(rn); }; $('#chips').appendChild(b);
 });
 $('#pista').textContent = 'El núcleo es el árbol; los nodos con anillo son las ramas y orbitan a su alrededor. Arrastra para girar, rueda para acercar, clic en una rama para entrar y ver sus módulos (Ctrl+clic: salta directo a su módulo principal); clic en el vacío o en las migas para volver. Los arcos unen conceptos con las funciones que los implementan. Puntos sólidos = funciones o conceptos con código; punteados = conceptos aún sin código. Arrastra la barra de la derecha para agrandar el mapa (doble clic la oculta). «Cómo funciona» tiene demos interactivas.';
 $('#titulo').title = 'Árbol de la estadística · ' + $('#resumen').textContent;
@@ -35222,6 +35291,7 @@ function buscar() {
       for (var p = h.parent; p; p = p.parent) conCoincidencia[p.id] = (conCoincidencia[p.id] || 0) + 1; }
   });
   resultados.sort(function (a, b) { return b.s - a.s || a.n.nombre.localeCompare(b.n.nombre); });
+  resArbol = {}; if (query) resultados.forEach(function (r) { var g = galaxiaDe(r.n); resArbol[g.id] = (resArbol[g.id] || 0) + 1; });
   var ul = $('#resultados'); ul.innerHTML = ''; idxRes = -1;
   if (query) {
     if (!resultados.length) { var li = document.createElement('li'); li.className = 'vacio'; li.textContent = 'Sin resultados para «' + query + '». Prueba con el nombre de un PROC de SAS o un concepto (p. ej. odds, VIF, chi).'; ul.appendChild(li); }
@@ -35234,7 +35304,7 @@ function buscar() {
     if (resultados.length > 12) { var mas = document.createElement('li'); mas.className = 'vacio'; mas.textContent = '+ ' + (resultados.length - 12) + ' más: los nodos resaltados en el mapa los muestran todos.'; ul.appendChild(mas); }
     ul.hidden = false;
   } else ul.hidden = true;
-  pintar();
+  pintar(); luces();
   conocimiento(query);
 }
 /* Gestor de conocimiento (solo en la app: lo busca Python, ver py/conocimiento). Lo que sea código o concepto del árbol ilumina su nodo en el mapa;
@@ -35246,7 +35316,7 @@ function hojaDeResultado(x) {
 }
 function conocimiento(q) {
   clearTimeout(temporizadorK);
-  if (!q) cerebro.resaltar({});
+  if (!q) { resK = {}; luces(); }
   if (!q || !hayPython() || !window.pywebview.api.buscar_conocimiento) return;
   temporizadorK = setTimeout(async function () {
     var r = await window.pywebview.api.buscar_conocimiento(q, 12, coleccionK || null);
@@ -35255,7 +35325,7 @@ function conocimiento(q) {
     var li = document.createElement('li'); li.className = 'sec vacio k'; ul.appendChild(li);
     if (r.error) { li.textContent = 'Tu conocimiento: ' + r.error; ul.hidden = false; return; }
     li.textContent = 'En tu conocimiento (' + r.resultados.length + ')';
-    var porGal = {}; r.resultados.forEach(function (x) { var g = COL_GAL[x.coleccion] || x.coleccion; porGal[g] = (porGal[g] || 0) + 1; }); cerebro.resaltar(porGal);
+    var porGal = {}; r.resultados.forEach(function (x) { var g = COL_GAL[x.coleccion] || x.coleccion; porGal[g] = (porGal[g] || 0) + 1; }); resK = porGal; luces();
     r.resultados.forEach(function (x) {
       var h = hojaDeResultado(x);
       if (h) { coincide[h.id] = (coincide[h.id] || 0) + 5; for (var p = h.parent; p; p = p.parent) conCoincidencia[p.id] = (conCoincidencia[p.id] || 0) + 1; }
@@ -35336,7 +35406,7 @@ function detalleVacio() {
   });
 }
 function seleccionar(n, zoom) {
-  if (vista !== 'arbol') mostrarArbol();
+  var gN = galaxiaDe(n); if (!zoom && (vista !== 'arbol' || galAct !== gN)) { focus = n.parent; entrarGalaxia(gN); }
   if (window.mostrarDetalle) window.mostrarDetalle();
   vistaModulo = null;
   sel = n; if (zoom) ir(n.parent); else pintar();
@@ -35766,9 +35836,8 @@ aplicarTema();
 /* ---------- arranque ---------- */
 coincide = {}; detalleVacio(); medir(); migas();
 var hash = decodeURIComponent((location.hash || '').slice(1));
-if (hash && porNombre[hash]) { seleccionar(porNombre[hash], true); mapa.ir(focus, true); }
-else { focus = root; mapa.ir(root, true); }
-if (!(hash && porNombre[hash])) mostrarCerebro();      /* se abre en el cerebro, salvo que el enlace apunte a una función concreta */
+if (hash && porNombre[hash]) { seleccionar(porNombre[hash], false); ir(porNombre[hash].parent, true); }
+else cerebro.mostrar();
 window.addEventListener('hashchange', function () {     /* enlaces #nombre y atrás/adelante del navegador */
   var h2 = decodeURIComponent((location.hash || '').slice(1));
   if (h2 && porNombre[h2] && porNombre[h2] !== sel) seleccionar(porNombre[h2], true);
@@ -36795,7 +36864,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
    su ficha en `fichas_fuente.py` (con `grupo` de alternativas) y su entrada `@bench` en `medir_propiedades.py` (hay tests que
    lo exigen), luego `python herramientas/fichas_fuente.py` y `python py/medir_propiedades.py <función>`.
    Cuando Mario pregunte «¿qué uso para X?», mira el grupo de alternativas y ordénalas con el perfil que encaje con su proyecto.
-5g. **Cerebro (primera capa del visor):** el visor se abre en un cerebro 3D (`py/visor/cerebro.js`) con una galaxia por colección: «Estadística» = el mapa 3D del árbol de siempre; «Libros», «Finanzas», «Notas» = ámbitos de búsqueda del gestor (clic = busca solo ahí). El botón 🧠 del mapa vuelve al cerebro. Icono: `python herramientas/generar_icono.py`. `indexar_conocimiento.bat` crea `conocimiento/fuentes.json` (tus carpetas) e indexa.
+5g. **Cerebro (primera capa del visor):** el visor se abre en un cerebro 3D (`py/visor/cerebro.js`) con una galaxia por parte: **Código** (las ramas de funciones), **Conceptos** (los temas `t_*` salvo finanzas), **Demos y guías**, **Finanzas** (rama `finanzas` + `t_fin`) —cada una con su propio mapa 3D, creado al entrar, y una animación de vuelo hacia ella— y **Libros** y **Notas** (solo ámbitos de búsqueda del gestor). El reparto está en `GALAXIAS` de `plantilla.html`; el buscador ilumina las galaxias con coincidencias y, al elegir un resultado, vuela a su galaxia. El botón 🧠 (o la miga) vuelve al cerebro. Icono: `python herramientas/generar_icono.py`. `indexar_conocimiento.bat` crea `conocimiento/fuentes.json` (tus carpetas) e indexa.
 5f. **Gestor de conocimiento:** `py/conocimiento/` es un buscador único (SQLite FTS5, BM25, sinónimos del catálogo) sobre código, conceptos, teoría y tus libros/finanzas/notas (`conocimiento/fuentes.json`, no se publica). `cd py && python -m conocimiento indexar | buscar "consulta" [-c colección] | estado`. Antes de buscar a mano en `Manuales Estadística` o en `teoria/`, usa `buscar`.
 6. **Conceptos:** `conceptos/catalogo.json` lista los conceptos del temario del máster y de Very Normal con las funciones que los implementan. Organización: `temas` (ramas del mapa, con color) > `areas` (módulos, con `ambito`) > conceptos (`area`, `prioridad` opcional, `area_fija` para que la actualización no lo mueva). La migración de 0.6.0 está en `herramientas/reorganizar_catalogo.py`.
    Si un concepto no tiene función (*hueco*), es que el árbol aún no lo cubre: impleméntalo (módulo + test), enlázalo en el catálogo (`funciones`) y regenera el visor.

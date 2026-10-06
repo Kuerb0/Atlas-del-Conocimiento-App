@@ -136,7 +136,7 @@ def test_un_concepto_con_funcion_inexistente_avisa_sin_romper_el_visor(monkeypat
 # ---------- mapa 3D (py/visor/mapa3d.js) ----------
 def test_el_mapa_3d_esta_incrustado_y_sin_marcadores_sin_sustituir():
     html = construir_visor.ensamblar(construir_visor.construir())
-    assert "crearMapa3D" in html and '<canvas id="mapa"' in html
+    assert "crearMapa3D" in html and "cv.className = 'mapa3d'" in html     # un canvas por galaxia, creado al entrar
     assert "/*__MAPA3D_JS__*/" not in html and "/*__DEMOS_JS__*/" not in html and "__DATOS__" not in html
     assert "<svg id=\"mapa\"" not in html                                    # ya no es el mapa de burbujas en SVG
 
