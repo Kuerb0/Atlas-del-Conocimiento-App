@@ -16,7 +16,8 @@ function sprite(c) {                                  /* mancha de luz de 32 px 
 }
 var CEREBRO = [[240, 140, 192], [210, 130, 235], [170, 140, 250], [130, 160, 255]];   /* rosa → violeta → azul */
 var ESPIRAL = .0095, GIRO = .04;                      /* los mismos que mapa3d.js: así la galaxia pequeña es una miniatura exacta de la de dentro */
-var DUST = [[255, 154, 46], [255, 196, 120], [255, 106, 31], [255, 230, 190]];
+function mez(a, b, k) { return [Math.round(a[0] + (b[0] - a[0]) * k), Math.round(a[1] + (b[1] - a[1]) * k), Math.round(a[2] + (b[2] - a[2]) * k)]; }
+function tonos(c) { return [c, mez(c, [255, 255, 255], .4), mez(c, [0, 0, 0], .25), mez(c, [255, 255, 255], .75)]; }   /* los mismos cuatro tonos que el polvo del mapa de dentro */
 var SITIOS = [[-56, 26, 56], [56, 22, 40], [-58, -10, -30], [56, -4, -48], [0, 54, -6], [0, -30, 74], [0, 8, 6], [-20, 46, -50]];
 function suave(x) { return x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x); }
 
@@ -45,10 +46,10 @@ window.crearCerebro = function (o) {
   }
   /* ---- las galaxias: miniatura de la de dentro (mismas ramas, ángulos y giro; ver mapa3d.js): núcleo, polvo en dos brazos y una nube por rama ---- */
   G.forEach(function (g, i) {
-    var polvo = [];
+    var polvo = [], tn = tonos(g.color);
     for (var k = 0; k < 520; k++) {
       var r = 38 + 640 * Math.pow(rnd(), 1.65), a = r > 190 && rnd() < .85 ? (rnd() < .5 ? 0 : Math.PI) + (r - 190) * ESPIRAL + .3 * gauss() : 2 * Math.PI * rnd();
-      polvo.push({lx: r * Math.cos(a), lz: r * Math.sin(a), y: (rnd() + rnd() + rnd() - 1.5) * .34 * (30 + r * .22), c: DUST[k % 4], s: .8 + 1.2 * rnd(), al: .25 + .6 * rnd()});
+      polvo.push({lx: r * Math.cos(a), lz: r * Math.sin(a), y: (rnd() + rnd() + rnd() - 1.5) * .34 * (30 + r * .22), c: tn[k % 4], s: .8 + 1.2 * rnd(), al: .25 + .6 * rnd()});
     }
     mundo.push({g: g, s: SITIOS[i] || [0, 0, 0], R: 26 + 24 * (g.peso || 0), polvo: polvo, sx: 0, sy: 0, sr: 40, rgb: g.color});
   });
@@ -78,6 +79,11 @@ window.crearCerebro = function (o) {
       m.polvo.forEach(function (d) {                          /* el polvo: puntos pequeños, como en el mapa de dentro */
         if (pr(s0[0] + (d.lx * gc + d.lz * gs) * k, s0[1] + d.y * k, s0[2] + (-d.lx * gs + d.lz * gc) * k, O)) luz(d.c, O.x, O.y, 3.6 + 2.6 * d.s, Math.min(1, d.al * 1.35) * (hot ? 1 : .9));
       });
+      ctx.strokeStyle = 'rgba(' + m.rgb.join(',') + ',' + (hot ? .5 : .28) + ')'; ctx.lineWidth = 1; ctx.beginPath();   /* los dos brazos, como líneas finas */
+      for (var br = 0; br < 2; br++) { var vis = false;
+        for (var rr = 30; rr <= 620; rr += 24) { var aa = br * Math.PI + (rr - 190) * ESPIRAL + GIRO * t;
+          if (pr(s0[0] + rr * Math.cos(aa) * k, s0[1], s0[2] + rr * Math.sin(aa) * k, O)) { if (vis) ctx.lineTo(O.x, O.y); else ctx.moveTo(O.x, O.y); vis = true; } else vis = false; } }
+      ctx.stroke(); ctx.globalAlpha = 1;
       var sis = m.g.sistema;
       if (sis) sis.ramas.forEach(function (q) {              /* una nube de color por rama, en su sitio y con su giro */
         var a = q.w * t, c = Math.cos(a), s = Math.sin(a);
@@ -85,7 +91,7 @@ window.crearCerebro = function (o) {
       });
       if (pr(s0[0], s0[1], s0[2], O)) {                       /* el núcleo, con un halo del color de la colección */
         m.sx = O.x; m.sy = O.y; m.sr = (m.R + 6) * O.s;
-        luz(m.rgb, O.x, O.y, m.R * 2 * O.s * (hot ? 1.3 : 1), hot ? .55 : .3); luz([255, 150, 40], O.x, O.y, Math.max(10, 300 * k * O.s * 1.3), .9); luz([255, 255, 255], O.x, O.y, Math.max(5, 60 * k * O.s), .9);
+        luz(m.rgb, O.x, O.y, m.R * 2 * O.s * (hot ? 1.3 : 1), hot ? .55 : .3); luz(mez(m.rgb, [255, 255, 255], .25), O.x, O.y, Math.max(10, 300 * k * O.s * 1.3), .9); luz([255, 255, 255], O.x, O.y, Math.max(5, 60 * k * O.s), .9);
       }
     });
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.textAlign = 'center';

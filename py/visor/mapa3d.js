@@ -38,16 +38,17 @@ function sprite(rgb) {                      /* mancha de luz con el centro casi 
   gr.addColorStop(.45, rgba(rgb, .22)); gr.addColorStop(1, rgba(rgb, 0));
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return sprites[k] = c;
 }
-function spriteNucleo() {
-  if (sprites.nucleo) return sprites.nucleo;
-  var c = document.createElement('canvas'); c.width = c.height = 256; var g = c.getContext('2d');
+function spriteNucleo(c) {                   /* el núcleo: gradiente del color de la galaxia (naranja por defecto) */
+  c = c || NUCLEO; var k = 'n' + c.join(','); if (sprites[k]) return sprites[k];
+  var cv = document.createElement('canvas'); cv.width = cv.height = 256; var g = cv.getContext('2d'), B = [255, 255, 255], N = [0, 0, 0];
   var gr = g.createRadialGradient(128, 128, 0, 128, 128, 128);
-  gr.addColorStop(0, 'rgba(255,248,225,1)'); gr.addColorStop(.07, 'rgba(255,214,130,.98)'); gr.addColorStop(.16, 'rgba(255,150,40,.8)');
-  gr.addColorStop(.38, 'rgba(255,95,15,.28)'); gr.addColorStop(.7, 'rgba(200,50,5,.07)'); gr.addColorStop(1, 'rgba(160,30,0,0)');
-  g.fillStyle = gr; g.fillRect(0, 0, 256, 256); return sprites.nucleo = c;
+  gr.addColorStop(0, rgba(mez(c, B, .9), 1)); gr.addColorStop(.07, rgba(mez(c, B, .5), .98)); gr.addColorStop(.16, rgba(c, .8));
+  gr.addColorStop(.38, rgba(mez(c, N, .2), .28)); gr.addColorStop(.7, rgba(mez(c, N, .5), .07)); gr.addColorStop(1, rgba(mez(c, N, .6), 0));
+  g.fillStyle = gr; g.fillRect(0, 0, 256, 256); return sprites[k] = cv;
 }
 
 window.crearMapa3D = function (o) {
+  var NUC = o.color || NUCLEO;          /* color de la galaxia: núcleo, polvo y brazos */
   var canvas = o.canvas, ctx = canvas.getContext('2d'), root = o.root, hojas = o.hojas, estado = o.estado, esDesc = o.esDesc;
   var rnd = azar(42), gauss = function () { return (rnd() + rnd() + rnd() + rnd() - 2) * 1.7321; };
   var W = 800, H = 600, DPR = 1, F = 700, F0 = 700, CX = 400, CY = 300, AJUSTE = 250, vuelo = null, focoPrevio = root, sincro = false;
@@ -96,7 +97,7 @@ window.crearMapa3D = function (o) {
   function grupoDe(rgb, base) { var k = rgb.join(','); for (var g = 0; g < grupos.length; g++) if (grupos[g].k === k) return g;
     grupos.push({k: k, rgb: rgb, ini: 0, fin: 0, base: base}); return grupos.length - 1; }
   function p(g, hub, lx, ly, lz, w, sz, al) { polvo.push({g: g, hub: hub, lx: lx, ly: ly, lz: lz, w: w, sz: sz, al: al}); }
-  [[255, 154, 46], [255, 196, 120], [255, 106, 31], [255, 230, 190]].forEach(function (c, k) {
+  [NUC, mez(NUC, [255, 255, 255], .4), mez(NUC, [0, 0, 0], .25), mez(NUC, [255, 255, 255], .75)].forEach(function (c, k) {
     var g = grupoDe(c, 0), n = [850, 500, 440, 170][k];
     for (var i = 0; i < n; i++) {
       var r = 38 + 640 * Math.pow(rnd(), 1.65), a = r > 190 && rnd() < .85 ? (rnd() < .5 ? 0 : Math.PI) + (r - 190) * ESPIRAL + .3 * gauss() : 2 * Math.PI * rnd(), esp = (rnd() + rnd() + rnd() - 1.5) * .34 * (30 + r * .22);
@@ -232,7 +233,7 @@ window.crearMapa3D = function (o) {
     var nuc = proy(0, 0, 0) ? {x: PX, y: PY, s: PS, d: PD} : null;
     if (nuc) {
       var pulso = 1 + .035 * Math.sin(t * 1.7), rh = acota(300 * nuc.s, 70, 380) * pulso;
-      ctx.globalAlpha = focus.kind === 'raiz' ? .92 : .5; ctx.drawImage(spriteNucleo(), nuc.x - rh, nuc.y - rh, rh * 2, rh * 2);
+      ctx.globalAlpha = focus.kind === 'raiz' ? .92 : .5; ctx.drawImage(spriteNucleo(NUC), nuc.x - rh, nuc.y - rh, rh * 2, rh * 2);
     }
 
     /* polvo */
@@ -256,31 +257,23 @@ window.crearMapa3D = function (o) {
     }
     ctx.globalAlpha = 1;
 
-    /* órbitas de las ramas */
-    ctx.lineWidth = 1;
-    ramas.forEach(function (rn) {
-      var q = rn.p3, rxz = Math.hypot(q.bx, q.bz); if (rxz < 40) return;
-      ctx.strokeStyle = rgba(q.rgb, .075 * (.4 + .6 * q.a)); ctx.beginPath();
-      var seguido = false;
-      for (var k = 0; k <= 96; k++) { var a = k / 96 * Math.PI * 2;
-        if (proy(rxz * Math.cos(a), q.by, rxz * Math.sin(a))) { if (seguido) ctx.lineTo(PX, PY); else ctx.moveTo(PX, PY); seguido = true; } else seguido = false; }
+    /* brazos de la espiral: dos curvas logarítmicas desde el núcleo, por donde se reparten las ramas */
+    ctx.lineWidth = 1.4;
+    for (var brazo = 0; brazo < 2; brazo++) {
+      ctx.strokeStyle = rgba(NUC, .32 * (focus.kind === 'raiz' ? 1 : .5)); ctx.beginPath(); var seguido = false;
+      for (var rr0 = 30; rr0 <= 620; rr0 += 8) { var aa = brazo * Math.PI + (rr0 - 190) * ESPIRAL + GIRO * t;
+        if (proy(rr0 * Math.cos(aa), 0, rr0 * Math.sin(aa))) { if (seguido) ctx.lineTo(PX, PY); else ctx.moveTo(PX, PY); seguido = true; } else seguido = false; }
       ctx.stroke();
-    });
+    }
     if (proy(0, 0, 0)) {                       /* anillos del núcleo */
-      [[58, .22], [96, .11]].forEach(function (rr) { ctx.strokeStyle = rgba(NUCLEO, rr[1]); ctx.beginPath();
+      [[58, .22], [96, .11]].forEach(function (rr) { ctx.strokeStyle = rgba(NUC, rr[1]); ctx.beginPath();
         for (var k = 0; k <= 72; k++) { var a = k / 72 * Math.PI * 2; if (proy(rr[0] * Math.cos(a), 0, rr[0] * Math.sin(a))) { if (k === 0) ctx.moveTo(PX, PY); else ctx.lineTo(PX, PY); } }
         ctx.stroke(); });
     }
 
-    /* líneas núcleo → ramas, rama → hoja y enlaces concepto ↔ función */
+    /* líneas rama → módulo → hoja y enlaces concepto ↔ función (ya no hay líneas rectas del núcleo a las ramas: las reparten los brazos de la espiral) */
     var activo = hover || sel, vec = activo && activo.p3 && activo.kind === 'hoja' ? activo.p3.vec : [];
     var focoRama = focus.kind === 'raiz' ? null : (focus.kind === 'rama' ? focus : focus.parent);
-    ramas.forEach(function (rn) {
-      var q = rn.p3, nu = proy(0, 0, 0), ox = PX, oy = PY; if (!nu || !proy(q.x, q.y, q.z)) return;
-      var gdt = ctx.createLinearGradient(ox, oy, PX, PY); var fuerte = (hover === rn) || focus === rn;
-      gdt.addColorStop(0, rgba(NUCLEO, .55 * q.a + .1)); gdt.addColorStop(1, rgba(q.rgb, (fuerte ? .75 : .38) * (.3 + .7 * q.a)));
-      ctx.strokeStyle = gdt; ctx.lineWidth = fuerte ? 1.6 : 1; ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(PX, PY); ctx.stroke();
-    });
     ctx.lineWidth = 1;
     ramas.forEach(function (rn) {
       var q = rn.p3, entrando = focoRama === rn;
@@ -341,7 +334,7 @@ window.crearMapa3D = function (o) {
       } else { var rm = acota(11 * nd.s, 5, 11); nd.r = rm; nd.a = a; ctx.globalAlpha = Math.min(1, a * .5); ctx.drawImage(sprite(q.rgb), nd.x - rm * 3, nd.y - rm * 3, rm * 6, rm * 6); }
     });
     /* núcleo (disco brillante) */
-    if (nuc) { var rc = acota(15 * nuc.s * (focus.kind === 'raiz' ? 1 : .8), 7, 20); ctx.globalAlpha = 1; ctx.drawImage(spriteNucleo(), nuc.x - rc * 2.2, nuc.y - rc * 2.2, rc * 4.4, rc * 4.4); }
+    if (nuc) { var rc = acota(15 * nuc.s * (focus.kind === 'raiz' ? 1 : .8), 7, 20); ctx.globalAlpha = 1; ctx.drawImage(spriteNucleo(NUC), nuc.x - rc * 2.2, nuc.y - rc * 2.2, rc * 4.4, rc * 4.4); }
 
     /* 2.ª pasada: puntos, anillos y marcas */
     ctx.globalCompositeOperation = 'source-over';

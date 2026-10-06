@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 0.18.1 - Instalador
+title Arbol de la estadistica 0.18.2 - Actualizar
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=0.18.1"
+set "ARBOL_MODO=actualizar"
+set "ARBOL_VERSION=0.18.2"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -486,7 +486,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-0.18.1
+0.18.2
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -2559,7 +2559,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "0.18.1"
+version = "0.18.2"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3239,7 +3239,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "0.18.1"
+__version__ = "0.18.2"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -32803,7 +32803,8 @@ function sprite(c) {                                  /* mancha de luz de 32 px 
 }
 var CEREBRO = [[240, 140, 192], [210, 130, 235], [170, 140, 250], [130, 160, 255]];   /* rosa → violeta → azul */
 var ESPIRAL = .0095, GIRO = .04;                      /* los mismos que mapa3d.js: así la galaxia pequeña es una miniatura exacta de la de dentro */
-var DUST = [[255, 154, 46], [255, 196, 120], [255, 106, 31], [255, 230, 190]];
+function mez(a, b, k) { return [Math.round(a[0] + (b[0] - a[0]) * k), Math.round(a[1] + (b[1] - a[1]) * k), Math.round(a[2] + (b[2] - a[2]) * k)]; }
+function tonos(c) { return [c, mez(c, [255, 255, 255], .4), mez(c, [0, 0, 0], .25), mez(c, [255, 255, 255], .75)]; }   /* los mismos cuatro tonos que el polvo del mapa de dentro */
 var SITIOS = [[-56, 26, 56], [56, 22, 40], [-58, -10, -30], [56, -4, -48], [0, 54, -6], [0, -30, 74], [0, 8, 6], [-20, 46, -50]];
 function suave(x) { return x < 0 ? 0 : x > 1 ? 1 : x * x * (3 - 2 * x); }
 
@@ -32832,10 +32833,10 @@ window.crearCerebro = function (o) {
   }
   /* ---- las galaxias: miniatura de la de dentro (mismas ramas, ángulos y giro; ver mapa3d.js): núcleo, polvo en dos brazos y una nube por rama ---- */
   G.forEach(function (g, i) {
-    var polvo = [];
+    var polvo = [], tn = tonos(g.color);
     for (var k = 0; k < 520; k++) {
       var r = 38 + 640 * Math.pow(rnd(), 1.65), a = r > 190 && rnd() < .85 ? (rnd() < .5 ? 0 : Math.PI) + (r - 190) * ESPIRAL + .3 * gauss() : 2 * Math.PI * rnd();
-      polvo.push({lx: r * Math.cos(a), lz: r * Math.sin(a), y: (rnd() + rnd() + rnd() - 1.5) * .34 * (30 + r * .22), c: DUST[k % 4], s: .8 + 1.2 * rnd(), al: .25 + .6 * rnd()});
+      polvo.push({lx: r * Math.cos(a), lz: r * Math.sin(a), y: (rnd() + rnd() + rnd() - 1.5) * .34 * (30 + r * .22), c: tn[k % 4], s: .8 + 1.2 * rnd(), al: .25 + .6 * rnd()});
     }
     mundo.push({g: g, s: SITIOS[i] || [0, 0, 0], R: 26 + 24 * (g.peso || 0), polvo: polvo, sx: 0, sy: 0, sr: 40, rgb: g.color});
   });
@@ -32865,6 +32866,11 @@ window.crearCerebro = function (o) {
       m.polvo.forEach(function (d) {                          /* el polvo: puntos pequeños, como en el mapa de dentro */
         if (pr(s0[0] + (d.lx * gc + d.lz * gs) * k, s0[1] + d.y * k, s0[2] + (-d.lx * gs + d.lz * gc) * k, O)) luz(d.c, O.x, O.y, 3.6 + 2.6 * d.s, Math.min(1, d.al * 1.35) * (hot ? 1 : .9));
       });
+      ctx.strokeStyle = 'rgba(' + m.rgb.join(',') + ',' + (hot ? .5 : .28) + ')'; ctx.lineWidth = 1; ctx.beginPath();   /* los dos brazos, como líneas finas */
+      for (var br = 0; br < 2; br++) { var vis = false;
+        for (var rr = 30; rr <= 620; rr += 24) { var aa = br * Math.PI + (rr - 190) * ESPIRAL + GIRO * t;
+          if (pr(s0[0] + rr * Math.cos(aa) * k, s0[1], s0[2] + rr * Math.sin(aa) * k, O)) { if (vis) ctx.lineTo(O.x, O.y); else ctx.moveTo(O.x, O.y); vis = true; } else vis = false; } }
+      ctx.stroke(); ctx.globalAlpha = 1;
       var sis = m.g.sistema;
       if (sis) sis.ramas.forEach(function (q) {              /* una nube de color por rama, en su sitio y con su giro */
         var a = q.w * t, c = Math.cos(a), s = Math.sin(a);
@@ -32872,7 +32878,7 @@ window.crearCerebro = function (o) {
       });
       if (pr(s0[0], s0[1], s0[2], O)) {                       /* el núcleo, con un halo del color de la colección */
         m.sx = O.x; m.sy = O.y; m.sr = (m.R + 6) * O.s;
-        luz(m.rgb, O.x, O.y, m.R * 2 * O.s * (hot ? 1.3 : 1), hot ? .55 : .3); luz([255, 150, 40], O.x, O.y, Math.max(10, 300 * k * O.s * 1.3), .9); luz([255, 255, 255], O.x, O.y, Math.max(5, 60 * k * O.s), .9);
+        luz(m.rgb, O.x, O.y, m.R * 2 * O.s * (hot ? 1.3 : 1), hot ? .55 : .3); luz(mez(m.rgb, [255, 255, 255], .25), O.x, O.y, Math.max(10, 300 * k * O.s * 1.3), .9); luz([255, 255, 255], O.x, O.y, Math.max(5, 60 * k * O.s), .9);
       }
     });
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.textAlign = 'center';
@@ -34245,16 +34251,17 @@ function sprite(rgb) {                      /* mancha de luz con el centro casi 
   gr.addColorStop(.45, rgba(rgb, .22)); gr.addColorStop(1, rgba(rgb, 0));
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return sprites[k] = c;
 }
-function spriteNucleo() {
-  if (sprites.nucleo) return sprites.nucleo;
-  var c = document.createElement('canvas'); c.width = c.height = 256; var g = c.getContext('2d');
+function spriteNucleo(c) {                   /* el núcleo: gradiente del color de la galaxia (naranja por defecto) */
+  c = c || NUCLEO; var k = 'n' + c.join(','); if (sprites[k]) return sprites[k];
+  var cv = document.createElement('canvas'); cv.width = cv.height = 256; var g = cv.getContext('2d'), B = [255, 255, 255], N = [0, 0, 0];
   var gr = g.createRadialGradient(128, 128, 0, 128, 128, 128);
-  gr.addColorStop(0, 'rgba(255,248,225,1)'); gr.addColorStop(.07, 'rgba(255,214,130,.98)'); gr.addColorStop(.16, 'rgba(255,150,40,.8)');
-  gr.addColorStop(.38, 'rgba(255,95,15,.28)'); gr.addColorStop(.7, 'rgba(200,50,5,.07)'); gr.addColorStop(1, 'rgba(160,30,0,0)');
-  g.fillStyle = gr; g.fillRect(0, 0, 256, 256); return sprites.nucleo = c;
+  gr.addColorStop(0, rgba(mez(c, B, .9), 1)); gr.addColorStop(.07, rgba(mez(c, B, .5), .98)); gr.addColorStop(.16, rgba(c, .8));
+  gr.addColorStop(.38, rgba(mez(c, N, .2), .28)); gr.addColorStop(.7, rgba(mez(c, N, .5), .07)); gr.addColorStop(1, rgba(mez(c, N, .6), 0));
+  g.fillStyle = gr; g.fillRect(0, 0, 256, 256); return sprites[k] = cv;
 }
 
 window.crearMapa3D = function (o) {
+  var NUC = o.color || NUCLEO;          /* color de la galaxia: núcleo, polvo y brazos */
   var canvas = o.canvas, ctx = canvas.getContext('2d'), root = o.root, hojas = o.hojas, estado = o.estado, esDesc = o.esDesc;
   var rnd = azar(42), gauss = function () { return (rnd() + rnd() + rnd() + rnd() - 2) * 1.7321; };
   var W = 800, H = 600, DPR = 1, F = 700, F0 = 700, CX = 400, CY = 300, AJUSTE = 250, vuelo = null, focoPrevio = root, sincro = false;
@@ -34303,7 +34310,7 @@ window.crearMapa3D = function (o) {
   function grupoDe(rgb, base) { var k = rgb.join(','); for (var g = 0; g < grupos.length; g++) if (grupos[g].k === k) return g;
     grupos.push({k: k, rgb: rgb, ini: 0, fin: 0, base: base}); return grupos.length - 1; }
   function p(g, hub, lx, ly, lz, w, sz, al) { polvo.push({g: g, hub: hub, lx: lx, ly: ly, lz: lz, w: w, sz: sz, al: al}); }
-  [[255, 154, 46], [255, 196, 120], [255, 106, 31], [255, 230, 190]].forEach(function (c, k) {
+  [NUC, mez(NUC, [255, 255, 255], .4), mez(NUC, [0, 0, 0], .25), mez(NUC, [255, 255, 255], .75)].forEach(function (c, k) {
     var g = grupoDe(c, 0), n = [850, 500, 440, 170][k];
     for (var i = 0; i < n; i++) {
       var r = 38 + 640 * Math.pow(rnd(), 1.65), a = r > 190 && rnd() < .85 ? (rnd() < .5 ? 0 : Math.PI) + (r - 190) * ESPIRAL + .3 * gauss() : 2 * Math.PI * rnd(), esp = (rnd() + rnd() + rnd() - 1.5) * .34 * (30 + r * .22);
@@ -34439,7 +34446,7 @@ window.crearMapa3D = function (o) {
     var nuc = proy(0, 0, 0) ? {x: PX, y: PY, s: PS, d: PD} : null;
     if (nuc) {
       var pulso = 1 + .035 * Math.sin(t * 1.7), rh = acota(300 * nuc.s, 70, 380) * pulso;
-      ctx.globalAlpha = focus.kind === 'raiz' ? .92 : .5; ctx.drawImage(spriteNucleo(), nuc.x - rh, nuc.y - rh, rh * 2, rh * 2);
+      ctx.globalAlpha = focus.kind === 'raiz' ? .92 : .5; ctx.drawImage(spriteNucleo(NUC), nuc.x - rh, nuc.y - rh, rh * 2, rh * 2);
     }
 
     /* polvo */
@@ -34463,31 +34470,23 @@ window.crearMapa3D = function (o) {
     }
     ctx.globalAlpha = 1;
 
-    /* órbitas de las ramas */
-    ctx.lineWidth = 1;
-    ramas.forEach(function (rn) {
-      var q = rn.p3, rxz = Math.hypot(q.bx, q.bz); if (rxz < 40) return;
-      ctx.strokeStyle = rgba(q.rgb, .075 * (.4 + .6 * q.a)); ctx.beginPath();
-      var seguido = false;
-      for (var k = 0; k <= 96; k++) { var a = k / 96 * Math.PI * 2;
-        if (proy(rxz * Math.cos(a), q.by, rxz * Math.sin(a))) { if (seguido) ctx.lineTo(PX, PY); else ctx.moveTo(PX, PY); seguido = true; } else seguido = false; }
+    /* brazos de la espiral: dos curvas logarítmicas desde el núcleo, por donde se reparten las ramas */
+    ctx.lineWidth = 1.4;
+    for (var brazo = 0; brazo < 2; brazo++) {
+      ctx.strokeStyle = rgba(NUC, .32 * (focus.kind === 'raiz' ? 1 : .5)); ctx.beginPath(); var seguido = false;
+      for (var rr0 = 30; rr0 <= 620; rr0 += 8) { var aa = brazo * Math.PI + (rr0 - 190) * ESPIRAL + GIRO * t;
+        if (proy(rr0 * Math.cos(aa), 0, rr0 * Math.sin(aa))) { if (seguido) ctx.lineTo(PX, PY); else ctx.moveTo(PX, PY); seguido = true; } else seguido = false; }
       ctx.stroke();
-    });
+    }
     if (proy(0, 0, 0)) {                       /* anillos del núcleo */
-      [[58, .22], [96, .11]].forEach(function (rr) { ctx.strokeStyle = rgba(NUCLEO, rr[1]); ctx.beginPath();
+      [[58, .22], [96, .11]].forEach(function (rr) { ctx.strokeStyle = rgba(NUC, rr[1]); ctx.beginPath();
         for (var k = 0; k <= 72; k++) { var a = k / 72 * Math.PI * 2; if (proy(rr[0] * Math.cos(a), 0, rr[0] * Math.sin(a))) { if (k === 0) ctx.moveTo(PX, PY); else ctx.lineTo(PX, PY); } }
         ctx.stroke(); });
     }
 
-    /* líneas núcleo → ramas, rama → hoja y enlaces concepto ↔ función */
+    /* líneas rama → módulo → hoja y enlaces concepto ↔ función (ya no hay líneas rectas del núcleo a las ramas: las reparten los brazos de la espiral) */
     var activo = hover || sel, vec = activo && activo.p3 && activo.kind === 'hoja' ? activo.p3.vec : [];
     var focoRama = focus.kind === 'raiz' ? null : (focus.kind === 'rama' ? focus : focus.parent);
-    ramas.forEach(function (rn) {
-      var q = rn.p3, nu = proy(0, 0, 0), ox = PX, oy = PY; if (!nu || !proy(q.x, q.y, q.z)) return;
-      var gdt = ctx.createLinearGradient(ox, oy, PX, PY); var fuerte = (hover === rn) || focus === rn;
-      gdt.addColorStop(0, rgba(NUCLEO, .55 * q.a + .1)); gdt.addColorStop(1, rgba(q.rgb, (fuerte ? .75 : .38) * (.3 + .7 * q.a)));
-      ctx.strokeStyle = gdt; ctx.lineWidth = fuerte ? 1.6 : 1; ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(PX, PY); ctx.stroke();
-    });
     ctx.lineWidth = 1;
     ramas.forEach(function (rn) {
       var q = rn.p3, entrando = focoRama === rn;
@@ -34548,7 +34547,7 @@ window.crearMapa3D = function (o) {
       } else { var rm = acota(11 * nd.s, 5, 11); nd.r = rm; nd.a = a; ctx.globalAlpha = Math.min(1, a * .5); ctx.drawImage(sprite(q.rgb), nd.x - rm * 3, nd.y - rm * 3, rm * 6, rm * 6); }
     });
     /* núcleo (disco brillante) */
-    if (nuc) { var rc = acota(15 * nuc.s * (focus.kind === 'raiz' ? 1 : .8), 7, 20); ctx.globalAlpha = 1; ctx.drawImage(spriteNucleo(), nuc.x - rc * 2.2, nuc.y - rc * 2.2, rc * 4.4, rc * 4.4); }
+    if (nuc) { var rc = acota(15 * nuc.s * (focus.kind === 'raiz' ? 1 : .8), 7, 20); ctx.globalAlpha = 1; ctx.drawImage(spriteNucleo(NUC), nuc.x - rc * 2.2, nuc.y - rc * 2.2, rc * 4.4, rc * 4.4); }
 
     /* 2.ª pasada: puntos, anillos y marcas */
     ctx.globalCompositeOperation = 'source-over';
@@ -35208,7 +35207,7 @@ function instancia(g) {
   cv.setAttribute('aria-label', 'Mapa 3D de «' + g.nombre + '»: el núcleo en el centro y las ramas orbitando. Arrastra para girar, rueda para acercar; las flechas del teclado también giran.');
   $('#cerebro').parentNode.insertBefore(cv, $('#cerebro'));
   var m = crearMapa3D({
-    canvas: cv, root: g.raiz, hojas: hojas.filter(function (h) { return esDesc(h, g.raiz); }), esDesc: esDesc, reducir: reducir,
+    canvas: cv, color: g.color, root: g.raiz, hojas: hojas.filter(function (h) { return esDesc(h, g.raiz); }), esDesc: esDesc, reducir: reducir,
     estado: function () { return {focus: focus && esDesc(focus, g.raiz) ? focus : g.raiz, sel: sel, filtrando: !!(query || soloSas || soloHuecos || soloAlta), coincide: coincide || {}, conCoincidencia: conCoincidencia}; },
     alNodo: clicNodo,
     alFondo: function () { if (focus.parent) ir(focus.parent); }
@@ -36982,7 +36981,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
    su ficha en `fichas_fuente.py` (con `grupo` de alternativas) y su entrada `@bench` en `medir_propiedades.py` (hay tests que
    lo exigen), luego `python herramientas/fichas_fuente.py` y `python py/medir_propiedades.py <función>`.
    Cuando Mario pregunte «¿qué uso para X?», mira el grupo de alternativas y ordénalas con el perfil que encaje con su proyecto.
-5g. **Cerebro (primera capa del visor):** el visor se abre en un cerebro 3D (`py/visor/cerebro.js`) con una galaxia en espiral por parte (y el mapa 3D de dentro también es una galaxia: las ramas se reparten por dos brazos espirales, `ESPIRAL`/`GIRO` en `mapa3d.js`) : **Código** (las ramas de funciones), **Conceptos** (los temas `t_*` salvo finanzas), **Demos y guías**, **Finanzas** (rama `finanzas` + `t_fin`) —cada una con su propio mapa 3D, creado al entrar, y una animación de vuelo hacia ella— y **Libros** y **Notas** (solo ámbitos de búsqueda del gestor). El reparto está en `GALAXIAS` de `plantilla.html`; el buscador ilumina las galaxias con coincidencias y, al elegir un resultado, vuela a su galaxia. **Transición realista:** la cámara no cambia: el cerebro se acerca a la galaxia hasta que la miniatura (mismas ramas, ángulos y giro que la de dentro) tiene el tamaño del mapa real, que se ve ya por debajo (`mapa.sync()` le presta la cámara del cerebro; `geometria()` da su escala) y la sustituye con un fundido; al volver (🧠) es lo mismo al revés. El botón 🧠 (o la miga) vuelve al cerebro. Icono: `python herramientas/generar_icono.py`. `indexar_conocimiento.bat` crea `conocimiento/fuentes.json` (tus carpetas) e indexa.
+5g. **Cerebro (primera capa del visor):** el visor se abre en un cerebro 3D (`py/visor/cerebro.js`) con una galaxia en espiral por parte (y el mapa 3D de dentro también es una galaxia: las ramas se reparten por dos brazos espirales, `ESPIRAL`/`GIRO` en `mapa3d.js`) : **Código** (las ramas de funciones), **Conceptos** (los temas `t_*` salvo finanzas), **Demos y guías**, **Finanzas** (cada galaxia con su color: polvo, núcleo y brazos) (rama `finanzas` + `t_fin`) —cada una con su propio mapa 3D, creado al entrar, y una animación de vuelo hacia ella— y **Libros** y **Notas** (solo ámbitos de búsqueda del gestor). El reparto está en `GALAXIAS` de `plantilla.html`; el buscador ilumina las galaxias con coincidencias y, al elegir un resultado, vuela a su galaxia. **Transición realista:** la cámara no cambia: el cerebro se acerca a la galaxia hasta que la miniatura (mismas ramas, ángulos y giro que la de dentro) tiene el tamaño del mapa real, que se ve ya por debajo (`mapa.sync()` le presta la cámara del cerebro; `geometria()` da su escala) y la sustituye con un fundido; al volver (🧠) es lo mismo al revés. El botón 🧠 (o la miga) vuelve al cerebro. Icono: `python herramientas/generar_icono.py`. `indexar_conocimiento.bat` crea `conocimiento/fuentes.json` (tus carpetas) e indexa.
 5f. **Gestor de conocimiento:** `py/conocimiento/` es un buscador único (SQLite FTS5, BM25, sinónimos del catálogo) sobre código, conceptos, teoría y tus libros/finanzas/notas (`conocimiento/fuentes.json`, no se publica). `cd py && python -m conocimiento indexar | buscar "consulta" [-c colección] | estado`. Antes de buscar a mano en `Manuales Estadística` o en `teoria/`, usa `buscar`.
 5h. **Modo vivo (para ver los cambios mientras se trabaja):** el acceso directo con `--vivo` (`powershell -ExecutionPolicy Bypass -File herramientascceso_vivo.ps1 on|off` lo apunta a esta carpeta o lo restaura) recarga la app solo cuando se regenera `visor_arbol.html` y la coloca donde indique `.foco`. Para enseñar un cambio: `python herramientas/ver.py [destino]` regenera el visor y escribe el foco (`cerebro`, `galaxia:codigo|conceptos|demos|finanzas` o el nombre de una función/concepto/demo; el visor también lo admite como `#destino`).
 6. **Conceptos:** `conceptos/catalogo.json` lista los conceptos del temario del máster y de Very Normal con las funciones que los implementan. Organización: `temas` (ramas del mapa, con color) > `areas` (módulos, con `ambito`) > conceptos (`area`, `prioridad` opcional, `area_fija` para que la actualización no lo mueva). La migración de 0.6.0 está en `herramientas/reorganizar_catalogo.py`.

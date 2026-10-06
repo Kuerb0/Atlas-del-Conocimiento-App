@@ -427,7 +427,7 @@ function instancia(g) {
   cv.setAttribute('aria-label', 'Mapa 3D de «' + g.nombre + '»: el núcleo en el centro y las ramas orbitando. Arrastra para girar, rueda para acercar; las flechas del teclado también giran.');
   $('#cerebro').parentNode.insertBefore(cv, $('#cerebro'));
   var m = crearMapa3D({
-    canvas: cv, root: g.raiz, hojas: hojas.filter(function (h) { return esDesc(h, g.raiz); }), esDesc: esDesc, reducir: reducir,
+    canvas: cv, color: g.color, root: g.raiz, hojas: hojas.filter(function (h) { return esDesc(h, g.raiz); }), esDesc: esDesc, reducir: reducir,
     estado: function () { return {focus: focus && esDesc(focus, g.raiz) ? focus : g.raiz, sel: sel, filtrando: !!(query || soloSas || soloHuecos || soloAlta), coincide: coincide || {}, conCoincidencia: conCoincidencia}; },
     alNodo: clicNodo,
     alFondo: function () { if (focus.parent) ir(focus.parent); }
