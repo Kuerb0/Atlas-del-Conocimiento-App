@@ -540,14 +540,18 @@ window.crearMapa3D = function (o) {
       }
       sinTocar = 0; pedir();
     },
-    /* El cerebro maneja la cámara mientras se acerca a la galaxia, para que este mapa se vea ya durante el vuelo con la misma pose y escala.
-       sync({yaw, pitch, px: píxeles por unidad, t: tiempo}) la pone a mano; sync(null) la suelta y vuelve a ir sola. */
+    /* El universo (cerebro.js) maneja la cámara mientras vuela hacia la galaxia o hacia un nodo de dentro, para que este mapa se vea ya durante el vuelo con la misma pose y escala.
+       sync({yaw, pitch, px: píxeles por unidad, t: tiempo, tx, ty, tz: centro}) la pone a mano; sync(null) la suelta y la deja donde está (misma pose, sin movimiento). */
     sync: function (s) {
-      if (!s) { sincro = false; sinTocar = 0; pedir(); return; }
+      if (!s) { sincro = false; meta.yaw = cam.yaw; meta.pitch = cam.pitch; sinTocar = 0; pedir(); return; }
       sincro = true; vuelo = null; zoomMul = 1; F = F0; t = s.t;
-      cam.tx = cam.ty = cam.tz = 0; cam.yaw = s.yaw; cam.pitch = s.pitch; cam.dist = F0 / s.px; sinTocar = 0; pedir();
+      cam.tx = s.tx || 0; cam.ty = s.ty || 0; cam.tz = s.tz || 0; cam.yaw = s.yaw; cam.pitch = s.pitch; cam.dist = F0 / s.px; sinTocar = 0; pedir();
     },
-    geometria: function () { return {extent: extentDe(root), px: AJUSTE / extentDe(root), t: t, yaw: cam.yaw, pitch: cam.pitch}; },   /* tamaño de la galaxia (unidades), escala de la vista general (px/unidad) y pose actual */
+    /* Dónde queda el centro del nodo n (unidades del mapa, en el instante tt) y a cuántos px/unidad se ve cuando la cámara está sobre él. */
+    camaraDe: function (n, tt) {
+      var t0 = t; t = tt; mundo(); var c = posDe(n), r = {x: c.x, y: c.y, z: c.z, px: F0 / acota(distBase(n), 70, ESCENA * 5)}; t = t0; return r;
+    },
+    geometria: function () { return {extent: extentDe(root), px: AJUSTE / extentDe(root), pxActual: F0 / cam.dist, t: t, yaw: cam.yaw, pitch: cam.pitch}; },   /* tamaño de la galaxia (unidades), escala de la vista general y de la actual (px/unidad) y pose */
     recentrar: function () { meta.yaw = .62; meta.pitch = .4; zoomMul = 1; pedir(); },
     rotacion: function (v) { if (v === undefined) return !pausa; pausa = !v; autorot = !!v; pedir(); return !pausa; },
     pausar: function (v) { pausa = !!v; pedir(); },

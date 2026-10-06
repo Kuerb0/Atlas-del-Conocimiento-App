@@ -313,9 +313,9 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
   <main class="cuerpo">
     <section class="lienzo">
       <div class="migas" id="migas"></div>
-      <canvas id="cerebro" role="img" aria-label="Cerebro 3D: tu conocimiento. Dentro, una galaxia por colección: estadística (el árbol), libros, finanzas y notas. Clic en una galaxia para entrar."></canvas>
+      <canvas id="cerebro" role="img" aria-label="Universo 3D: tu conocimiento. Una galaxia por parte del árbol (código, conceptos, demos, finanzas) y por colección (libros, notas). Clic en una galaxia para entrar."></canvas>
       <div class="mapa-ctrls" id="ctrls" hidden>
-        <button class="btn ic" id="cerebroBtn" type="button" title="Volver al cerebro (todo tu conocimiento)">🧠</button>
+        <button class="btn ic" id="cerebroBtn" type="button" title="Volver al universo (todo tu conocimiento)">🌌</button>
         <button class="btn ic" id="rot" type="button" title="Pausar / reanudar el movimiento" aria-pressed="false">⏸</button>
         <button class="btn ic" id="vista" type="button" title="Vista general: volver al núcleo y recentrar">⌂</button>
       </div>
@@ -448,19 +448,22 @@ function irYa(n, g, instante, suave) {
   if (vista !== 'arbol' || galAct !== g) { focus = suave ? g.raiz : n; entrarGalaxia(g, suave); }
   focus = n; mapa.ir(n, instante); migas();
 }
-/* Del cerebro a una galaxia: la cámara no cambia; se acerca hasta que la galaxia pequeña tiene el tamaño del mapa de dentro, que se ve ya (mismo sitio, misma escala, mismo giro) y la sustituye con un fundido. */
+/* Del universo a un destino (una galaxia o un nodo de dentro): UN solo vuelo continuo. La cámara no cambia de orientación; el mapa de dentro se dibuja ya por debajo
+   (mismo sitio, escala y giro) y toma el relevo con un fundido, mientras la cámara sigue acercándose hasta el nodo, sin parar en la vista general de la galaxia. */
 function ir(n, instante) {
   var g = galaxiaDe(n);
   if (vista === 'cerebro' && !instante && !reducir) { despegar(n, g); return; }
   irYa(n, g, instante || reducir);
 }
+var nodoVuelo = null;
 function limpiarVuelo(inst) {
-  inst.mapa.sync(null); inst.canvas.style.opacity = ''; inst.canvas.style.transform = ''; $('#cerebro').style.opacity = '';
+  inst.mapa.sync(null); inst.canvas.style.opacity = ''; inst.canvas.style.transform = ''; $('#cerebro').style.opacity = ''; nodoVuelo = null;
 }
 function despegar(n, g) {
   var inst = instancia(g); inst.canvas.hidden = false; inst.canvas.style.opacity = 0; inst.mapa.medir(); inst.mapa.rotacion(false);
-  var geo = inst.mapa.geometria(); g.sistema.extent = geo.extent; g.sistema.px = geo.px;
-  cerebro.volar(g.id, function () { limpiarVuelo(inst); irYa(n, g, false, true); });
+  var geo = inst.mapa.geometria(); g.sistema.extent = geo.extent;
+  focus = n; nodoVuelo = n;                       /* el mapa de dentro ya resalta el destino mientras nos acercamos */
+  cerebro.volar(g.id, function () { limpiarVuelo(inst); irYa(n, g, true, true); }, {pxFinal: inst.mapa.camaraDe(n, geo.t).px, profundo: n !== g.raiz});
 }
 function pintar() { if (mapa) mapa.pintar(); }
 window.arbolDebug = {ir: ir, root: root, instancias: instancias};      /* para medir el rendimiento: arbolDebug.instancias.codigo.mapa.perfil(60, 0.5) */
@@ -483,8 +486,10 @@ function luces() {                            /* las galaxias con coincidencias 
   var m = {}; [resArbol, resK].forEach(function (o) { Object.keys(o).forEach(function (k) { m[k] = Math.max(m[k] || 0, o[k]); }); }); cerebro.resaltar(m);
 }
 var cerebro = crearCerebro({canvas: $('#cerebro'), galaxias: GALAXIAS, reducir: reducir,
-  alVuelo: function (i) {                    /* cada fotograma del vuelo: el mapa de dentro toma la cámara del cerebro y se funden */
-    var inst = instancias[i.id]; if (i.sync) inst.mapa.sync({yaw: i.yaw, pitch: i.pitch, px: i.px, t: i.t});
+  alVuelo: function (i) {                    /* cada fotograma del vuelo: el mapa de dentro toma la cámara del universo (y se centra poco a poco en el destino) y se funden */
+    var inst = instancias[i.id];
+    if (i.sync) { var c = nodoVuelo ? inst.mapa.camaraDe(nodoVuelo, i.t) : {x: 0, y: 0, z: 0};
+      inst.mapa.sync({yaw: i.yaw, pitch: i.pitch, px: i.px, t: i.t, tx: c.x * i.w, ty: c.y * i.w, tz: c.z * i.w}); }
     inst.canvas.style.transform = 'translate(' + i.dx.toFixed(1) + 'px,' + i.dy.toFixed(1) + 'px)'; inst.canvas.style.opacity = i.opMapa; $('#cerebro').style.opacity = i.opCerebro;
   },
   alGalaxia: function (g) {
@@ -494,13 +499,10 @@ var cerebro = crearCerebro({canvas: $('#cerebro'), galaxias: GALAXIAS, reducir: 
 }});
 function mostrarCerebro() {
   if (vista === 'cerebro') return;
-  var g = galAct, inst = instancias[g.id];
-  function arrancar() {                       /* la cámara se aleja de la galaxia, sin cambiar de orientación, hasta ver el cerebro */
-    mapa.rotacion(false); var geo = mapa.geometria(); g.sistema.extent = geo.extent; g.sistema.px = geo.px;
-    vista = 'cerebro'; $('#cerebro').style.opacity = 0; $('#cerebro').hidden = false; $('#ctrls').hidden = true; migas();
-    cerebro.mostrar(g.id, {yaw: geo.yaw, pitch: geo.pitch, t: geo.t}, function () { limpiarVuelo(inst); inst.canvas.hidden = true; });
-  }
-  if (!reducir && focus !== g.raiz) { ir(g.raiz); setTimeout(arrancar, 1100); } else arrancar();
+  var g = galAct, inst = instancias[g.id];       /* la cámara se aleja del nodo en el que estés, sin cambiar de orientación, hasta ver el universo */
+  mapa.rotacion(false); var geo = mapa.geometria(); g.sistema.extent = geo.extent; nodoVuelo = focus;
+  vista = 'cerebro'; $('#cerebro').style.opacity = 0; $('#cerebro').hidden = false; $('#ctrls').hidden = true; migas();
+  cerebro.mostrar(g.id, {yaw: geo.yaw, pitch: geo.pitch, t: geo.t}, geo.pxActual, function () { limpiarVuelo(inst); inst.canvas.hidden = true; });
 }
 $('#cerebroBtn').onclick = mostrarCerebro;
 setTimeout(function () {                      /* los mapas de dentro se crean ya (en silencio): las galaxias pequeñas son su miniatura y los usan para el vuelo */
@@ -553,12 +555,12 @@ window.addEventListener('pywebviewready', async function () {     /* cuántos fi
 function migas() {
   var m = $('#migas'); m.innerHTML = '';
   if (vista === 'cerebro') {
-    var c = document.createElement('span'); c.className = 'act'; c.textContent = '🧠 Conocimiento'; m.appendChild(c);
+    var c = document.createElement('span'); c.className = 'act'; c.textContent = '🌌 Universo'; m.appendChild(c);
     if (coleccionK) { var x = document.createElement('button'); x.type = 'button'; x.textContent = '✕ solo en «' + coleccionK + '»'; x.onclick = function () { coleccionK = ''; $('#q').placeholder = 'Buscar…  ( / )'; migas(); conocimiento(query); }; m.appendChild(x); }
     return;
   }
   var cam = []; for (var p = focus; p; p = p.parent) cam.unshift(p);
-  var cb = document.createElement('button'); cb.type = 'button'; cb.textContent = '🧠'; cb.title = 'Volver al cerebro'; cb.onclick = mostrarCerebro; m.appendChild(cb);
+  var cb = document.createElement('button'); cb.type = 'button'; cb.textContent = '🌌'; cb.title = 'Volver al universo'; cb.onclick = mostrarCerebro; m.appendChild(cb);
   m.appendChild(document.createElement('span')).textContent = '›';
   cam.forEach(function (n, i) {
     if (i) { var s = document.createElement('span'); s.textContent = '›'; m.appendChild(s); }

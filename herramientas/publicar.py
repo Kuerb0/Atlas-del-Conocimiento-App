@@ -46,7 +46,8 @@ def revisar_privado() -> list[str]:
             break
     for bat in (RAIZ / "instaladores").glob("*.bat"):
         t = bat.read_text(encoding="utf-8")
-        for m in PRIVADO.finditer(t):
+        sin_b64 = re.sub(r":::BEGIN ([^|\n]+)\|b64\n.*?\n:::END", "", t, flags=re.S)   # el texto base64 de un binario puede contener una palabra por azar: se comprueba abajo, ya decodificado
+        for m in PRIVADO.finditer(sin_b64):
             malos.append(f"{bat.name}: «{m.group(0)}»")
             break
         for b in re.finditer(r":::BEGIN ([^|\n]+)\|b64\n(.*?)\n:::END", t, re.S):
