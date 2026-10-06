@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 0.16.0 - Actualizar
+title Arbol de la estadistica 0.16.1 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=actualizar"
-set "ARBOL_VERSION=0.16.0"
+set "ARBOL_MODO=instalar"
+set "ARBOL_VERSION=0.16.1"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -483,7 +483,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-0.16.0
+0.16.1
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -2512,7 +2512,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "0.16.0"
+version = "0.16.1"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3192,7 +3192,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "0.16.0"
+__version__ = "0.16.1"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -32801,11 +32801,13 @@ window.crearCerebro = function (o) {
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.textAlign = 'center';
     var puestas = [];                               /* etiquetas: de arriba abajo, bajando la que se pise con otra */
     mundo.map(function (m, gi) { return {m: m, gi: gi, y: m.sy + m.sr + 14}; }).sort(function (a, b) { return a.y - b.y; }).forEach(function (e) {
-      puestas.forEach(function (q) { if (Math.abs(e.m.sx - q.m.sx) < 130 && e.y < q.y + 32) e.y = q.y + 32; });
+      puestas.forEach(function (q) { if (Math.abs(e.m.sx - q.m.sx) < 130 && e.y < q.y + 28) e.y = q.y + 28; });
       puestas.push(e);
       var m = e.m, hot = e.gi === hover, n = res[m.g.id];
-      ctx.font = (hot ? 700 : 600) + ' 13px ' + SANS; ctx.fillStyle = hot ? '#fff' : 'rgba(225,232,248,.88)'; ctx.fillText(m.g.nombre + (n ? '  · ' + n + ' ✓' : ''), m.sx, e.y);
-      if (m.g.sub) { ctx.font = '500 11px ' + SANS; ctx.fillStyle = 'rgba(160,176,205,.8)'; ctx.fillText(m.g.sub, m.sx, e.y + 14); }
+      var txt = m.g.nombre + (n ? '  · ' + n + ' ✓' : ''), yy = e.y - 2;
+      ctx.lineJoin = 'round'; ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(3,4,10,.95)';
+      ctx.font = '700 11px ' + SANS; ctx.strokeText(txt, m.sx, yy); ctx.fillStyle = hot ? '#fff' : 'rgba(255,255,255,.95)'; ctx.fillText(txt, m.sx, yy);
+      if (m.g.sub) { ctx.font = '600 9.5px ' + SANS; ctx.strokeText(m.g.sub, m.sx, yy + 12); ctx.fillStyle = 'rgba(190,204,230,.92)'; ctx.fillText(m.g.sub, m.sx, yy + 12); }
     });
     ctx.font = '500 12px ' + SANS; ctx.fillStyle = 'rgba(160,176,205,.7)'; ctx.fillText('Clic en una galaxia para entrar · arrastra para girar · rueda para acercar', W / 2, H - 14);
   }
@@ -35090,9 +35092,9 @@ var vista = 'arbol', coleccionK = '', rotPrev = true;
 var COL_GAL = {codigo: 'arbol', conceptos: 'arbol', teoria: 'arbol'};
 var GALAXIAS = [
   {id: 'arbol', nombre: 'Estadística', color: [255, 150, 40], sub: hojas.length + ' elementos · el árbol'},
-  {id: 'libros', nombre: 'Libros', color: [111, 162, 255], sub: ''},
-  {id: 'finanzas', nombre: 'Finanzas', color: [111, 207, 123], sub: ''},
-  {id: 'notas', nombre: 'Notas y enlaces', color: [240, 140, 192], sub: ''}];
+  {id: 'libros', nombre: 'Libros', color: [111, 162, 255], sub: 'sin indexar'},
+  {id: 'finanzas', nombre: 'Finanzas', color: [111, 207, 123], sub: 'sin indexar'},
+  {id: 'notas', nombre: 'Notas y enlaces', color: [240, 140, 192], sub: 'sin indexar'}];
 var cerebro = crearCerebro({canvas: $('#cerebro'), galaxias: GALAXIAS, reducir: reducir, alGalaxia: function (g) {
   if (g.id === 'arbol') { mostrarArbol(); ir(root); return; }
   coleccionK = g.id; $('#q').placeholder = 'Buscar en ' + g.nombre.toLowerCase() + '…'; migas(); $('#q').focus(); if (query) conocimiento(query);

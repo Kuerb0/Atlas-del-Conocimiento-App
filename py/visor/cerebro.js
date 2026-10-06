@@ -75,11 +75,13 @@ window.crearCerebro = function (o) {
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.textAlign = 'center';
     var puestas = [];                               /* etiquetas: de arriba abajo, bajando la que se pise con otra */
     mundo.map(function (m, gi) { return {m: m, gi: gi, y: m.sy + m.sr + 14}; }).sort(function (a, b) { return a.y - b.y; }).forEach(function (e) {
-      puestas.forEach(function (q) { if (Math.abs(e.m.sx - q.m.sx) < 130 && e.y < q.y + 32) e.y = q.y + 32; });
+      puestas.forEach(function (q) { if (Math.abs(e.m.sx - q.m.sx) < 130 && e.y < q.y + 28) e.y = q.y + 28; });
       puestas.push(e);
       var m = e.m, hot = e.gi === hover, n = res[m.g.id];
-      ctx.font = (hot ? 700 : 600) + ' 13px ' + SANS; ctx.fillStyle = hot ? '#fff' : 'rgba(225,232,248,.88)'; ctx.fillText(m.g.nombre + (n ? '  · ' + n + ' ✓' : ''), m.sx, e.y);
-      if (m.g.sub) { ctx.font = '500 11px ' + SANS; ctx.fillStyle = 'rgba(160,176,205,.8)'; ctx.fillText(m.g.sub, m.sx, e.y + 14); }
+      var txt = m.g.nombre + (n ? '  · ' + n + ' ✓' : ''), yy = e.y - 2;
+      ctx.lineJoin = 'round'; ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(3,4,10,.95)';
+      ctx.font = '700 11px ' + SANS; ctx.strokeText(txt, m.sx, yy); ctx.fillStyle = hot ? '#fff' : 'rgba(255,255,255,.95)'; ctx.fillText(txt, m.sx, yy);
+      if (m.g.sub) { ctx.font = '600 9.5px ' + SANS; ctx.strokeText(m.g.sub, m.sx, yy + 12); ctx.fillStyle = 'rgba(190,204,230,.92)'; ctx.fillText(m.g.sub, m.sx, yy + 12); }
     });
     ctx.font = '500 12px ' + SANS; ctx.fillStyle = 'rgba(160,176,205,.7)'; ctx.fillText('Clic en una galaxia para entrar · arrastra para girar · rueda para acercar', W / 2, H - 14);
   }

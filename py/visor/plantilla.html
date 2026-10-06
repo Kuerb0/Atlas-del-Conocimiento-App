@@ -427,9 +427,9 @@ var vista = 'arbol', coleccionK = '', rotPrev = true;
 var COL_GAL = {codigo: 'arbol', conceptos: 'arbol', teoria: 'arbol'};
 var GALAXIAS = [
   {id: 'arbol', nombre: 'Estadística', color: [255, 150, 40], sub: hojas.length + ' elementos · el árbol'},
-  {id: 'libros', nombre: 'Libros', color: [111, 162, 255], sub: ''},
-  {id: 'finanzas', nombre: 'Finanzas', color: [111, 207, 123], sub: ''},
-  {id: 'notas', nombre: 'Notas y enlaces', color: [240, 140, 192], sub: ''}];
+  {id: 'libros', nombre: 'Libros', color: [111, 162, 255], sub: 'sin indexar'},
+  {id: 'finanzas', nombre: 'Finanzas', color: [111, 207, 123], sub: 'sin indexar'},
+  {id: 'notas', nombre: 'Notas y enlaces', color: [240, 140, 192], sub: 'sin indexar'}];
 var cerebro = crearCerebro({canvas: $('#cerebro'), galaxias: GALAXIAS, reducir: reducir, alGalaxia: function (g) {
   if (g.id === 'arbol') { mostrarArbol(); ir(root); return; }
   coleccionK = g.id; $('#q').placeholder = 'Buscar en ' + g.nombre.toLowerCase() + '…'; migas(); $('#q').focus(); if (query) conocimiento(query);
