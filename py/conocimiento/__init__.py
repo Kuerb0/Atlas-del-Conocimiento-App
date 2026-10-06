@@ -26,6 +26,7 @@ DB = CARPETA / "indice.db"
 EXT = {".md", ".txt", ".pdf", ".epub", ".docx"}
 
 
+SIN_VENTANA = getattr(__import__("subprocess"), "CREATE_NO_WINDOW", 0)      # creationflags de los subprocess: en la app (pythonw) evita que parpadee una ventana de consola
 PROGRESO = None                                                  # función(texto, fracción 0-1): la pone quien quiera ver el avance (la app, mientras importa un PDF grande)
 
 

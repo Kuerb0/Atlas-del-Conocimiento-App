@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.3.0 - Actualizar
+title Arbol de la estadistica 1.3.1 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=actualizar"
-set "ARBOL_VERSION=1.3.0"
+set "ARBOL_MODO=instalar"
+set "ARBOL_VERSION=1.3.1"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -494,7 +494,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.3.0
+1.3.1
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -2782,7 +2782,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.3.0"
+version = "1.3.1"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3462,7 +3462,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -13871,6 +13871,7 @@ DB = CARPETA / "indice.db"
 EXT = {".md", ".txt", ".pdf", ".epub", ".docx"}
 
 
+SIN_VENTANA = getattr(__import__("subprocess"), "CREATE_NO_WINDOW", 0)      # creationflags de los subprocess: en la app (pythonw) evita que parpadee una ventana de consola
 PROGRESO = None                                                  # función(texto, fracción 0-1): la pone quien quiera ver el avance (la app, mientras importa un PDF grande)
 
 
@@ -14214,7 +14215,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from . import RAIZ
+from . import RAIZ, SIN_VENTANA
 
 LIMITE = 1 << 30            # 1 GB recomendado por repositorio
 LIMITE_DURO = 5 << 30       # a partir de aquí GitHub puede bloquear el repo
@@ -14255,7 +14256,7 @@ def _lista_disco(raiz: Path):
 def _lista_github(raiz: Path):
     """Archivos que subiría git (versionados + nuevos no ignorados). Sin git: None."""
     try:
-        r = subprocess.run(["git", "-C", str(raiz), "ls-files", "-co", "--exclude-standard", "-z"], capture_output=True, timeout=60, check=True)
+        r = subprocess.run(["git", "-C", str(raiz), "ls-files", "-co", "--exclude-standard", "-z"], capture_output=True, timeout=60, check=True, creationflags=SIN_VENTANA)
     except (OSError, subprocess.SubprocessError):
         return None
     return [x.decode("utf-8", "replace") for x in r.stdout.split(b"\0") if x]
@@ -14319,7 +14320,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from . import CARPETA, DB, EXT, RAIZ, _abrir, _extraer, _norm, _prog, indexar
+from . import CARPETA, DB, EXT, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, indexar
 
 GALAXIAS = {"codigo": "Código", "conceptos": "Conceptos", "demos": "Demos y guías", "finanzas": "Finanzas", "libros": "Libros", "notas": "Notas y enlaces"}
 TIPOS = {"libro": "Libro", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "otro": "Otro"}
@@ -14479,7 +14480,7 @@ def _imagen_pdf(f: Path) -> bytes | None:
         import tempfile
         with tempfile.TemporaryDirectory() as td:
             try:
-                subprocess.run([exe, "-f", "1", "-l", "1", "-jpeg", "-scale-to", "260", str(f), str(Path(td) / "p")], check=True, capture_output=True, timeout=60)
+                subprocess.run([exe, "-f", "1", "-l", "1", "-jpeg", "-scale-to", "260", str(f), str(Path(td) / "p")], check=True, capture_output=True, timeout=60, creationflags=SIN_VENTANA)
                 sal = sorted(Path(td).glob("p*.jpg"))
                 if sal:
                     return sal[0].read_bytes()

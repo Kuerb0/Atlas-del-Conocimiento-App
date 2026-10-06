@@ -9,7 +9,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from . import RAIZ
+from . import RAIZ, SIN_VENTANA
 
 LIMITE = 1 << 30            # 1 GB recomendado por repositorio
 LIMITE_DURO = 5 << 30       # a partir de aquí GitHub puede bloquear el repo
@@ -50,7 +50,7 @@ def _lista_disco(raiz: Path):
 def _lista_github(raiz: Path):
     """Archivos que subiría git (versionados + nuevos no ignorados). Sin git: None."""
     try:
-        r = subprocess.run(["git", "-C", str(raiz), "ls-files", "-co", "--exclude-standard", "-z"], capture_output=True, timeout=60, check=True)
+        r = subprocess.run(["git", "-C", str(raiz), "ls-files", "-co", "--exclude-standard", "-z"], capture_output=True, timeout=60, check=True, creationflags=SIN_VENTANA)
     except (OSError, subprocess.SubprocessError):
         return None
     return [x.decode("utf-8", "replace") for x in r.stdout.split(b"\0") if x]

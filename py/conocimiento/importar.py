@@ -23,7 +23,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from . import CARPETA, DB, EXT, RAIZ, _abrir, _extraer, _norm, _prog, indexar
+from . import CARPETA, DB, EXT, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, indexar
 
 GALAXIAS = {"codigo": "Código", "conceptos": "Conceptos", "demos": "Demos y guías", "finanzas": "Finanzas", "libros": "Libros", "notas": "Notas y enlaces"}
 TIPOS = {"libro": "Libro", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "otro": "Otro"}
@@ -183,7 +183,7 @@ def _imagen_pdf(f: Path) -> bytes | None:
         import tempfile
         with tempfile.TemporaryDirectory() as td:
             try:
-                subprocess.run([exe, "-f", "1", "-l", "1", "-jpeg", "-scale-to", "260", str(f), str(Path(td) / "p")], check=True, capture_output=True, timeout=60)
+                subprocess.run([exe, "-f", "1", "-l", "1", "-jpeg", "-scale-to", "260", str(f), str(Path(td) / "p")], check=True, capture_output=True, timeout=60, creationflags=SIN_VENTANA)
                 sal = sorted(Path(td).glob("p*.jpg"))
                 if sal:
                     return sal[0].read_bytes()
