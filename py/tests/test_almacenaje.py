@@ -1,4 +1,4 @@
-﻿"""Almacenaje: reparto por galaxia y tipo, y diferencia entre Â«discoÂ» y Â«githubÂ» (.gitignore)."""
+"""Almacenaje: reparto por galaxia y tipo, y diferencia entre Â«discoÂ» y Â«githubÂ» (.gitignore)."""
 import subprocess
 import sys
 from pathlib import Path
