@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 0.17.1 - Actualizar
+title Arbol de la estadistica 0.17.2 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=actualizar"
-set "ARBOL_VERSION=0.17.1"
+set "ARBOL_MODO=instalar"
+set "ARBOL_VERSION=0.17.2"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -339,7 +339,9 @@ function Crear-Accesos($dest) {
         $fichLanz = Join-Path $dest 'python_arbol.txt'      # lo lee abrir_arbol.bat
         $l = Elegir-Lanzador
         # Un único acceso directo: la app (py\arbol_app.pyw, ventana propia con pywebview).
-        $s = $w.CreateShortcut((Join-Path $esc ($Nombre + '.lnk')))
+        $lnk = Join-Path $esc ($Nombre + '.lnk')
+        Remove-Item -LiteralPath $lnk -Force -ErrorAction SilentlyContinue     # se recrea entero: así se cambia también el icono de una versión anterior
+        $s = $w.CreateShortcut($lnk)
         if ($l) {
             $s.TargetPath = $l[0]; $s.Arguments = '"' + $app + '"'
             if ($l[1]) { $s.WindowStyle = 7 }
@@ -349,8 +351,9 @@ function Crear-Accesos($dest) {
             Remove-Item -LiteralPath $fichLanz -Force -ErrorAction SilentlyContinue
         }
         $s.WorkingDirectory = $dest
-        if (Test-Path -LiteralPath $ico) { $s.IconLocation = $ico }
+        if (Test-Path -LiteralPath $ico) { $s.IconLocation = $ico + ',0' }
         $s.Description = 'Árbol de la estadística'; $s.Save()
+        try { Start-Process -FilePath (Join-Path $env:windir 'System32\ie4uinit.exe') -ArgumentList '-show' -WindowStyle Hidden -Wait } catch { }   # refresca la caché de iconos de Windows
         # El segundo acceso («- regenerar») ya no se crea; si lo dejó una versión anterior, se quita.
         $viejo = Join-Path $esc ($Nombre + ' - regenerar.lnk')
         if (Test-Path -LiteralPath $viejo) { Remove-Item -LiteralPath $viejo -Force -ErrorAction SilentlyContinue; Info 'Quitado el acceso «regenerar» del Escritorio (ya no hace falta; sigue regenerar_visor.bat en la carpeta).' }
@@ -483,7 +486,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-0.17.1
+0.17.2
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -2517,7 +2520,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "0.17.1"
+version = "0.17.2"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3197,7 +3200,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "0.17.1"
+__version__ = "0.17.2"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""

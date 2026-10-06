@@ -324,7 +324,9 @@ function Crear-Accesos($dest) {
         $fichLanz = Join-Path $dest 'python_arbol.txt'      # lo lee abrir_arbol.bat
         $l = Elegir-Lanzador
         # Un único acceso directo: la app (py\arbol_app.pyw, ventana propia con pywebview).
-        $s = $w.CreateShortcut((Join-Path $esc ($Nombre + '.lnk')))
+        $lnk = Join-Path $esc ($Nombre + '.lnk')
+        Remove-Item -LiteralPath $lnk -Force -ErrorAction SilentlyContinue     # se recrea entero: así se cambia también el icono de una versión anterior
+        $s = $w.CreateShortcut($lnk)
         if ($l) {
             $s.TargetPath = $l[0]; $s.Arguments = '"' + $app + '"'
             if ($l[1]) { $s.WindowStyle = 7 }
@@ -334,8 +336,9 @@ function Crear-Accesos($dest) {
             Remove-Item -LiteralPath $fichLanz -Force -ErrorAction SilentlyContinue
         }
         $s.WorkingDirectory = $dest
-        if (Test-Path -LiteralPath $ico) { $s.IconLocation = $ico }
+        if (Test-Path -LiteralPath $ico) { $s.IconLocation = $ico + ',0' }
         $s.Description = 'Árbol de la estadística'; $s.Save()
+        try { Start-Process -FilePath (Join-Path $env:windir 'System32\ie4uinit.exe') -ArgumentList '-show' -WindowStyle Hidden -Wait } catch { }   # refresca la caché de iconos de Windows
         # El segundo acceso («- regenerar») ya no se crea; si lo dejó una versión anterior, se quita.
         $viejo = Join-Path $esc ($Nombre + ' - regenerar.lnk')
         if (Test-Path -LiteralPath $viejo) { Remove-Item -LiteralPath $viejo -Force -ErrorAction SilentlyContinue; Info 'Quitado el acceso «regenerar» del Escritorio (ya no hace falta; sigue regenerar_visor.bat en la carpeta).' }
