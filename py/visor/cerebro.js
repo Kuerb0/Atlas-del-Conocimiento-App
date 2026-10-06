@@ -7,7 +7,7 @@
    Vuelo: UN solo movimiento continuo desde el universo hasta el destino (una galaxia o un nodo de dentro): la cámara no cambia de orientación, el mapa de dentro se
    dibuja por debajo con la misma cámara (alVuelo) y toma el relevo con un fundido; no hay parada intermedia.
    API: crearCerebro({canvas, galaxias:[{id, nombre, color:[r,g,b], sub, peso}], alGalaxia(g), alVuelo(info), reducir})
-        -> {mostrar(desde, pose, pxFinal, fin), volar(id, fin, {pxFinal, profundo}), ocultar, medir, resaltar({id: nº}), datos({id: texto})} */
+        -> {mostrar(desde, pose, pxFinal, fin), volar(id, fin, {pxFinal, profundo}), ocultar, medir, resaltar({id: nº}), enfocar(id|null), datos({id: texto})} */
 (function () {
 'use strict';
 function azar(sem) { var a = sem >>> 0; return function () { a = (a + 0x6D2B79F5) >>> 0; var t = a; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
@@ -29,7 +29,7 @@ var NEBULOSAS_COL = [[110, 80, 255], [60, 140, 255], [220, 80, 200], [40, 190, 1
 
 window.crearCerebro = function (o) {
   var cv = o.canvas, ctx = cv.getContext('2d'), G = o.galaxias, rnd = azar(11), gauss = function () { return (rnd() + rnd() + rnd() - 1.5) * 1.15; };
-  var W = 800, H = 600, DPR = 1, yaw = .5, pitch = .62, zoom = 1, t = 0, tPrev = 0, raf = 0, vivo = false, hover = -1, arr = null, res = {};
+  var W = 800, H = 600, DPR = 1, yaw = .5, pitch = .62, zoom = 1, t = 0, tPrev = 0, raf = 0, vivo = false, hover = -1, arr = null, res = {}, mira = {id: null, k: 0, m: null}, mult = 1;
   var mundo = [], estrellas = [], nebulosas = [], lejos = [];
 
   /* ---- el paisaje ---- */
@@ -57,7 +57,7 @@ window.crearCerebro = function (o) {
     var s = F / d; out.x = CX + x1 * s; out.y = CY - y2 * s; out.s = s; out.d = d; return true;
   }
   var O = {};
-  function luz(c, x, y, tam, al) { ctx.globalAlpha = al > 1 ? 1 : al; ctx.drawImage(sprite(c), x - tam / 2, y - tam / 2, tam, tam); }
+  function luz(c, x, y, tam, al) { al *= mult; ctx.globalAlpha = al > 1 ? 1 : al; ctx.drawImage(sprite(c), x - tam / 2, y - tam / 2, tam, tam); }
 
   function dibujar() {
     prep(); ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.fillStyle = '#03040a'; ctx.fillRect(0, 0, W, H);
@@ -71,6 +71,8 @@ window.crearCerebro = function (o) {
       luz([255, 255, 255], O.x, O.y, Math.max(2, tam * .16), g.a); });
     mundo.forEach(function (m, gi) {
       var hot = gi === hover || res[m.g.id], k = escala(m), gc = Math.cos(GIRO * t), gs = Math.sin(GIRO * t), s0 = m.s;
+      var buscando = Object.keys(res).length > 0, pulso = res[m.g.id] ? 1 + .1 * Math.sin(t * 6) : 1;
+      mult = buscando && !res[m.g.id] ? .3 : 1;                  /* buscando: lo que no coincide se apaga y lo que coincide late */
       m.polvo.forEach(function (d) {                          /* el polvo: puntos pequeños, como en el mapa de dentro */
         if (pr(s0[0] + (d.lx * gc + d.lz * gs) * k, s0[1] + d.y * k, s0[2] + (-d.lx * gs + d.lz * gc) * k, O)) luz(d.c, O.x, O.y, 3.6 + 2.6 * d.s, Math.min(1, d.al * 1.35) * (hot ? 1 : .9));
       });
@@ -87,16 +89,17 @@ window.crearCerebro = function (o) {
       });
       if (pr(s0[0], s0[1], s0[2], O)) {                       /* el núcleo, con un halo del color de la galaxia */
         m.sx = O.x; m.sy = O.y; m.sr = (m.R + 6) * O.s;
-        luz(m.rgb, O.x, O.y, m.R * 2 * O.s * (hot ? 1.3 : 1), hot ? .55 : .3); luz(mez(m.rgb, [255, 255, 255], .25), O.x, O.y, Math.max(10, 300 * k * O.s * 1.3), .9); luz([255, 255, 255], O.x, O.y, Math.max(5, 60 * k * O.s), .9);
+        luz(m.rgb, O.x, O.y, m.R * 2 * O.s * (hot ? 1.3 : 1) * pulso, hot ? .55 : .3); luz(mez(m.rgb, [255, 255, 255], .25), O.x, O.y, Math.max(10, 300 * k * O.s * 1.3), .9); luz([255, 255, 255], O.x, O.y, Math.max(5, 60 * k * O.s), .9);
       }
     });
-    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.textAlign = 'center';
+    mult = 1; ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.textAlign = 'center';
     if (an) return;                                 /* durante el vuelo no hay títulos ni textos */
     var puestas = [];                               /* etiquetas: de arriba abajo, bajando la que se pise con otra */
     mundo.map(function (m, gi) { return {m: m, gi: gi, y: m.sy + m.sr + 14}; }).sort(function (a, b) { return a.y - b.y; }).forEach(function (e) {
       puestas.forEach(function (q) { if (Math.abs(e.m.sx - q.m.sx) < 130 && e.y < q.y + 28) e.y = q.y + 28; });
       puestas.push(e);
       var m = e.m, hot = e.gi === hover, n = res[m.g.id], col = 'rgb(' + m.rgb.join(',') + ')';
+      ctx.globalAlpha = Object.keys(res).length && !n ? .4 : 1;
       if (m.g.sistema && m.g.sistema.ramas.length) { ctx.strokeStyle = 'rgba(' + m.rgb.join(',') + ',' + (hot ? .85 : .45) + ')'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(m.sx, m.sy + 4); ctx.lineTo(m.sx, e.y - 12); ctx.stroke(); }   /* línea guía: de la galaxia a su título (solo si tiene contenido) */
       var txt = m.g.nombre + (n ? '  · ' + n + ' ✓' : ''), yy = e.y - 2;
       ctx.lineJoin = 'round'; ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(3,4,10,.95)';
@@ -105,21 +108,26 @@ window.crearCerebro = function (o) {
       ctx.beginPath(); ctx.arc(m.sx - tw / 2 - 2, yy - 4, 3.5, 0, 6.2832); ctx.fillStyle = col; ctx.fill();                                                                     /* punto del color de la galaxia */
       if (m.g.sub) { ctx.font = '600 9.5px ' + SANS; ctx.strokeText(m.g.sub, m.sx + 6, yy + 12); ctx.fillStyle = 'rgba(190,204,230,.92)'; ctx.fillText(m.g.sub, m.sx + 6, yy + 12); }
     });
-    ctx.font = '500 12px ' + SANS; ctx.fillStyle = 'rgba(160,176,205,.7)'; ctx.fillText('Clic en una galaxia para entrar · arrastra para girar · rueda para acercar', W / 2, H - 14);
+    ctx.globalAlpha = 1; ctx.font = '500 12px ' + SANS; ctx.fillStyle = 'rgba(160,176,205,.7)'; ctx.fillText('Clic en una galaxia para entrar · arrastra para girar · rueda para acercar', W / 2, H - 14);
   }
-  function termina() { var fin = an.fin; an = null; foco = {x: 0, y: 0, z: 0}; dist = DIST; if (fin) fin(); }
+  function termina() { var fin = an.fin; an = null; foco = {x: 0, y: 0, z: 0}; dist = DIST; mira.k = 0; mira.id = null; mira.m = null; if (fin) fin(); }
   function frame(ahora) {
     var dt = Math.min(.05, (ahora - (tPrev || ahora)) / 1000); tPrev = ahora;
     if (an) {                                               /* vuelo: una sola curva de zoom del universo al destino (o al revés); misma orientación todo el rato */
       prep(); an.p = Math.min(1, (ahora - an.t0) / an.dur);
-      var P = an.sale ? 1 - an.p : an.p, e = suave(P), m = an.m, kk = escala(m), px0 = F * kk / DIST;
+      var P = an.sale ? 1 - an.p : an.p, e = suave(P), m = an.m, kk = escala(m), px0 = F * kk / an.d0;
       var Z = Math.exp(Math.log(px0) + (Math.log(an.pxF) - Math.log(px0)) * e), f = suave(P / .55);   /* Z: píxeles por unidad del mapa de dentro */
-      foco = {x: m.s[0] * f, y: m.s[1] * f, z: m.s[2] * f}; dist = F * kk / Z;
+      foco = {x: an.f0.x + (m.s[0] - an.f0.x) * f, y: an.f0.y + (m.s[1] - an.f0.y) * f, z: an.f0.z + (m.s[2] - an.f0.z) * f}; dist = F * kk / Z;
       if (pr(m.s[0], m.s[1], m.s[2], O) && o.alVuelo) o.alVuelo({id: m.g.id, yaw: yaw, pitch: pitch, px: Z, t: t, dx: O.x - W / 2, dy: O.y - H / 2,
         w: suave((P - .4) / .6), sync: P > .2, opMapa: suave((P - .3) / .35), opCerebro: 1 - suave((P - .5) / .3)});
       if (an.p >= 1) termina();
       t += dt * .7;
-    } else { if (!o.reducir && !arr) yaw += dt * .13 * vel; t += dt * .7; }
+    } else {
+      if (!o.reducir && !arr) yaw += dt * .13 * vel; t += dt * .7;
+      var meta = mira.id && !o.reducir ? 1 : 0; mira.k += (meta - mira.k) * Math.min(1, dt * 4);           /* acercamiento suave a la galaxia que busca el usuario */
+      if (!meta && mira.k < .002) { mira.k = 0; mira.m = null; }
+      if (mira.m) { var q = .38 * suave(mira.k); foco = {x: mira.m.s[0] * q, y: mira.m.s[1] * q, z: mira.m.s[2] * q}; dist = DIST * (1 - .16 * suave(mira.k)); } else { foco = {x: 0, y: 0, z: 0}; dist = DIST; }
+    }
     dibujar(); raf = vivo && (!o.reducir || an) ? requestAnimationFrame(frame) : 0;
   }
   function ocupado() {                                    /* ¿hay un vuelo en curso? (uno que lleva mucho más de su duración se da por muerto: pestaña sin fotogramas) */
@@ -151,16 +159,18 @@ window.crearCerebro = function (o) {
       var m = desde && pose && !o.reducir ? mundo.filter(function (q) { return q.g.id === desde && q.g.sistema; })[0] : null;
       if (!m) { if (fin) fin(); return; }
       yaw = pose.yaw; pitch = pose.pitch; t = pose.t;
-      an = {m: m, sale: true, t0: performance.now(), dur: 2200, p: 0, fin: fin, pxF: pxFinal}; pintar();
+      mira.k = 0; mira.id = null; mira.m = null;
+      an = {m: m, sale: true, t0: performance.now(), dur: 2200, p: 0, fin: fin, pxF: pxFinal, f0: {x: 0, y: 0, z: 0}, d0: DIST}; pintar();
     },
     volar: function (id, fin, op) {                         /* op = {pxFinal: px/unidad del destino, profundo: ¿es un nodo y no la galaxia entera?}; llama a fin() al llegar */
       var m = mundo.filter(function (q) { return q.g.id === id; })[0];
       if (!m || !m.g.sistema || !op || o.reducir || ocupado()) { if (fin) fin(); return; }
-      hover = -1; an = {m: m, sale: false, t0: performance.now(), dur: op.profundo ? 3000 : 2100, p: 0, fin: fin, pxF: op.pxFinal}; if (!vivo) vivo = true; pintar();
+      hover = -1; an = {m: m, sale: false, t0: performance.now(), dur: op.profundo ? 3000 : 2100, p: 0, fin: fin, pxF: op.pxFinal, f0: {x: foco.x, y: foco.y, z: foco.z}, d0: dist}; if (!vivo) vivo = true; pintar();
     },
     ocultar: function () { vivo = false; if (raf) cancelAnimationFrame(raf); raf = 0; },
     medir: medir,
     resaltar: function (m) { res = m || {}; pintar(); },
+    enfocar: function (id) { mira.id = id || null; if (id) mira.m = mundo.filter(function (q) { return q.g.id === id && q.g.sistema; })[0] || mira.m; if (!mira.m) mira.id = null; pintar(); },
     datos: function (m) { G.forEach(function (g) { if (m[g.id] !== undefined) g.sub = m[g.id]; }); pintar(); }
   };
 };

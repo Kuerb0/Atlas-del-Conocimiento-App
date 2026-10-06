@@ -215,6 +215,17 @@ def _expresiones(con: sqlite3.Connection, consulta: str) -> list[str]:
     return [expr, " OR ".join(f'"{t}"*' for t in toks)]      # si la primera no da nada, vale cualquier palabra
 
 
+_PORTADAS: dict = {}
+
+
+def _portada_cache(base: Path, rel: str) -> str:
+    """Portada como data URI (con memoria: la búsqueda la pide en cada pulsación)."""
+    if rel not in _PORTADAS:
+        f = Path(base) / rel
+        _PORTADAS[rel] = "data:image/jpeg;base64," + __import__("base64").b64encode(f.read_bytes()).decode() if f.is_file() else ""
+    return _PORTADAS[rel]
+
+
 def buscar(consulta: str, coleccion: str | None = None, n: int = 10, db: Path = DB) -> list[dict]:
     """Mejores `n` trozos para la consulta, por BM25 (el título pesa 8×). Cada resultado: coleccion, titulo, ubicacion, ruta, fragmento."""
     if not Path(db).exists():
@@ -239,6 +250,8 @@ def buscar(consulta: str, coleccion: str | None = None, n: int = 10, db: Path = 
         except ValueError:
             m = None
         r.update(subtema=(m or {}).get("subtema", ""), tipo=(m or {}).get("tipo", ""), etiquetas=(m or {}).get("etiquetas", ""))
+        if (m or {}).get("portada"):
+            r["portada"] = _portada_cache(base, m["portada"])
         r["interno"] = m is None and (r["coleccion"] in ("codigo", "teoria") or r["ruta"].endswith("catalogo.json"))   # código, teoría y catálogo del propio árbol: no son ficheros que abrir
         out.append(r)
     return out

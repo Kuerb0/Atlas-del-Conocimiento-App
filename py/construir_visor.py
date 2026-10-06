@@ -507,7 +507,7 @@ def construir() -> dict:
     ids_conceptos = {k["id"] for k in json.loads(CATALOGO.read_text(encoding="utf-8"))["conceptos"]}
     ids_demos = {d["id"] for _, _, ds in DEMOS for d in ds}
     return {"raiz": RAIZ_POR_DEFECTO, "generado": dt.date.today().isoformat(), "pruebas": n_tests, "ramas": ramas,
-            "propiedades": meta_prop, "rutas": cargar_rutas(nombres_fn, ids_conceptos, ids_demos)}
+            "propiedades": meta_prop, "rutas": cargar_rutas(nombres_fn, ids_conceptos, ids_demos), "portadas": portadas_biblioteca()}
 
 
 # ---------- la biblioteca del usuario (conocimiento/biblioteca, ver conocimiento/importar.py) ----------
@@ -518,6 +518,16 @@ PALETA_BIB = [("#2458C8", "#6FA2FF"), ("#137A6E", "#45C3B3"), ("#A8700A", "#E5A2
 def _hoja_bib(rid: str, nombre: str, tipo: str, desc: str, ruta: str, rel: str, **extra) -> dict:
     return {"id": rid, "nombre": nombre, "tipo": tipo, "firma": "", "doc": "", "desc": desc, "sas": "", "origen": "", "archivo": "biblioteca/" + rel, "linea": 1,
             "lineas": 8, "codigo": "", "importar": "", "llamada": "", "opcionales": "", "aviso": "", "texto": "", "ruta": ruta, **extra}
+
+
+def portadas_biblioteca() -> dict:
+    """{ruta de la portada: data URI} de lo importado (el visor las usa de icono en el buscador y en los paneles)."""
+    try:
+        from conocimiento.importar import carpeta_datos, leer_metadatos, portada_datauri
+    except Exception:
+        return {}
+    c = carpeta_datos()
+    return {m["portada"]: u for m in leer_metadatos(c).values() if m.get("portada") for u in [portada_datauri(c, m["portada"])] if u}
 
 
 def ramas_biblioteca() -> list[dict]:
@@ -543,7 +553,7 @@ def ramas_biblioteca() -> list[dict]:
     def doc(rid: str, rel: str, m: dict) -> dict:
         t = titulo_corto(m.get("titulo", rel))
         return _hoja_bib(rid, t, "documento", f"{m.get('tipo', '')} · {m.get('subtema', '')}", str(base / rel), rel, subtema=m.get("subtema", ""), etiquetas=m.get("etiquetas", ""),
-                         fecha=m.get("fecha", "")[:10], genero=m.get("genero", ""), paginas=m.get("paginas", 0), titulo_largo=m.get("titulo", ""))
+                         fecha=m.get("fecha", "")[:10], genero=m.get("genero", ""), paginas=m.get("paginas", 0), titulo_largo=m.get("titulo", ""), portada=m.get("portada", ""))
 
     libros = {rel: m for rel, m in meta.items() if m.get("galaxia") == "libros"}
     por_genero: dict[str, list] = {}
@@ -556,7 +566,7 @@ def ramas_biblioteca() -> list[dict]:
             caps = m.get("capitulos") or [{"titulo": libro, "pagina": 1}]
             items = [_hoja_bib(f"lib_{g}_{i}_{j}", c["titulo"][:90], "capitulo", f"{libro}" + (f" — p. {c['pagina']}" if c.get("pagina") else ""), str(base / rel), rel,
                                pagina=c.get("pagina") or 0, libro=libro, subtema=m.get("subtema", ""), genero=g, paginas=m.get("paginas", 0), etiquetas=m.get("etiquetas", ""),
-                               fecha=m.get("fecha", "")[:10], titulo_largo=m.get("titulo", ""), lineas=8 + min(12, 2 * len(c["titulo"]) // 10)) for j, c in enumerate(caps)]
+                               fecha=m.get("fecha", "")[:10], titulo_largo=m.get("titulo", ""), portada=m.get("portada", ""), lineas=8 + min(12, 2 * len(c["titulo"]) // 10)) for j, c in enumerate(caps)]
             modulos.append({"id": f"lib_{g}_{i}", "nombre": libro, "desc": f"{m.get('subtema', '')} · {m.get('paginas') or '?'} págs. · {len(caps)} capítulos", "archivo": "biblioteca/" + rel, "items": items})
         ramas.append({"id": f"gen_{g}", "nombre": GENEROS.get(g, g), "desc": f"{len(lista)} libro{'s' if len(lista) != 1 else ''} de {GENEROS.get(g, g).lower()}",
                       "modulos": modulos, "galaxia": "libros", "biblioteca": True, "color": color()})

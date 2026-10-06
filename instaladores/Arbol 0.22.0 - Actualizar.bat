@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 0.21.1 - Actualizar
+title Arbol de la estadistica 0.22.0 - Actualizar
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
 set "ARBOL_MODO=actualizar"
-set "ARBOL_VERSION=0.21.1"
+set "ARBOL_VERSION=0.22.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -486,7 +486,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-0.21.1
+0.22.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -1247,7 +1247,7 @@ def construir() -> dict:
     ids_conceptos = {k["id"] for k in json.loads(CATALOGO.read_text(encoding="utf-8"))["conceptos"]}
     ids_demos = {d["id"] for _, _, ds in DEMOS for d in ds}
     return {"raiz": RAIZ_POR_DEFECTO, "generado": dt.date.today().isoformat(), "pruebas": n_tests, "ramas": ramas,
-            "propiedades": meta_prop, "rutas": cargar_rutas(nombres_fn, ids_conceptos, ids_demos)}
+            "propiedades": meta_prop, "rutas": cargar_rutas(nombres_fn, ids_conceptos, ids_demos), "portadas": portadas_biblioteca()}
 
 
 # ---------- la biblioteca del usuario (conocimiento/biblioteca, ver conocimiento/importar.py) ----------
@@ -1258,6 +1258,16 @@ PALETA_BIB = [("#2458C8", "#6FA2FF"), ("#137A6E", "#45C3B3"), ("#A8700A", "#E5A2
 def _hoja_bib(rid: str, nombre: str, tipo: str, desc: str, ruta: str, rel: str, **extra) -> dict:
     return {"id": rid, "nombre": nombre, "tipo": tipo, "firma": "", "doc": "", "desc": desc, "sas": "", "origen": "", "archivo": "biblioteca/" + rel, "linea": 1,
             "lineas": 8, "codigo": "", "importar": "", "llamada": "", "opcionales": "", "aviso": "", "texto": "", "ruta": ruta, **extra}
+
+
+def portadas_biblioteca() -> dict:
+    """{ruta de la portada: data URI} de lo importado (el visor las usa de icono en el buscador y en los paneles)."""
+    try:
+        from conocimiento.importar import carpeta_datos, leer_metadatos, portada_datauri
+    except Exception:
+        return {}
+    c = carpeta_datos()
+    return {m["portada"]: u for m in leer_metadatos(c).values() if m.get("portada") for u in [portada_datauri(c, m["portada"])] if u}
 
 
 def ramas_biblioteca() -> list[dict]:
@@ -1283,7 +1293,7 @@ def ramas_biblioteca() -> list[dict]:
     def doc(rid: str, rel: str, m: dict) -> dict:
         t = titulo_corto(m.get("titulo", rel))
         return _hoja_bib(rid, t, "documento", f"{m.get('tipo', '')} · {m.get('subtema', '')}", str(base / rel), rel, subtema=m.get("subtema", ""), etiquetas=m.get("etiquetas", ""),
-                         fecha=m.get("fecha", "")[:10], genero=m.get("genero", ""), paginas=m.get("paginas", 0), titulo_largo=m.get("titulo", ""))
+                         fecha=m.get("fecha", "")[:10], genero=m.get("genero", ""), paginas=m.get("paginas", 0), titulo_largo=m.get("titulo", ""), portada=m.get("portada", ""))
 
     libros = {rel: m for rel, m in meta.items() if m.get("galaxia") == "libros"}
     por_genero: dict[str, list] = {}
@@ -1296,7 +1306,7 @@ def ramas_biblioteca() -> list[dict]:
             caps = m.get("capitulos") or [{"titulo": libro, "pagina": 1}]
             items = [_hoja_bib(f"lib_{g}_{i}_{j}", c["titulo"][:90], "capitulo", f"{libro}" + (f" — p. {c['pagina']}" if c.get("pagina") else ""), str(base / rel), rel,
                                pagina=c.get("pagina") or 0, libro=libro, subtema=m.get("subtema", ""), genero=g, paginas=m.get("paginas", 0), etiquetas=m.get("etiquetas", ""),
-                               fecha=m.get("fecha", "")[:10], titulo_largo=m.get("titulo", ""), lineas=8 + min(12, 2 * len(c["titulo"]) // 10)) for j, c in enumerate(caps)]
+                               fecha=m.get("fecha", "")[:10], titulo_largo=m.get("titulo", ""), portada=m.get("portada", ""), lineas=8 + min(12, 2 * len(c["titulo"]) // 10)) for j, c in enumerate(caps)]
             modulos.append({"id": f"lib_{g}_{i}", "nombre": libro, "desc": f"{m.get('subtema', '')} · {m.get('paginas') or '?'} págs. · {len(caps)} capítulos", "archivo": "biblioteca/" + rel, "items": items})
         ramas.append({"id": f"gen_{g}", "nombre": GENEROS.get(g, g), "desc": f"{len(lista)} libro{'s' if len(lista) != 1 else ''} de {GENEROS.get(g, g).lower()}",
                       "modulos": modulos, "galaxia": "libros", "biblioteca": True, "color": color()})
@@ -2688,7 +2698,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "0.21.1"
+version = "0.22.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3368,7 +3378,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "0.21.1"
+__version__ = "0.22.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -13966,6 +13976,17 @@ def _expresiones(con: sqlite3.Connection, consulta: str) -> list[str]:
     return [expr, " OR ".join(f'"{t}"*' for t in toks)]      # si la primera no da nada, vale cualquier palabra
 
 
+_PORTADAS: dict = {}
+
+
+def _portada_cache(base: Path, rel: str) -> str:
+    """Portada como data URI (con memoria: la búsqueda la pide en cada pulsación)."""
+    if rel not in _PORTADAS:
+        f = Path(base) / rel
+        _PORTADAS[rel] = "data:image/jpeg;base64," + __import__("base64").b64encode(f.read_bytes()).decode() if f.is_file() else ""
+    return _PORTADAS[rel]
+
+
 def buscar(consulta: str, coleccion: str | None = None, n: int = 10, db: Path = DB) -> list[dict]:
     """Mejores `n` trozos para la consulta, por BM25 (el título pesa 8×). Cada resultado: coleccion, titulo, ubicacion, ruta, fragmento."""
     if not Path(db).exists():
@@ -13990,6 +14011,8 @@ def buscar(consulta: str, coleccion: str | None = None, n: int = 10, db: Path = 
         except ValueError:
             m = None
         r.update(subtema=(m or {}).get("subtema", ""), tipo=(m or {}).get("tipo", ""), etiquetas=(m or {}).get("etiquetas", ""))
+        if (m or {}).get("portada"):
+            r["portada"] = _portada_cache(base, m["portada"])
         r["interno"] = m is None and (r["coleccion"] in ("codigo", "teoria") or r["ruta"].endswith("catalogo.json"))   # código, teoría y catálogo del propio árbol: no son ficheros que abrir
         out.append(r)
     return out
@@ -14069,14 +14092,17 @@ Uso: `python -m conocimiento importar f1.pdf f2.docx [-g libros] [-s "Inferencia
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import html
+import io
 import json
 import math
 import os
 import re
 import shutil
 import unicodedata
+import posixpath
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -14202,6 +14228,106 @@ def titulo_corto(nombre: str, n: int = 60) -> str:
     if len(s) > n:
         s = s[:n].rsplit(" ", 1)[0].rstrip(" ,;:-") + "…"
     return s or str(nombre)[:n]
+
+
+_COLOR_GENERO = {"historia": (150, 90, 50), "economia": (40, 120, 80), "ensayo": (110, 80, 150), "estadistica": (40, 90, 170), "ciencia": (30, 130, 150), "novela": (160, 60, 90),
+                 "biografia": (140, 110, 40), "politica": (150, 60, 50), "tecnologia": (60, 70, 90), "psicologia": (130, 70, 130), "arte": (170, 90, 120), "otro": (80, 90, 110)}
+
+
+def _imagen_epub(f: Path) -> bytes | None:
+    with zipfile.ZipFile(f) as z:
+        nombres = z.namelist()
+        opf = next((n for n in nombres if n.endswith(".opf")), None)
+        if opf:
+            x = z.read(opf).decode("utf-8", "replace")
+            ident = re.search(r'<meta[^>]+name="cover"[^>]+content="([^"]+)"', x) or re.search(r'<meta[^>]+content="([^"]+)"[^>]+name="cover"', x)
+            href = None
+            if ident:
+                m = re.search(r'<item[^>]+id="' + re.escape(ident.group(1)) + r'"[^>]*>', x)
+                href = re.search(r'href="([^"]+)"', m.group(0)).group(1) if m else None
+            if not href:
+                m = re.search(r'<item[^>]+properties="[^"]*cover-image[^"]*"[^>]*>', x)
+                href = re.search(r'href="([^"]+)"', m.group(0)).group(1) if m else None
+            if href:
+                ruta = posixpath.normpath(posixpath.join(posixpath.dirname(opf), html.unescape(href)))
+                if ruta in nombres:
+                    return z.read(ruta)
+        imgs = [n for n in nombres if re.search(r"\.(jpe?g|png)$", n, re.I)]
+        cub = [n for n in imgs if "cover" in n.lower() or "portada" in n.lower()]
+        elegido = (cub or sorted(imgs, key=lambda n: -z.getinfo(n).file_size))[:1]
+        return z.read(elegido[0]) if elegido else None
+
+
+def _imagen_pdf(f: Path) -> bytes | None:
+    """La primera página del PDF como imagen: con `pdftoppm` (Poppler) si está instalado; si no, una imagen JPEG incrustada en las dos primeras páginas (las demás
+    codificaciones salen mal sin un motor de PDF)."""
+    exe = shutil.which("pdftoppm")
+    if exe:
+        import subprocess
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            try:
+                subprocess.run([exe, "-f", "1", "-l", "1", "-jpeg", "-scale-to", "260", str(f), str(Path(td) / "p")], check=True, capture_output=True, timeout=60)
+                sal = sorted(Path(td).glob("p*.jpg"))
+                if sal:
+                    return sal[0].read_bytes()
+            except Exception:
+                pass
+    try:
+        from pypdf import PdfReader
+        for pag in PdfReader(str(f)).pages[:2]:
+            for im in pag.images:
+                if im.data[:2] == bytes([255, 216]) and len(im.data) > 8000:
+                    return im.data
+    except Exception:
+        pass
+    return None
+
+
+def portada(f: str | Path, destino: Path, titulo: str = "", genero: str = "otro") -> bool:
+    """Guarda en `destino` (JPG de unos 120×170 px) la portada del libro: la imagen del EPUB o del PDF si la tiene; si no, una portada de color según el género con el título.
+    Devuelve True si pudo escribirla."""
+    from PIL import Image, ImageDraw, ImageFont
+    f = Path(f)
+    try:
+        datos = _imagen_epub(f) if f.suffix.lower() == ".epub" else _imagen_pdf(f) if f.suffix.lower() == ".pdf" else None
+    except Exception:
+        datos = None
+    try:
+        if datos:
+            im = Image.open(io.BytesIO(datos)).convert("RGB")
+            im.thumbnail((150, 215))
+        else:                                                      # portada generada: color del género, título a mano
+            c = _COLOR_GENERO.get(genero, _COLOR_GENERO["otro"])
+            im = Image.new("RGB", (120, 170), c)
+            d = ImageDraw.Draw(im)
+            for y in range(170):
+                d.line([(0, y), (120, y)], fill=tuple(int(v * (1.15 - .45 * y / 170)) % 256 if v * 1.15 < 256 else min(255, int(v * (1.15 - .45 * y / 170))) for v in c))
+            d.rectangle((6, 6, 113, 163), outline=(255, 255, 255), width=1)
+            try:
+                fuente = ImageFont.load_default(size=13)
+            except TypeError:
+                fuente = ImageFont.load_default()
+            lineas, actual = [], ""
+            for w in (titulo or f.stem).split():
+                if len(actual) + len(w) + 1 > 13 and actual:
+                    lineas.append(actual); actual = w
+                else:
+                    actual = (actual + " " + w).strip()
+            lineas.append(actual)
+            for i, ln in enumerate(lineas[:7]):
+                d.text((12, 14 + i * 18), ln[:14], fill=(255, 255, 255), font=fuente)
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        im.save(destino, "JPEG", quality=78)
+        return True
+    except Exception:
+        return False
+
+
+def portada_datauri(carpeta: Path, rel: str) -> str:
+    """La portada guardada (`rel`, relativa a biblioteca/) como data URI, o ''."""
+    f = Path(carpeta) / "biblioteca" / rel
+    return "data:image/jpeg;base64," + base64.b64encode(f.read_bytes()).decode() if rel and f.is_file() else ""
 
 
 def _catalogo() -> dict:
@@ -14357,6 +14483,10 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
             meta[rel] = {"capitulos": caps, "paginas": pags, "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "etiquetas": (d.get("etiquetas") or "").strip(), "origen": str(f), "hash": h,
                          "fecha": datetime.now().isoformat(timespec="seconds"), "automatico": not (d.get("galaxia") or d.get("subtema") or d.get("tipo") or d.get("genero")) and (d.get("titulo") or auto["titulo"]).strip() == auto["titulo"]}
             hashes[h] = rel
+            if tipo == "libro":
+                nom = "portadas/" + h[:10] + ".jpg"
+                if portada(fin, base / nom, titulo, genero):
+                    meta[rel]["portada"] = nom
             salida.append({**r, "estado": "ok", "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "destino": str(fin), "mensaje": auto["motivo"]})
         except Exception as e:
             salida.append({**r, "estado": "error", "mensaje": str(e)})
@@ -14381,6 +14511,10 @@ def enriquecer(carpeta: Path | None = None) -> int:
             continue
         if "capitulos" not in m:
             m["capitulos"], m["paginas"] = capitulos(f); n += 1
+        if m.get("tipo") == "libro" and not m.get("portada"):
+            nom = "portadas/" + m.get("hash", rel)[:10] + ".jpg"
+            if portada(f, carpeta / "biblioteca" / nom, m.get("titulo", ""), m.get("genero", "otro")):
+                m["portada"] = nom; n += 1
         if len(m.get("titulo", "")) > 60 or " -- " in m.get("titulo", ""):
             m["titulo"] = titulo_corto(m["titulo"]); n += 1
         if "genero" not in m:
@@ -32068,6 +32202,51 @@ def test_el_visor_no_tiene_los_filtros_de_arriba_y_el_libro_muestra_sus_capitulo
     html = cv.ensamblar(cv.construir())
     assert 'id="chips"' not in html and 'class="filtros"' not in html and 'id="soloSas"' not in html
     assert "detalleLibro" in html and "esLibro" in html and "n.tipo === 'capitulo'" in html     # capítulos ocultos hasta enfocar el libro (mapa3d.js)
+
+
+def _epub_con_portada(ruta):
+    import io
+    import zipfile
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (300, 440), (200, 30, 40)).save(buf, "JPEG")
+    with zipfile.ZipFile(ruta, "w") as z:
+        z.writestr("OEBPS/content.opf", '<package><metadata><meta name="cover" content="cov"/></metadata><manifest><item id="cov" href="img/tapa.jpg" media-type="image/jpeg"/></manifest></package>')
+        z.writestr("OEBPS/img/tapa.jpg", buf.getvalue())
+        z.writestr("OEBPS/c1.xhtml", "<html><body><h1>Uno</h1><p>" + "history of the empire " * 60 + "</p></body></html>")
+
+
+def test_portadas_la_del_epub_si_la_tiene_y_una_generada_si_no(tmp_path):
+    from PIL import Image
+    e = tmp_path / "con_portada.epub"
+    _epub_con_portada(e)
+    assert imp.portada(e, tmp_path / "p" / "a.jpg", "Con portada", "historia")
+    px = Image.open(tmp_path / "p" / "a.jpg").convert("RGB").getpixel((50, 50))
+    assert px[0] > 150 and px[1] < 90                               # la imagen rojiza del propio EPUB, no una generada
+    t = tmp_path / "apunte.txt"
+    t.write_text("nada", encoding="utf-8")
+    assert imp.portada(t, tmp_path / "p" / "b.jpg", "Apunte sin portada propia", "estadistica") and Image.open(tmp_path / "p" / "b.jpg").size == (120, 170)
+
+
+def test_la_portada_viaja_con_la_importacion_y_con_la_busqueda_y_el_visor(tmp_path, monkeypatch):
+    import construir_visor as cv
+    e = tmp_path / "roma.epub"
+    _epub_con_portada(e)
+    carpeta = tmp_path / "datos"
+    r = imp.importar([e], carpeta=carpeta, db=carpeta / "i.db")[0]
+    meta = next(iter(imp.leer_metadatos(carpeta).values()))
+    assert r["estado"] == "ok" and meta["portada"].startswith("portadas/") and (carpeta / "biblioteca" / meta["portada"]).is_file()
+    assert k.buscar("empire", db=carpeta / "i.db")[0]["portada"].startswith("data:image/jpeg;base64,")
+    monkeypatch.setenv("ARBOL_CONOCIMIENTO", str(carpeta))
+    d = cv.construir()
+    assert d["portadas"][meta["portada"]].startswith("data:image/jpeg") and any(i.get("portada") == meta["portada"] for r_ in d["ramas"] for m in r_["modulos"] for i in m["items"])
+
+
+def test_el_visor_tiene_iconos_en_el_buscador_y_animaciones_al_buscar():
+    import construir_visor as cv
+    html = cv.ensamblar(cv.construir())
+    for pieza in ("iconoNodo", "iconoRes", "SVG_PY", 'class="ico-t sig"', "enfocar: function", "cerebro.enfocar(", "flex:1 1 480px"):
+        assert pieza in html
 :::END
 :::BEGIN py/tests/test_instaladores.py|text
 """Los instaladores autoextraibles empaquetan lo correcto y se extraen identicos."""
@@ -33513,7 +33692,7 @@ window.crearAgujero = function (o) {
    Vuelo: UN solo movimiento continuo desde el universo hasta el destino (una galaxia o un nodo de dentro): la cámara no cambia de orientación, el mapa de dentro se
    dibuja por debajo con la misma cámara (alVuelo) y toma el relevo con un fundido; no hay parada intermedia.
    API: crearCerebro({canvas, galaxias:[{id, nombre, color:[r,g,b], sub, peso}], alGalaxia(g), alVuelo(info), reducir})
-        -> {mostrar(desde, pose, pxFinal, fin), volar(id, fin, {pxFinal, profundo}), ocultar, medir, resaltar({id: nº}), datos({id: texto})} */
+        -> {mostrar(desde, pose, pxFinal, fin), volar(id, fin, {pxFinal, profundo}), ocultar, medir, resaltar({id: nº}), enfocar(id|null), datos({id: texto})} */
 (function () {
 'use strict';
 function azar(sem) { var a = sem >>> 0; return function () { a = (a + 0x6D2B79F5) >>> 0; var t = a; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
@@ -33535,7 +33714,7 @@ var NEBULOSAS_COL = [[110, 80, 255], [60, 140, 255], [220, 80, 200], [40, 190, 1
 
 window.crearCerebro = function (o) {
   var cv = o.canvas, ctx = cv.getContext('2d'), G = o.galaxias, rnd = azar(11), gauss = function () { return (rnd() + rnd() + rnd() - 1.5) * 1.15; };
-  var W = 800, H = 600, DPR = 1, yaw = .5, pitch = .62, zoom = 1, t = 0, tPrev = 0, raf = 0, vivo = false, hover = -1, arr = null, res = {};
+  var W = 800, H = 600, DPR = 1, yaw = .5, pitch = .62, zoom = 1, t = 0, tPrev = 0, raf = 0, vivo = false, hover = -1, arr = null, res = {}, mira = {id: null, k: 0, m: null}, mult = 1;
   var mundo = [], estrellas = [], nebulosas = [], lejos = [];
 
   /* ---- el paisaje ---- */
@@ -33563,7 +33742,7 @@ window.crearCerebro = function (o) {
     var s = F / d; out.x = CX + x1 * s; out.y = CY - y2 * s; out.s = s; out.d = d; return true;
   }
   var O = {};
-  function luz(c, x, y, tam, al) { ctx.globalAlpha = al > 1 ? 1 : al; ctx.drawImage(sprite(c), x - tam / 2, y - tam / 2, tam, tam); }
+  function luz(c, x, y, tam, al) { al *= mult; ctx.globalAlpha = al > 1 ? 1 : al; ctx.drawImage(sprite(c), x - tam / 2, y - tam / 2, tam, tam); }
 
   function dibujar() {
     prep(); ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.fillStyle = '#03040a'; ctx.fillRect(0, 0, W, H);
@@ -33577,6 +33756,8 @@ window.crearCerebro = function (o) {
       luz([255, 255, 255], O.x, O.y, Math.max(2, tam * .16), g.a); });
     mundo.forEach(function (m, gi) {
       var hot = gi === hover || res[m.g.id], k = escala(m), gc = Math.cos(GIRO * t), gs = Math.sin(GIRO * t), s0 = m.s;
+      var buscando = Object.keys(res).length > 0, pulso = res[m.g.id] ? 1 + .1 * Math.sin(t * 6) : 1;
+      mult = buscando && !res[m.g.id] ? .3 : 1;                  /* buscando: lo que no coincide se apaga y lo que coincide late */
       m.polvo.forEach(function (d) {                          /* el polvo: puntos pequeños, como en el mapa de dentro */
         if (pr(s0[0] + (d.lx * gc + d.lz * gs) * k, s0[1] + d.y * k, s0[2] + (-d.lx * gs + d.lz * gc) * k, O)) luz(d.c, O.x, O.y, 3.6 + 2.6 * d.s, Math.min(1, d.al * 1.35) * (hot ? 1 : .9));
       });
@@ -33593,16 +33774,17 @@ window.crearCerebro = function (o) {
       });
       if (pr(s0[0], s0[1], s0[2], O)) {                       /* el núcleo, con un halo del color de la galaxia */
         m.sx = O.x; m.sy = O.y; m.sr = (m.R + 6) * O.s;
-        luz(m.rgb, O.x, O.y, m.R * 2 * O.s * (hot ? 1.3 : 1), hot ? .55 : .3); luz(mez(m.rgb, [255, 255, 255], .25), O.x, O.y, Math.max(10, 300 * k * O.s * 1.3), .9); luz([255, 255, 255], O.x, O.y, Math.max(5, 60 * k * O.s), .9);
+        luz(m.rgb, O.x, O.y, m.R * 2 * O.s * (hot ? 1.3 : 1) * pulso, hot ? .55 : .3); luz(mez(m.rgb, [255, 255, 255], .25), O.x, O.y, Math.max(10, 300 * k * O.s * 1.3), .9); luz([255, 255, 255], O.x, O.y, Math.max(5, 60 * k * O.s), .9);
       }
     });
-    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.textAlign = 'center';
+    mult = 1; ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.textAlign = 'center';
     if (an) return;                                 /* durante el vuelo no hay títulos ni textos */
     var puestas = [];                               /* etiquetas: de arriba abajo, bajando la que se pise con otra */
     mundo.map(function (m, gi) { return {m: m, gi: gi, y: m.sy + m.sr + 14}; }).sort(function (a, b) { return a.y - b.y; }).forEach(function (e) {
       puestas.forEach(function (q) { if (Math.abs(e.m.sx - q.m.sx) < 130 && e.y < q.y + 28) e.y = q.y + 28; });
       puestas.push(e);
       var m = e.m, hot = e.gi === hover, n = res[m.g.id], col = 'rgb(' + m.rgb.join(',') + ')';
+      ctx.globalAlpha = Object.keys(res).length && !n ? .4 : 1;
       if (m.g.sistema && m.g.sistema.ramas.length) { ctx.strokeStyle = 'rgba(' + m.rgb.join(',') + ',' + (hot ? .85 : .45) + ')'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(m.sx, m.sy + 4); ctx.lineTo(m.sx, e.y - 12); ctx.stroke(); }   /* línea guía: de la galaxia a su título (solo si tiene contenido) */
       var txt = m.g.nombre + (n ? '  · ' + n + ' ✓' : ''), yy = e.y - 2;
       ctx.lineJoin = 'round'; ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(3,4,10,.95)';
@@ -33611,21 +33793,26 @@ window.crearCerebro = function (o) {
       ctx.beginPath(); ctx.arc(m.sx - tw / 2 - 2, yy - 4, 3.5, 0, 6.2832); ctx.fillStyle = col; ctx.fill();                                                                     /* punto del color de la galaxia */
       if (m.g.sub) { ctx.font = '600 9.5px ' + SANS; ctx.strokeText(m.g.sub, m.sx + 6, yy + 12); ctx.fillStyle = 'rgba(190,204,230,.92)'; ctx.fillText(m.g.sub, m.sx + 6, yy + 12); }
     });
-    ctx.font = '500 12px ' + SANS; ctx.fillStyle = 'rgba(160,176,205,.7)'; ctx.fillText('Clic en una galaxia para entrar · arrastra para girar · rueda para acercar', W / 2, H - 14);
+    ctx.globalAlpha = 1; ctx.font = '500 12px ' + SANS; ctx.fillStyle = 'rgba(160,176,205,.7)'; ctx.fillText('Clic en una galaxia para entrar · arrastra para girar · rueda para acercar', W / 2, H - 14);
   }
-  function termina() { var fin = an.fin; an = null; foco = {x: 0, y: 0, z: 0}; dist = DIST; if (fin) fin(); }
+  function termina() { var fin = an.fin; an = null; foco = {x: 0, y: 0, z: 0}; dist = DIST; mira.k = 0; mira.id = null; mira.m = null; if (fin) fin(); }
   function frame(ahora) {
     var dt = Math.min(.05, (ahora - (tPrev || ahora)) / 1000); tPrev = ahora;
     if (an) {                                               /* vuelo: una sola curva de zoom del universo al destino (o al revés); misma orientación todo el rato */
       prep(); an.p = Math.min(1, (ahora - an.t0) / an.dur);
-      var P = an.sale ? 1 - an.p : an.p, e = suave(P), m = an.m, kk = escala(m), px0 = F * kk / DIST;
+      var P = an.sale ? 1 - an.p : an.p, e = suave(P), m = an.m, kk = escala(m), px0 = F * kk / an.d0;
       var Z = Math.exp(Math.log(px0) + (Math.log(an.pxF) - Math.log(px0)) * e), f = suave(P / .55);   /* Z: píxeles por unidad del mapa de dentro */
-      foco = {x: m.s[0] * f, y: m.s[1] * f, z: m.s[2] * f}; dist = F * kk / Z;
+      foco = {x: an.f0.x + (m.s[0] - an.f0.x) * f, y: an.f0.y + (m.s[1] - an.f0.y) * f, z: an.f0.z + (m.s[2] - an.f0.z) * f}; dist = F * kk / Z;
       if (pr(m.s[0], m.s[1], m.s[2], O) && o.alVuelo) o.alVuelo({id: m.g.id, yaw: yaw, pitch: pitch, px: Z, t: t, dx: O.x - W / 2, dy: O.y - H / 2,
         w: suave((P - .4) / .6), sync: P > .2, opMapa: suave((P - .3) / .35), opCerebro: 1 - suave((P - .5) / .3)});
       if (an.p >= 1) termina();
       t += dt * .7;
-    } else { if (!o.reducir && !arr) yaw += dt * .13 * vel; t += dt * .7; }
+    } else {
+      if (!o.reducir && !arr) yaw += dt * .13 * vel; t += dt * .7;
+      var meta = mira.id && !o.reducir ? 1 : 0; mira.k += (meta - mira.k) * Math.min(1, dt * 4);           /* acercamiento suave a la galaxia que busca el usuario */
+      if (!meta && mira.k < .002) { mira.k = 0; mira.m = null; }
+      if (mira.m) { var q = .38 * suave(mira.k); foco = {x: mira.m.s[0] * q, y: mira.m.s[1] * q, z: mira.m.s[2] * q}; dist = DIST * (1 - .16 * suave(mira.k)); } else { foco = {x: 0, y: 0, z: 0}; dist = DIST; }
+    }
     dibujar(); raf = vivo && (!o.reducir || an) ? requestAnimationFrame(frame) : 0;
   }
   function ocupado() {                                    /* ¿hay un vuelo en curso? (uno que lleva mucho más de su duración se da por muerto: pestaña sin fotogramas) */
@@ -33657,16 +33844,18 @@ window.crearCerebro = function (o) {
       var m = desde && pose && !o.reducir ? mundo.filter(function (q) { return q.g.id === desde && q.g.sistema; })[0] : null;
       if (!m) { if (fin) fin(); return; }
       yaw = pose.yaw; pitch = pose.pitch; t = pose.t;
-      an = {m: m, sale: true, t0: performance.now(), dur: 2200, p: 0, fin: fin, pxF: pxFinal}; pintar();
+      mira.k = 0; mira.id = null; mira.m = null;
+      an = {m: m, sale: true, t0: performance.now(), dur: 2200, p: 0, fin: fin, pxF: pxFinal, f0: {x: 0, y: 0, z: 0}, d0: DIST}; pintar();
     },
     volar: function (id, fin, op) {                         /* op = {pxFinal: px/unidad del destino, profundo: ¿es un nodo y no la galaxia entera?}; llama a fin() al llegar */
       var m = mundo.filter(function (q) { return q.g.id === id; })[0];
       if (!m || !m.g.sistema || !op || o.reducir || ocupado()) { if (fin) fin(); return; }
-      hover = -1; an = {m: m, sale: false, t0: performance.now(), dur: op.profundo ? 3000 : 2100, p: 0, fin: fin, pxF: op.pxFinal}; if (!vivo) vivo = true; pintar();
+      hover = -1; an = {m: m, sale: false, t0: performance.now(), dur: op.profundo ? 3000 : 2100, p: 0, fin: fin, pxF: op.pxFinal, f0: {x: foco.x, y: foco.y, z: foco.z}, d0: dist}; if (!vivo) vivo = true; pintar();
     },
     ocultar: function () { vivo = false; if (raf) cancelAnimationFrame(raf); raf = 0; },
     medir: medir,
     resaltar: function (m) { res = m || {}; pintar(); },
+    enfocar: function (id) { mira.id = id || null; if (id) mira.m = mundo.filter(function (q) { return q.g.id === id && q.g.sistema; })[0] || mira.m; if (!mira.m) mira.id = null; pintar(); },
     datos: function (m) { G.forEach(function (g) { if (m[g.id] !== undefined) g.sub = m[g.id]; }); pintar(); }
   };
 };
@@ -35550,13 +35739,18 @@ code,pre{font-family:var(--mono)}
 .top{display:flex;flex-wrap:nowrap;align-items:center;gap:8px;padding:6px 8px;min-width:0}
 .brand{display:flex;min-width:0;flex:none}
 .brand h1{margin:0;font-size:15px;font-weight:650;letter-spacing:-.01em;cursor:default}
-.search{position:relative;flex:0 1 260px;min-width:150px}
+.search{position:relative;flex:1 1 480px;max-width:820px;min-width:170px}
 .search input{width:100%;padding:9px 12px 9px 36px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
 .search svg{position:absolute;left:11px;top:50%;translate:0 -50%;width:16px;height:16px;stroke:var(--muted);fill:none;stroke-width:2}
 .resultados{position:absolute;z-index:20;left:0;right:0;top:calc(100% + 4px);max-height:min(60vh,420px);overflow:auto;
   background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.18);padding:4px;margin:0;list-style:none}
-.resultados li{display:grid;grid-template-columns:10px minmax(0,1fr);gap:2px 10px;padding:7px 8px;border-radius:6px;cursor:pointer}
+.resultados li{display:grid;grid-template-columns:34px minmax(0,1fr);gap:2px 10px;align-items:center;padding:7px 8px;border-radius:6px;cursor:pointer}
 .resultados li[aria-selected="true"],.resultados li:hover{background:var(--surface-2)}
+.ico{position:relative;flex:none;grid-row:1/3;align-self:start;width:32px;height:32px;border-radius:8px;display:grid;place-items:center;overflow:hidden;background:rgba(127,140,170,.13);border:1px solid var(--line)}
+.ico svg{width:21px;height:21px;display:block} .ico.port{width:26px;height:36px;border-radius:3px;justify-self:center;border:0;box-shadow:0 1px 4px rgba(0,0,0,.45)} .ico img{width:100%;height:100%;object-fit:cover;display:block}
+.ico-t{font:700 11px var(--mono);line-height:1} .ico-t.sig{font:700 21px Georgia,'Times New Roman',serif;color:#b28cff} .ico-t.fx{font:italic 700 12px Georgia,'Times New Roman',serif;color:#4fc3dc;letter-spacing:-.02em}
+.ico-t.ext{font:700 9.5px var(--mono);color:var(--muted)} .ico .vid{position:absolute;right:-1px;bottom:-1px;font:700 8px/1 var(--sans,sans-serif);font-style:normal;color:#fff;background:#e0334a;border-radius:6px 0 7px 0;padding:2px 3px 2px 4px}
+.portada-g{float:right;width:84px;border-radius:4px;margin:0 0 8px 12px;box-shadow:0 2px 10px rgba(0,0,0,.5)}
 .resultados .pt{grid-row:1/3;align-self:start;margin-top:5px;width:10px;height:10px;border-radius:50%}
 .resultados .n{font-family:var(--mono);font-size:13px;font-weight:600;overflow-wrap:anywhere}
 .resultados .d{color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -35905,6 +36099,25 @@ var DATA = JSON.parse(document.getElementById('datos').textContent);
 var $ = function (s) { return document.querySelector(s); };
 var NS = 'http://www.w3.org/2000/svg';
 var norm = function (s) { return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); };
+/* ---------- iconos de los resultados: portada del libro · logo de Python (código) · ∑ (conceptos) · f(x) (demos) · formato del archivo ---------- */
+var SVG_PY = '<svg viewBox="0 0 128 128" aria-hidden="true"><path fill="#3776AB" d="M63.4 2c-4.2 0-8.3.4-11.8 1-10.5 1.8-12.3 5.7-12.3 12.8v9.4H64v3.1H30c-7.2 0-13.5 4.3-15.4 12.5-2.3 9.4-2.4 15.3 0 25.1 1.7 7.3 5.9 12.5 13.1 12.5h8.5V67.2c0-8.2 7.1-15.3 15.4-15.3h24.7c6.9 0 12.3-5.7 12.3-12.5V15.8c0-6.7-5.6-11.7-12.3-12.8-4.2-.7-8.6-1-12.9-1zM50 9.6c2.6 0 4.6 2.1 4.6 4.7 0 2.6-2.1 4.7-4.6 4.7-2.6 0-4.6-2.1-4.6-4.7s2.1-4.7 4.6-4.7z"/><path fill="#FFD43B" d="M91.7 28.4v11c0 8.5-7.2 15.7-15.4 15.7H51.6c-6.8 0-12.3 5.8-12.3 12.5v23.5c0 6.7 5.8 10.6 12.3 12.5 7.8 2.3 15.3 2.7 24.7 0 6.2-1.8 12.3-5.4 12.3-12.5v-9.4H63.9v-3.1h37c7.2 0 9.9-5 12.4-12.5 2.6-7.7 2.5-15.2 0-25.1-1.8-7.1-5.2-12.5-12.4-12.5h-9.2zM77.8 87.9c2.6 0 4.6 2.1 4.6 4.7 0 2.6-2.1 4.7-4.6 4.7-2.6 0-4.6-2.1-4.6-4.7s2.1-4.7 4.6-4.7z"/></svg>';
+var SVG_DOC = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#9fb0cc" stroke-width="1.6" stroke-linejoin="round"><path d="M6 2.8h8.2L19 7.6V21H6z"/><path d="M14 2.8v5h5M9 12h7M9 15.5h7M9 19h4"/></svg>';
+var SVG_LIBRO = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#6fa2ff" stroke-width="1.6" stroke-linejoin="round"><path d="M4 4.5A2.5 2.5 0 016.5 2H19v17H6.5A2.5 2.5 0 004 21.5z"/><path d="M4 21.5A2.5 2.5 0 016.5 19H19v3H6.5"/></svg>';
+function extDe(r) { var m = /\.(\w{1,5})$/.exec(String(r || '')); return m ? m[1].toUpperCase() : ''; }
+function iconoPortada(p) { return '<span class="ico port"><img alt="" src="' + p + '"></span>'; }
+function iconoNodo(n) {                       /* icono de un nodo del árbol (resultado del buscador) */
+  var p = n.portada && DATA.portadas && DATA.portadas[n.portada];
+  if (p) return iconoPortada(p);
+  var h = n.tipo === 'funcion' || n.tipo === 'ejemplo' ? SVG_PY : n.tipo === 'concepto' ? '<span class="ico-t sig">∑</span>' : n.tipo === 'demo' ? '<span class="ico-t fx">f(x)</span>' :
+    n.tipo === 'capitulo' ? SVG_LIBRO : n.tipo === 'documento' ? '<span class="ico-t ext">' + esc(extDe(n.ruta) || 'DOC') + '</span>' : SVG_DOC;
+  return '<span class="ico">' + h + (n.video ? '<i class="vid">▶</i>' : '') + '</span>';
+}
+function iconoRes(x) {                        /* icono de un resultado de tu conocimiento (libros, notas, código, teoría…) */
+  if (x.portada) return iconoPortada(x.portada);
+  var h = x.coleccion === 'codigo' ? SVG_PY : x.coleccion === 'conceptos' && x.interno ? '<span class="ico-t sig">∑</span>' : x.coleccion === 'teoria' ? SVG_DOC :
+    x.tipo === 'libro' || /^(EPUB)$/.test(extDe(x.ruta)) ? SVG_LIBRO : '<span class="ico-t ext">' + esc(extDe(x.ruta) || 'DOC') + '</span>';
+  return '<span class="ico">' + h + '</span>';
+}
 var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
 /* colores de las ramas de conceptos (los define el catálogo): claro / oscuro */
 (function () {
@@ -36062,6 +36275,8 @@ var coleccionK = '', resArbol = {}, resK = {};
 })();
 function luces() {                            /* las galaxias con coincidencias (del árbol y de tus carpetas) se iluminan */
   var m = {}; [resArbol, resK].forEach(function (o) { Object.keys(o).forEach(function (k) { m[k] = Math.max(m[k] || 0, o[k]); }); }); cerebro.resaltar(m);
+  var mejor = null, mv = 0; Object.keys(m).forEach(function (k) { if (m[k] > mv) { mv = m[k]; mejor = k; } });
+  cerebro.enfocar(vista === 'cerebro' && query ? mejor : null);      /* al buscar, el universo se acerca un poco a la galaxia con más coincidencias y atenúa el resto */
 }
 var cerebro = crearCerebro({canvas: $('#cerebro'), galaxias: GALAXIAS, reducir: reducir,
   alVuelo: function (i) {                    /* cada fotograma del vuelo: el mapa de dentro toma la cámara del universo (y se centra poco a poco en el destino) y se funden */
@@ -36174,7 +36389,7 @@ function puntuar(n, tokens) {
   }
   return tot;
 }
-var resultados = [], idxRes = -1;
+var resultados = [], listaVista = [], idxRes = -1;
 function buscar() {
   query = $('#q').value.trim();
   var tokens = norm(query).split(/\s+/).filter(Boolean);
@@ -36190,13 +36405,17 @@ function buscar() {
   var ul = $('#resultados'); ul.innerHTML = ''; idxRes = -1;
   if (query) {
     if (!resultados.length) { var li = document.createElement('li'); li.className = 'vacio'; li.textContent = 'Sin resultados para «' + query + '». Prueba con el nombre de un PROC de SAS o un concepto (p. ej. odds, VIF, chi).'; ul.appendChild(li); }
-    resultados.slice(0, 12).forEach(function (r, i) {
-      var li = document.createElement('li'); li.setAttribute('role', 'option'); li.dataset.i = i;
-      li.innerHTML = '<span class="pt b-' + r.n.rama + '" style="background:var(--c)"></span><span class="n">' + esc(r.n.nombre) + '</span><span class="d">' + esc(r.n.ramaNombre + ' · ' + (r.n.desc || '')) + '</span>';
+    var libros = {}, lista = resultados.filter(function (r) {          /* de un libro solo se muestra su mejor capítulo (el resto sigue resaltado en el mapa) */
+      if (r.n.tipo !== 'capitulo') return true; var k = r.n.parent.id; if (libros[k]) return false; return (libros[k] = true);
+    });
+    listaVista = lista;
+    lista.slice(0, 12).forEach(function (r, i) {
+      var li = document.createElement('li'); li.setAttribute('role', 'option'); li.dataset.i = i; r.i = i;
+      li.innerHTML = iconoNodo(r.n) + '<span class="n">' + esc(r.n.tipo === 'capitulo' && /^P[aá]ginas? \d/.test(r.n.nombre) ? r.n.libro : r.n.nombre) + '</span><span class="d">' + esc(r.n.ramaNombre + ' · ' + (r.n.desc || '')) + '</span>';
       li.onmousedown = function (ev) { ev.preventDefault(); elegir(r.n); };
       ul.appendChild(li);
     });
-    if (resultados.length > 12) { var mas = document.createElement('li'); mas.className = 'vacio'; mas.textContent = '+ ' + (resultados.length - 12) + ' más: los nodos resaltados en el mapa los muestran todos.'; ul.appendChild(mas); }
+    if (listaVista.length > 12) { var mas = document.createElement('li'); mas.className = 'vacio'; mas.textContent = '+ ' + (listaVista.length - 12) + ' más: los nodos resaltados en el mapa los muestran todos.'; ul.appendChild(mas); }
     ul.hidden = false;
   } else ul.hidden = true;
   pintar(); luces();
@@ -36226,7 +36445,7 @@ function conocimiento(q) {
       var h = hojaDeResultado(x);
       if (h) { coincide[h.id] = (coincide[h.id] || 0) + 5; for (var p = h.parent; p; p = p.parent) conCoincidencia[p.id] = (conCoincidencia[p.id] || 0) + 1; }
       var it = document.createElement('li'); it.className = 'k';
-      it.innerHTML = '<span class="pt" style="background:var(--muted)"></span><span class="n"><span class="col">' + esc(x.coleccion + (x.subtema ? ' › ' + x.subtema : '')) + '</span>' + esc(x.titulo) +
+      it.innerHTML = iconoRes(x) + '<span class="n"><span class="col">' + esc(x.coleccion + (x.subtema ? ' › ' + x.subtema : '')) + '</span>' + esc(x.titulo) +
         (x.ubicacion ? ' · ' + esc(x.ubicacion) : '') + '</span><span class="d">' + esc(x.fragmento.replace(/\s+/g, ' ')) + '</span>';
       it.onmousedown = function (ev) { ev.preventDefault(); if (h) elegir(h); else if (!x.interno) window.pywebview.api.abrir_fuente(x.ruta, x.ubicacion); };
       ul.appendChild(it);
@@ -36246,7 +36465,7 @@ $('#q').addEventListener('blur', function () { setTimeout(function () { $('#resu
 $('#q').addEventListener('keydown', function (ev) {
   if (ev.key === 'ArrowDown') { ev.preventDefault(); marcar(idxRes + 1); }
   else if (ev.key === 'ArrowUp') { ev.preventDefault(); marcar(idxRes - 1); }
-  else if (ev.key === 'Enter') { var r = resultados[idxRes >= 0 ? idxRes : 0]; if (r) { ev.preventDefault(); elegir(r.n); } }
+  else if (ev.key === 'Enter') { var r = listaVista[idxRes >= 0 ? idxRes : 0]; if (r) { ev.preventDefault(); elegir(r.n); } }
   else if (ev.key === 'Escape') { this.value = ''; buscar(); this.blur(); }
 });
 
@@ -36454,7 +36673,7 @@ function detalleConcepto(n, d) {
 
 function detalleDocumento(n, d) {         /* un capítulo de un libro o un documento importado (ver conocimiento/importar.py) */
   var cap = n.tipo === 'capitulo', gen = n.genero && GENEROS_NOM[n.genero] ? GENEROS_NOM[n.genero] : '';
-  var h = '<div class="det-cab b-' + n.rama + '"><i></i><span>' + esc(n.ramaNombre) + ' › ' + esc(n.modulo) + '</span></div><h2 class="sans">' + esc(n.nombre) + '</h2><p class="desc">' + esc(n.desc) + '</p><dl class="meta">' +
+  var h = '<div class="det-cab b-' + n.rama + '"><i></i><span>' + esc(n.ramaNombre) + ' › ' + esc(n.modulo) + '</span></div>' + (n.portada && DATA.portadas && DATA.portadas[n.portada] ? '<img class="portada-g" alt="" src="' + DATA.portadas[n.portada] + '">' : '') + '<h2 class="sans">' + esc(n.nombre) + '</h2><p class="desc">' + esc(n.desc) + '</p><dl class="meta">' +
     (n.libro ? '<dt>Libro</dt><dd>' + esc(n.libro) + '</dd>' : '') + (n.pagina ? '<dt>Página</dt><dd>' + n.pagina + (n.paginas ? ' de ' + n.paginas : '') + '</dd>' : '') +
     (gen ? '<dt>Género</dt><dd>' + esc(gen) + '</dd>' : '') + (n.subtema ? '<dt>Subtema</dt><dd>' + esc(n.subtema) + '</dd>' : '') + (n.etiquetas ? '<dt>Etiquetas</dt><dd>' + esc(n.etiquetas) + '</dd>' : '') +
     (n.fecha ? '<dt>Importado</dt><dd>' + esc(n.fecha) + '</dd>' : '') + (n.titulo_largo && n.titulo_largo !== n.libro && n.titulo_largo !== n.nombre ? '<dt>Nombre completo</dt><dd>' + esc(n.titulo_largo) + '</dd>' : '') + '</dl>' +
@@ -36474,7 +36693,7 @@ function detalleLibro(m) {                  /* el panel de un libro: ficha y lis
   var d = $('#detalle'), c0 = m.hijos[0], r = m.parent, gen = c0.genero && GENEROS_NOM[c0.genero] ? GENEROS_NOM[c0.genero] : '';
   if (window.mostrarDetalle) window.mostrarDetalle();
   vistaModulo = null; sel = null;
-  var h = '<div class="det-cab b-' + r.rama + '"><i></i><span>' + esc(r.nombre) + ' › libro</span></div><h2 class="sans">' + esc(m.nombre) + '</h2><p class="desc">' + esc(m.desc) + '</p><dl class="meta">' +
+  var h = '<div class="det-cab b-' + r.rama + '"><i></i><span>' + esc(r.nombre) + ' › libro</span></div>' + (c0.portada && DATA.portadas && DATA.portadas[c0.portada] ? '<img class="portada-g" alt="" src="' + DATA.portadas[c0.portada] + '">' : '') + '<h2 class="sans">' + esc(m.nombre) + '</h2><p class="desc">' + esc(m.desc) + '</p><dl class="meta">' +
     (gen ? '<dt>Género</dt><dd>' + esc(gen) + '</dd>' : '') + (c0.subtema ? '<dt>Subtema</dt><dd>' + esc(c0.subtema) + '</dd>' : '') + (c0.paginas ? '<dt>Páginas</dt><dd>' + c0.paginas + '</dd>' : '') +
     (c0.etiquetas ? '<dt>Etiquetas</dt><dd>' + esc(c0.etiquetas) + '</dd>' : '') + (c0.fecha ? '<dt>Importado</dt><dd>' + esc(c0.fecha) + '</dd>' : '') +
     (c0.titulo_largo && c0.titulo_largo !== m.nombre ? '<dt>Nombre completo</dt><dd>' + esc(c0.titulo_largo) + '</dd>' : '') + '</dl>' +
@@ -37979,7 +38198,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 5g. **Universo (primera capa del visor):** el visor se abre en un universo 3D (`py/visor/cerebro.js`; el fichero y las variables se siguen llamando «cerebro» por historia) con paisaje (estrellas con paralaje, nebulosas, galaxias lejanas, hilos entre galaxias) y una galaxia en espiral por parte: **Código** (las ramas de funciones), **Conceptos** (los temas `t_*` salvo finanzas), **Demos y guías**, **Finanzas** (rama `finanzas` + `t_fin`) —cada una con su propio mapa 3D, que es también una galaxia: núcleo, polvo y dos brazos espirales (`ESPIRAL`/`GIRO` en `mapa3d.js`), con su color (`color` en `crearMapa3D`)— y **Libros** y **Notas** (solo ámbitos de búsqueda del gestor). El reparto está en `GALAXIAS` de `plantilla.html`; la galaxia pequeña del universo es una miniatura exacta de la de dentro. El buscador ilumina las galaxias con coincidencias y, al elegir un resultado, vuela a su galaxia. **Vuelo:** un único movimiento continuo hasta el destino (galaxia o nodo), sin parada en la vista general: la cámara no cambia de orientación, el mapa de dentro se dibuja ya por debajo con la cámara del universo (`mapa.sync()`, `camaraDe()`, `geometria()`) y toma el relevo con un fundido; al volver (🌌) es lo mismo al revés, desde el nodo en el que estés. Icono (una galaxia): `python herramientas/generar_icono.py`. `indexar_conocimiento.bat` crea `conocimiento/fuentes.json` (tus carpetas) e indexa.
 5f. **Gestor de conocimiento:** `py/conocimiento/` es un buscador único (SQLite FTS5, BM25, sinónimos del catálogo) sobre código, conceptos, teoría y tus libros/finanzas/notas (`conocimiento/fuentes.json`, no se publica). `cd py && python -m conocimiento indexar | buscar "consulta" [-c colección] | estado`. Antes de buscar a mano en `Manuales Estadística` o en `teoria/`, usa `buscar`.
 5h. **Modo vivo (para ver los cambios mientras se trabaja):** el acceso directo con `--vivo` (`powershell -ExecutionPolicy Bypass -File herramientascceso_vivo.ps1 on|off` lo apunta a esta carpeta o lo restaura) recarga la app solo cuando se regenera `visor_arbol.html` y la coloca donde indique `.foco`. Para enseñar un cambio: `python herramientas/ver.py [destino]` regenera el visor y escribe el foco (`cerebro`, `galaxia:codigo|conceptos|demos|finanzas` o el nombre de una función/concepto/demo; el visor también lo admite como `#destino`).
-5i. **Pestañas e importador:** el visor tiene pestañas **🌌 Universo** (el mapa) y **⚫ Importar** (además de 🎓 Aprender). «Importar» es un agujero negro (`py/visor/agujero.js`): clic o soltar archivos abre el explorador de Windows (`Api.elegir_archivos`); `py/conocimiento/importar.py` analiza cada fichero (`clasificar`: galaxia finanzas/libros/notas, **género** —historia, economía, ensayo, estadística, ciencia, novela…—, subtema = tema del catálogo (palabras clave en inglés y español, peso del título) y solo para estadística/economía/tecnología —un libro de historia queda en «General»—, tipo, capítulos, vista previa, idioma, duplicado) y el panel muestra una tarjeta desplegable por archivo (barras con lo detectado: pulsar una fija el género o el subtema; desplegables de galaxia/género/tipo, título editable —los nombres largos se recortan con `titulo_corto`—, etiquetas, «Para todos»). Se importa archivo a archivo con progreso: `importar()` copia a `conocimiento/biblioteca/<galaxia>/<subtema>/` con nombre corto, guarda `biblioteca/metadatos.json` (hash: no duplica) y lo indexa; después `Api.actualizar_visor` regenera `visor_arbol.html` y el visor se recarga. `enriquecer()` completa capítulos/género/títulos de lo importado con versiones anteriores. Al final de la pestaña hay un desplegable «¿Cómo funciona la importación?». **Mapas con tu biblioteca** (`ramas_biblioteca` en `construir_visor.py`): Libros = una rama por género › un módulo por libro › un punto por capítulo (PDF: marcadores o tramos de 25 págs.; EPUB: su índice) con «Abrir en la página N»; los capítulos NO se dibujan hasta que pulsas el libro (`nivel()` en `mapa3d.js`; el panel del libro, `detalleLibro`, los lista siempre); el recuento de una rama son sus libros; Notas = una rama por subtema con un punto por documento; las demás galaxias reciben una rama «Documentos importados». Una galaxia sin nada no tiene mapa ni líneas (solo búsqueda). **Conceptos con vídeo:** los conceptos con fuentes de vídeo (Very Normal, Harvard, MIT, 3Blue1Brown…; `es_video`) llevan un ▶ en el mapa y la lista de vídeos arriba del panel (la cabecera ya no tiene filtros ni chips de ramas: solo buscador y perfil). Los `*.pdf` y `*.epub` están en `.gitignore`. Por consola: `cd py && python -m conocimiento importar f.pdf [-g libros] [-G historia] [-s "Inferencia y contrastes"] [-t libro]`.
+5i. **Pestañas e importador:** el visor tiene pestañas **🌌 Universo** (el mapa) y **⚫ Importar** (además de 🎓 Aprender). «Importar» es un agujero negro (`py/visor/agujero.js`): clic o soltar archivos abre el explorador de Windows (`Api.elegir_archivos`); `py/conocimiento/importar.py` analiza cada fichero (`clasificar`: galaxia finanzas/libros/notas, **género** —historia, economía, ensayo, estadística, ciencia, novela…—, subtema = tema del catálogo (palabras clave en inglés y español, peso del título) y solo para estadística/economía/tecnología —un libro de historia queda en «General»—, tipo, capítulos, vista previa, idioma, duplicado) y el panel muestra una tarjeta desplegable por archivo (barras con lo detectado: pulsar una fija el género o el subtema; desplegables de galaxia/género/tipo, título editable —los nombres largos se recortan con `titulo_corto`—, etiquetas, «Para todos»). Se importa archivo a archivo con progreso: `importar()` copia a `conocimiento/biblioteca/<galaxia>/<subtema>/` con nombre corto, guarda `biblioteca/metadatos.json` (hash: no duplica) y lo indexa; después `Api.actualizar_visor` regenera `visor_arbol.html` y el visor se recarga. `enriquecer()` completa capítulos/género/títulos de lo importado con versiones anteriores. Al final de la pestaña hay un desplegable «¿Cómo funciona la importación?». **Mapas con tu biblioteca** (`ramas_biblioteca` en `construir_visor.py`): Libros = una rama por género › un módulo por libro › un punto por capítulo (PDF: marcadores o tramos de 25 págs.; EPUB: su índice) con «Abrir en la página N»; los capítulos NO se dibujan hasta que pulsas el libro (`nivel()` en `mapa3d.js`; el panel del libro, `detalleLibro`, los lista siempre); el recuento de una rama son sus libros; Notas = una rama por subtema con un punto por documento; las demás galaxias reciben una rama «Documentos importados». Una galaxia sin nada no tiene mapa ni líneas (solo búsqueda). **Conceptos con vídeo:** los conceptos con fuentes de vídeo (Very Normal, Harvard, MIT, 3Blue1Brown…; `es_video`) llevan un ▶ en el mapa y la lista de vídeos arriba del panel (la cabecera ya no tiene filtros ni chips de ramas: solo buscador y perfil). **Buscador:** la barra ocupa todo el espacio libre de la cabecera y cada resultado lleva un icono (`iconoNodo`/`iconoRes` en la plantilla): portada del libro (la del EPUB, la primera página del PDF con Poppler si está, o una generada por género; `importar.portada`, `DATA.portadas`), logo de Python (funciones y ejemplos), ∑ (conceptos; con ▶ si tienen vídeo), f(x) (demos), documento (guías) y la etiqueta del formato (PDF, DOCX, MD…). Al buscar, el universo reacciona: la galaxia con más coincidencias late y la cámara se acerca un poco (`cerebro.enfocar`), el resto se atenúa; los capítulos de un mismo libro se agrupan en un resultado. Los `*.pdf` y `*.epub` están en `.gitignore`. Por consola: `cd py && python -m conocimiento importar f.pdf [-g libros] [-G historia] [-s "Inferencia y contrastes"] [-t libro]`.
 6. **Conceptos:** `conceptos/catalogo.json` lista los conceptos del temario del máster y de Very Normal con las funciones que los implementan. Organización: `temas` (ramas del mapa, con color) > `areas` (módulos, con `ambito`) > conceptos (`area`, `prioridad` opcional, `area_fija` para que la actualización no lo mueva). La migración de 0.6.0 está en `herramientas/reorganizar_catalogo.py`.
    Si un concepto no tiene función (*hueco*), es que el árbol aún no lo cubre: impleméntalo (módulo + test), enlázalo en el catálogo (`funciones`) y regenera el visor.
    Al añadir una función nueva, enlázala al menos a un concepto (hay un test que lo exige).

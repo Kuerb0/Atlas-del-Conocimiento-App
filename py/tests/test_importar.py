@@ -138,3 +138,48 @@ def test_el_visor_no_tiene_los_filtros_de_arriba_y_el_libro_muestra_sus_capitulo
     html = cv.ensamblar(cv.construir())
     assert 'id="chips"' not in html and 'class="filtros"' not in html and 'id="soloSas"' not in html
     assert "detalleLibro" in html and "esLibro" in html and "n.tipo === 'capitulo'" in html     # capítulos ocultos hasta enfocar el libro (mapa3d.js)
+
+
+def _epub_con_portada(ruta):
+    import io
+    import zipfile
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (300, 440), (200, 30, 40)).save(buf, "JPEG")
+    with zipfile.ZipFile(ruta, "w") as z:
+        z.writestr("OEBPS/content.opf", '<package><metadata><meta name="cover" content="cov"/></metadata><manifest><item id="cov" href="img/tapa.jpg" media-type="image/jpeg"/></manifest></package>')
+        z.writestr("OEBPS/img/tapa.jpg", buf.getvalue())
+        z.writestr("OEBPS/c1.xhtml", "<html><body><h1>Uno</h1><p>" + "history of the empire " * 60 + "</p></body></html>")
+
+
+def test_portadas_la_del_epub_si_la_tiene_y_una_generada_si_no(tmp_path):
+    from PIL import Image
+    e = tmp_path / "con_portada.epub"
+    _epub_con_portada(e)
+    assert imp.portada(e, tmp_path / "p" / "a.jpg", "Con portada", "historia")
+    px = Image.open(tmp_path / "p" / "a.jpg").convert("RGB").getpixel((50, 50))
+    assert px[0] > 150 and px[1] < 90                               # la imagen rojiza del propio EPUB, no una generada
+    t = tmp_path / "apunte.txt"
+    t.write_text("nada", encoding="utf-8")
+    assert imp.portada(t, tmp_path / "p" / "b.jpg", "Apunte sin portada propia", "estadistica") and Image.open(tmp_path / "p" / "b.jpg").size == (120, 170)
+
+
+def test_la_portada_viaja_con_la_importacion_y_con_la_busqueda_y_el_visor(tmp_path, monkeypatch):
+    import construir_visor as cv
+    e = tmp_path / "roma.epub"
+    _epub_con_portada(e)
+    carpeta = tmp_path / "datos"
+    r = imp.importar([e], carpeta=carpeta, db=carpeta / "i.db")[0]
+    meta = next(iter(imp.leer_metadatos(carpeta).values()))
+    assert r["estado"] == "ok" and meta["portada"].startswith("portadas/") and (carpeta / "biblioteca" / meta["portada"]).is_file()
+    assert k.buscar("empire", db=carpeta / "i.db")[0]["portada"].startswith("data:image/jpeg;base64,")
+    monkeypatch.setenv("ARBOL_CONOCIMIENTO", str(carpeta))
+    d = cv.construir()
+    assert d["portadas"][meta["portada"]].startswith("data:image/jpeg") and any(i.get("portada") == meta["portada"] for r_ in d["ramas"] for m in r_["modulos"] for i in m["items"])
+
+
+def test_el_visor_tiene_iconos_en_el_buscador_y_animaciones_al_buscar():
+    import construir_visor as cv
+    html = cv.ensamblar(cv.construir())
+    for pieza in ("iconoNodo", "iconoRes", "SVG_PY", 'class="ico-t sig"', "enfocar: function", "cerebro.enfocar(", "flex:1 1 480px"):
+        assert pieza in html

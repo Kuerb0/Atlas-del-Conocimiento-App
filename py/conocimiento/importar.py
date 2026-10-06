@@ -8,14 +8,17 @@ Uso: `python -m conocimiento importar f1.pdf f2.docx [-g libros] [-s "Inferencia
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import html
+import io
 import json
 import math
 import os
 import re
 import shutil
 import unicodedata
+import posixpath
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -141,6 +144,106 @@ def titulo_corto(nombre: str, n: int = 60) -> str:
     if len(s) > n:
         s = s[:n].rsplit(" ", 1)[0].rstrip(" ,;:-") + "…"
     return s or str(nombre)[:n]
+
+
+_COLOR_GENERO = {"historia": (150, 90, 50), "economia": (40, 120, 80), "ensayo": (110, 80, 150), "estadistica": (40, 90, 170), "ciencia": (30, 130, 150), "novela": (160, 60, 90),
+                 "biografia": (140, 110, 40), "politica": (150, 60, 50), "tecnologia": (60, 70, 90), "psicologia": (130, 70, 130), "arte": (170, 90, 120), "otro": (80, 90, 110)}
+
+
+def _imagen_epub(f: Path) -> bytes | None:
+    with zipfile.ZipFile(f) as z:
+        nombres = z.namelist()
+        opf = next((n for n in nombres if n.endswith(".opf")), None)
+        if opf:
+            x = z.read(opf).decode("utf-8", "replace")
+            ident = re.search(r'<meta[^>]+name="cover"[^>]+content="([^"]+)"', x) or re.search(r'<meta[^>]+content="([^"]+)"[^>]+name="cover"', x)
+            href = None
+            if ident:
+                m = re.search(r'<item[^>]+id="' + re.escape(ident.group(1)) + r'"[^>]*>', x)
+                href = re.search(r'href="([^"]+)"', m.group(0)).group(1) if m else None
+            if not href:
+                m = re.search(r'<item[^>]+properties="[^"]*cover-image[^"]*"[^>]*>', x)
+                href = re.search(r'href="([^"]+)"', m.group(0)).group(1) if m else None
+            if href:
+                ruta = posixpath.normpath(posixpath.join(posixpath.dirname(opf), html.unescape(href)))
+                if ruta in nombres:
+                    return z.read(ruta)
+        imgs = [n for n in nombres if re.search(r"\.(jpe?g|png)$", n, re.I)]
+        cub = [n for n in imgs if "cover" in n.lower() or "portada" in n.lower()]
+        elegido = (cub or sorted(imgs, key=lambda n: -z.getinfo(n).file_size))[:1]
+        return z.read(elegido[0]) if elegido else None
+
+
+def _imagen_pdf(f: Path) -> bytes | None:
+    """La primera página del PDF como imagen: con `pdftoppm` (Poppler) si está instalado; si no, una imagen JPEG incrustada en las dos primeras páginas (las demás
+    codificaciones salen mal sin un motor de PDF)."""
+    exe = shutil.which("pdftoppm")
+    if exe:
+        import subprocess
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            try:
+                subprocess.run([exe, "-f", "1", "-l", "1", "-jpeg", "-scale-to", "260", str(f), str(Path(td) / "p")], check=True, capture_output=True, timeout=60)
+                sal = sorted(Path(td).glob("p*.jpg"))
+                if sal:
+                    return sal[0].read_bytes()
+            except Exception:
+                pass
+    try:
+        from pypdf import PdfReader
+        for pag in PdfReader(str(f)).pages[:2]:
+            for im in pag.images:
+                if im.data[:2] == bytes([255, 216]) and len(im.data) > 8000:
+                    return im.data
+    except Exception:
+        pass
+    return None
+
+
+def portada(f: str | Path, destino: Path, titulo: str = "", genero: str = "otro") -> bool:
+    """Guarda en `destino` (JPG de unos 120×170 px) la portada del libro: la imagen del EPUB o del PDF si la tiene; si no, una portada de color según el género con el título.
+    Devuelve True si pudo escribirla."""
+    from PIL import Image, ImageDraw, ImageFont
+    f = Path(f)
+    try:
+        datos = _imagen_epub(f) if f.suffix.lower() == ".epub" else _imagen_pdf(f) if f.suffix.lower() == ".pdf" else None
+    except Exception:
+        datos = None
+    try:
+        if datos:
+            im = Image.open(io.BytesIO(datos)).convert("RGB")
+            im.thumbnail((150, 215))
+        else:                                                      # portada generada: color del género, título a mano
+            c = _COLOR_GENERO.get(genero, _COLOR_GENERO["otro"])
+            im = Image.new("RGB", (120, 170), c)
+            d = ImageDraw.Draw(im)
+            for y in range(170):
+                d.line([(0, y), (120, y)], fill=tuple(int(v * (1.15 - .45 * y / 170)) % 256 if v * 1.15 < 256 else min(255, int(v * (1.15 - .45 * y / 170))) for v in c))
+            d.rectangle((6, 6, 113, 163), outline=(255, 255, 255), width=1)
+            try:
+                fuente = ImageFont.load_default(size=13)
+            except TypeError:
+                fuente = ImageFont.load_default()
+            lineas, actual = [], ""
+            for w in (titulo or f.stem).split():
+                if len(actual) + len(w) + 1 > 13 and actual:
+                    lineas.append(actual); actual = w
+                else:
+                    actual = (actual + " " + w).strip()
+            lineas.append(actual)
+            for i, ln in enumerate(lineas[:7]):
+                d.text((12, 14 + i * 18), ln[:14], fill=(255, 255, 255), font=fuente)
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        im.save(destino, "JPEG", quality=78)
+        return True
+    except Exception:
+        return False
+
+
+def portada_datauri(carpeta: Path, rel: str) -> str:
+    """La portada guardada (`rel`, relativa a biblioteca/) como data URI, o ''."""
+    f = Path(carpeta) / "biblioteca" / rel
+    return "data:image/jpeg;base64," + base64.b64encode(f.read_bytes()).decode() if rel and f.is_file() else ""
 
 
 def _catalogo() -> dict:
@@ -296,6 +399,10 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
             meta[rel] = {"capitulos": caps, "paginas": pags, "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "etiquetas": (d.get("etiquetas") or "").strip(), "origen": str(f), "hash": h,
                          "fecha": datetime.now().isoformat(timespec="seconds"), "automatico": not (d.get("galaxia") or d.get("subtema") or d.get("tipo") or d.get("genero")) and (d.get("titulo") or auto["titulo"]).strip() == auto["titulo"]}
             hashes[h] = rel
+            if tipo == "libro":
+                nom = "portadas/" + h[:10] + ".jpg"
+                if portada(fin, base / nom, titulo, genero):
+                    meta[rel]["portada"] = nom
             salida.append({**r, "estado": "ok", "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "destino": str(fin), "mensaje": auto["motivo"]})
         except Exception as e:
             salida.append({**r, "estado": "error", "mensaje": str(e)})
@@ -320,6 +427,10 @@ def enriquecer(carpeta: Path | None = None) -> int:
             continue
         if "capitulos" not in m:
             m["capitulos"], m["paginas"] = capitulos(f); n += 1
+        if m.get("tipo") == "libro" and not m.get("portada"):
+            nom = "portadas/" + m.get("hash", rel)[:10] + ".jpg"
+            if portada(f, carpeta / "biblioteca" / nom, m.get("titulo", ""), m.get("genero", "otro")):
+                m["portada"] = nom; n += 1
         if len(m.get("titulo", "")) > 60 or " -- " in m.get("titulo", ""):
             m["titulo"] = titulo_corto(m["titulo"]); n += 1
         if "genero" not in m:
