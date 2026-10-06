@@ -41,12 +41,17 @@ window.crearCerebro = function (o) {
     var a = P[Math.floor(rnd() * P.length)], b = P[Math.floor(rnd() * P.length)], d = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
     if (d > 14 && d < 42) L.push([a, b]);
   }
-  /* ---- las galaxias: dos brazos en espiral logarítmica, inclinadas y girando ---- */
+  /* ---- los sistemas: un núcleo y un planeta por rama (con su color y su tamaño), como el mapa 3D de dentro ---- */
+  function fib(i, n) { var y = 1 - 2 * (i + .5) / n, r = Math.sqrt(Math.max(0, 1 - y * y)), f = i * 2.399963229728653; return {x: r * Math.cos(f), y: y, z: r * Math.sin(f)}; }
   G.forEach(function (g, i) {
-    var s = SITIOS[i] || [0, 0, 0], R = 30 + 18 * (g.peso || 0), pts = [], N = 170 + Math.round(150 * (g.peso || 0)), tilt = (rnd() - .5) * 1.1;
-    for (var k = 0; k < N; k++) { var r = 3 + R * Math.pow(rnd(), .75), brazo = k % 2 ? Math.PI : 0;
-      pts.push({r: r, a: r * .17 + brazo + gauss() * .22, y: gauss() * 2.2 * (1 - r / R * .6), s: .7 + 1.1 * rnd(), al: .35 + .6 * rnd()}); }
-    mundo.push({g: g, s: s, R: R, pts: pts, tilt: tilt, w: .25 + .2 * rnd(), sx: 0, sy: 0, sr: 40, rgb: g.color});
+    var s = SITIOS[i] || [0, 0, 0], R = 42 + 26 * (g.peso || 0), tilt = (rnd() - .5) * .7;
+    var pl = g.planetas && g.planetas.length ? g.planetas : [1, 2, 3, 4].map(function (k) { return {rgb: g.color, n: 2 + 3 * k}; });
+    var cuerpos = pl.map(function (q, k) {
+      var f = fib(k, pl.length), r = R * (.55 + .45 * rnd()), polvo = [];
+      for (var j = 0; j < 6; j++) polvo.push({x: gauss() * 4, y: gauss() * 4, z: gauss() * 4, s: .5 + rnd(), a: .25 + .4 * rnd()});
+      return {x0: f.x * r, y0: f.y * r * .55, z0: f.z * r, w: .35 + .5 * rnd(), rgb: q.rgb, tam: 5 + 1.5 * Math.sqrt(q.n), polvo: polvo};
+    });
+    mundo.push({g: g, s: s, R: R, cuerpos: cuerpos, tilt: tilt, sx: 0, sy: 0, sr: 40, rgb: g.color});
   });
 
   /* ---- proyección ---- */
@@ -67,12 +72,19 @@ window.crearCerebro = function (o) {
     L.forEach(function (e) { var A = {}, B = {}; if (pr(e[0].x, e[0].y, e[0].z, A) && pr(e[1].x, e[1].y, e[1].z, B)) { ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); } });
     ctx.stroke();
     for (var i = 0; i < P.length; i++) { var p = P[i]; if (!pr(p.x, p.y, p.z, O)) continue;
-      var prof = 1.15 - (O.d - dist + 130) / 520; luz(CEREBRO[p.c < 0 ? 0 : p.c], O.x, O.y, (1.2 + 1.5 * p.s) * O.s * 1.5, p.a * .55 * (prof < .3 ? .3 : prof)); }
+      var prof = 1.15 - (O.d - dist + 130) / 520; luz(CEREBRO[p.c < 0 ? 0 : p.c], O.x, O.y, (1.2 + 1.5 * p.s) * O.s * 1.5, p.a * .36 * (prof < .3 ? .3 : prof)); }
     mundo.forEach(function (m, gi) {
-      var hot = gi === hover || res[m.g.id], ct = Math.cos(m.tilt), st = Math.sin(m.tilt), c0 = [255, 255, 255];
-      m.pts.forEach(function (p) { var a = p.a + t * m.w, x = p.r * Math.cos(a), z = p.r * Math.sin(a), y = p.y * ct - z * st, z2 = p.y * st + z * ct;
-        if (pr(m.s[0] + x, m.s[1] + y, m.s[2] + z2, O)) luz(m.rgb, O.x, O.y, (3 + 4 * p.s) * O.s * (hot ? 1.5 : 1.15), p.al * (hot ? 1 : .8)); });
-      if (pr(m.s[0], m.s[1], m.s[2], O)) { m.sx = O.x; m.sy = O.y; m.sr = (m.R + 6) * O.s; luz(m.rgb, O.x, O.y, m.R * 1.5 * O.s * (hot ? 1.6 : 1.1), hot ? .9 : .55); luz(c0, O.x, O.y, 9 * O.s, .9); }
+      var hot = gi === hover || res[m.g.id], ct = Math.cos(m.tilt), st = Math.sin(m.tilt), k = hot ? 1.3 : 1;
+      m.cuerpos.forEach(function (c) {                       /* cada planeta gira alrededor del núcleo */
+        var a = c.w * t, ca = Math.cos(a), sa = Math.sin(a), x = c.x0 * ca + c.z0 * sa, z = -c.x0 * sa + c.z0 * ca, y = c.y0 * ct - z * st, z2 = c.y0 * st + z * ct;
+        if (!pr(m.s[0] + x, m.s[1] + y, m.s[2] + z2, O)) return;
+        luz(c.rgb, O.x, O.y, c.tam * O.s * 2.1 * k, .95);
+        c.polvo.forEach(function (d) { if (pr(m.s[0] + x + d.x, m.s[1] + y + d.y, m.s[2] + z2 + d.z, O)) luz(c.rgb, O.x, O.y, 6 * d.s * O.s * k, d.a); });
+      });
+      if (pr(m.s[0], m.s[1], m.s[2], O)) {                   /* el núcleo, con un halo del color de la colección */
+        m.sx = O.x; m.sy = O.y; m.sr = (m.R + 6) * O.s;
+        luz(m.rgb, O.x, O.y, m.R * 1.5 * O.s * k, hot ? .6 : .38); luz([255, 150, 40], O.x, O.y, 26 * O.s * k, .95); luz([255, 255, 255], O.x, O.y, 9 * O.s, .95);
+      }
     });
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.textAlign = 'center';
     if (an) { var ov = an.sale ? 1 - suave(an.p / .4) : suave((an.p - .72) / .28); ctx.fillStyle = 'rgba(3,4,10,' + ov.toFixed(3) + ')'; ctx.fillRect(0, 0, W, H); return; }

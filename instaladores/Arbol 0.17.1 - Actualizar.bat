@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 0.17.0 - Instalador
+title Arbol de la estadistica 0.17.1 - Actualizar
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=0.17.0"
+set "ARBOL_MODO=actualizar"
+set "ARBOL_VERSION=0.17.1"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -483,7 +483,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-0.17.0
+0.17.1
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -2517,7 +2517,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "0.17.0"
+version = "0.17.1"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3197,7 +3197,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "0.17.0"
+__version__ = "0.17.1"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -32780,12 +32780,17 @@ window.crearCerebro = function (o) {
     var a = P[Math.floor(rnd() * P.length)], b = P[Math.floor(rnd() * P.length)], d = Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
     if (d > 14 && d < 42) L.push([a, b]);
   }
-  /* ---- las galaxias: dos brazos en espiral logarítmica, inclinadas y girando ---- */
+  /* ---- los sistemas: un núcleo y un planeta por rama (con su color y su tamaño), como el mapa 3D de dentro ---- */
+  function fib(i, n) { var y = 1 - 2 * (i + .5) / n, r = Math.sqrt(Math.max(0, 1 - y * y)), f = i * 2.399963229728653; return {x: r * Math.cos(f), y: y, z: r * Math.sin(f)}; }
   G.forEach(function (g, i) {
-    var s = SITIOS[i] || [0, 0, 0], R = 30 + 18 * (g.peso || 0), pts = [], N = 170 + Math.round(150 * (g.peso || 0)), tilt = (rnd() - .5) * 1.1;
-    for (var k = 0; k < N; k++) { var r = 3 + R * Math.pow(rnd(), .75), brazo = k % 2 ? Math.PI : 0;
-      pts.push({r: r, a: r * .17 + brazo + gauss() * .22, y: gauss() * 2.2 * (1 - r / R * .6), s: .7 + 1.1 * rnd(), al: .35 + .6 * rnd()}); }
-    mundo.push({g: g, s: s, R: R, pts: pts, tilt: tilt, w: .25 + .2 * rnd(), sx: 0, sy: 0, sr: 40, rgb: g.color});
+    var s = SITIOS[i] || [0, 0, 0], R = 42 + 26 * (g.peso || 0), tilt = (rnd() - .5) * .7;
+    var pl = g.planetas && g.planetas.length ? g.planetas : [1, 2, 3, 4].map(function (k) { return {rgb: g.color, n: 2 + 3 * k}; });
+    var cuerpos = pl.map(function (q, k) {
+      var f = fib(k, pl.length), r = R * (.55 + .45 * rnd()), polvo = [];
+      for (var j = 0; j < 6; j++) polvo.push({x: gauss() * 4, y: gauss() * 4, z: gauss() * 4, s: .5 + rnd(), a: .25 + .4 * rnd()});
+      return {x0: f.x * r, y0: f.y * r * .55, z0: f.z * r, w: .35 + .5 * rnd(), rgb: q.rgb, tam: 5 + 1.5 * Math.sqrt(q.n), polvo: polvo};
+    });
+    mundo.push({g: g, s: s, R: R, cuerpos: cuerpos, tilt: tilt, sx: 0, sy: 0, sr: 40, rgb: g.color});
   });
 
   /* ---- proyección ---- */
@@ -32806,12 +32811,19 @@ window.crearCerebro = function (o) {
     L.forEach(function (e) { var A = {}, B = {}; if (pr(e[0].x, e[0].y, e[0].z, A) && pr(e[1].x, e[1].y, e[1].z, B)) { ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); } });
     ctx.stroke();
     for (var i = 0; i < P.length; i++) { var p = P[i]; if (!pr(p.x, p.y, p.z, O)) continue;
-      var prof = 1.15 - (O.d - dist + 130) / 520; luz(CEREBRO[p.c < 0 ? 0 : p.c], O.x, O.y, (1.2 + 1.5 * p.s) * O.s * 1.5, p.a * .55 * (prof < .3 ? .3 : prof)); }
+      var prof = 1.15 - (O.d - dist + 130) / 520; luz(CEREBRO[p.c < 0 ? 0 : p.c], O.x, O.y, (1.2 + 1.5 * p.s) * O.s * 1.5, p.a * .36 * (prof < .3 ? .3 : prof)); }
     mundo.forEach(function (m, gi) {
-      var hot = gi === hover || res[m.g.id], ct = Math.cos(m.tilt), st = Math.sin(m.tilt), c0 = [255, 255, 255];
-      m.pts.forEach(function (p) { var a = p.a + t * m.w, x = p.r * Math.cos(a), z = p.r * Math.sin(a), y = p.y * ct - z * st, z2 = p.y * st + z * ct;
-        if (pr(m.s[0] + x, m.s[1] + y, m.s[2] + z2, O)) luz(m.rgb, O.x, O.y, (3 + 4 * p.s) * O.s * (hot ? 1.5 : 1.15), p.al * (hot ? 1 : .8)); });
-      if (pr(m.s[0], m.s[1], m.s[2], O)) { m.sx = O.x; m.sy = O.y; m.sr = (m.R + 6) * O.s; luz(m.rgb, O.x, O.y, m.R * 1.5 * O.s * (hot ? 1.6 : 1.1), hot ? .9 : .55); luz(c0, O.x, O.y, 9 * O.s, .9); }
+      var hot = gi === hover || res[m.g.id], ct = Math.cos(m.tilt), st = Math.sin(m.tilt), k = hot ? 1.3 : 1;
+      m.cuerpos.forEach(function (c) {                       /* cada planeta gira alrededor del núcleo */
+        var a = c.w * t, ca = Math.cos(a), sa = Math.sin(a), x = c.x0 * ca + c.z0 * sa, z = -c.x0 * sa + c.z0 * ca, y = c.y0 * ct - z * st, z2 = c.y0 * st + z * ct;
+        if (!pr(m.s[0] + x, m.s[1] + y, m.s[2] + z2, O)) return;
+        luz(c.rgb, O.x, O.y, c.tam * O.s * 2.1 * k, .95);
+        c.polvo.forEach(function (d) { if (pr(m.s[0] + x + d.x, m.s[1] + y + d.y, m.s[2] + z2 + d.z, O)) luz(c.rgb, O.x, O.y, 6 * d.s * O.s * k, d.a); });
+      });
+      if (pr(m.s[0], m.s[1], m.s[2], O)) {                   /* el núcleo, con un halo del color de la colección */
+        m.sx = O.x; m.sy = O.y; m.sr = (m.R + 6) * O.s;
+        luz(m.rgb, O.x, O.y, m.R * 1.5 * O.s * k, hot ? .6 : .38); luz([255, 150, 40], O.x, O.y, 26 * O.s * k, .95); luz([255, 255, 255], O.x, O.y, 9 * O.s, .95);
+      }
     });
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.textAlign = 'center';
     if (an) { var ov = an.sale ? 1 - suave(an.p / .4) : suave((an.p - .72) / .28); ctx.fillStyle = 'rgba(3,4,10,' + ov.toFixed(3) + ')'; ctx.fillRect(0, 0, W, H); return; }
@@ -35168,6 +35180,10 @@ var coleccionK = '', resArbol = {}, resK = {};
   var n = {}; hojas.forEach(function (h) { var g = galaxiaDe(h); n[g.id] = (n[g.id] || 0) + 1; });
   GAL.codigo.base = n.codigo + ' funciones'; GAL.conceptos.base = n.conceptos + ' conceptos'; GAL.demos.base = n.demos + ' demos y guías'; GAL.finanzas.base = n.finanzas + ' funciones y conceptos';
   GALAXIAS.forEach(function (g) { g.sub = g.base || 'sin indexar'; });
+  function hexRgb(h) { var m = /^#?([0-9a-f]{6})$/i.exec(h || ''); if (!m) return [147, 163, 189]; var v = parseInt(m[1], 16); return [v >> 16 & 255, v >> 8 & 255, v & 255]; }
+  GALAXIAS.forEach(function (g) {            /* un planeta por rama, como el mapa de dentro */
+    if (g.raiz) g.planetas = g.raiz.hijos.map(function (rn) { return {rgb: hexRgb(rn.colorHex), n: rn.hijos.reduce(function (s, m) { return s + m.hijos.length; }, 0)}; });
+  });
 })();
 function luces() {                            /* las galaxias con coincidencias (del árbol y de tus carpetas) se iluminan */
   var m = {}; [resArbol, resK].forEach(function (o) { Object.keys(o).forEach(function (k) { m[k] = Math.max(m[k] || 0, o[k]); }); }); cerebro.resaltar(m);
@@ -36864,7 +36880,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
    su ficha en `fichas_fuente.py` (con `grupo` de alternativas) y su entrada `@bench` en `medir_propiedades.py` (hay tests que
    lo exigen), luego `python herramientas/fichas_fuente.py` y `python py/medir_propiedades.py <función>`.
    Cuando Mario pregunte «¿qué uso para X?», mira el grupo de alternativas y ordénalas con el perfil que encaje con su proyecto.
-5g. **Cerebro (primera capa del visor):** el visor se abre en un cerebro 3D (`py/visor/cerebro.js`) con una galaxia por parte: **Código** (las ramas de funciones), **Conceptos** (los temas `t_*` salvo finanzas), **Demos y guías**, **Finanzas** (rama `finanzas` + `t_fin`) —cada una con su propio mapa 3D, creado al entrar, y una animación de vuelo hacia ella— y **Libros** y **Notas** (solo ámbitos de búsqueda del gestor). El reparto está en `GALAXIAS` de `plantilla.html`; el buscador ilumina las galaxias con coincidencias y, al elegir un resultado, vuela a su galaxia. El botón 🧠 (o la miga) vuelve al cerebro. Icono: `python herramientas/generar_icono.py`. `indexar_conocimiento.bat` crea `conocimiento/fuentes.json` (tus carpetas) e indexa.
+5g. **Cerebro (primera capa del visor):** el visor se abre en un cerebro 3D (`py/visor/cerebro.js`) con una galaxia (un sistema solar en miniatura: núcleo y un planeta por rama, del color y tamaño de la rama) por parte: **Código** (las ramas de funciones), **Conceptos** (los temas `t_*` salvo finanzas), **Demos y guías**, **Finanzas** (rama `finanzas` + `t_fin`) —cada una con su propio mapa 3D, creado al entrar, y una animación de vuelo hacia ella— y **Libros** y **Notas** (solo ámbitos de búsqueda del gestor). El reparto está en `GALAXIAS` de `plantilla.html`; el buscador ilumina las galaxias con coincidencias y, al elegir un resultado, vuela a su galaxia. El botón 🧠 (o la miga) vuelve al cerebro. Icono: `python herramientas/generar_icono.py`. `indexar_conocimiento.bat` crea `conocimiento/fuentes.json` (tus carpetas) e indexa.
 5f. **Gestor de conocimiento:** `py/conocimiento/` es un buscador único (SQLite FTS5, BM25, sinónimos del catálogo) sobre código, conceptos, teoría y tus libros/finanzas/notas (`conocimiento/fuentes.json`, no se publica). `cd py && python -m conocimiento indexar | buscar "consulta" [-c colección] | estado`. Antes de buscar a mano en `Manuales Estadística` o en `teoria/`, usa `buscar`.
 6. **Conceptos:** `conceptos/catalogo.json` lista los conceptos del temario del máster y de Very Normal con las funciones que los implementan. Organización: `temas` (ramas del mapa, con color) > `areas` (módulos, con `ambito`) > conceptos (`area`, `prioridad` opcional, `area_fija` para que la actualización no lo mueva). La migración de 0.6.0 está en `herramientas/reorganizar_catalogo.py`.
    Si un concepto no tiene función (*hueco*), es que el árbol aún no lo cubre: impleméntalo (módulo + test), enlázalo en el catálogo (`funciones`) y regenera el visor.
