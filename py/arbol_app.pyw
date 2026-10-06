@@ -13,6 +13,7 @@ Si visor_arbol.html no existe todavía, lo genera antes con py/construir_visor.p
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import webbrowser
@@ -76,13 +77,17 @@ class Api:
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}
 
-    def abrir_fuente(self, ruta):
-        """Abre con su programa un fichero del índice (un PDF, una nota…); nada que no esté indexado."""
+    def abrir_fuente(self, ruta, ubicacion=""):
+        """Abre un fichero del índice. Un PDF se abre en el navegador, en la página del resultado (p. 248 -> #page=248)."""
         import conocimiento
-        if conocimiento.es_fuente(str(ruta)) and Path(ruta).exists():
+        if not (conocimiento.es_fuente(str(ruta)) and Path(ruta).exists()):
+            return False
+        m = re.match(r"p\. (\d+)$", str(ubicacion))
+        if str(ruta).lower().endswith(".pdf") and m:
+            webbrowser.open(Path(ruta).as_uri() + "#page=" + m.group(1))
+        else:
             os.startfile(str(ruta))
-            return True
-        return False
+        return True
 
 
 def abrir_con_pywebview() -> bool:

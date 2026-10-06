@@ -592,7 +592,7 @@ function conocimiento(q) {
       var it = document.createElement('li'); it.className = 'k';
       it.innerHTML = '<span class="pt" style="background:var(--muted)"></span><span class="n"><span class="col">' + esc(x.coleccion) + '</span>' + esc(x.titulo) +
         (x.ubicacion ? ' · ' + esc(x.ubicacion) : '') + '</span><span class="d">' + esc(x.fragmento.replace(/\s+/g, ' ')) + '</span>';
-      it.onmousedown = function (ev) { ev.preventDefault(); if (h) elegir(h); else if (x.coleccion !== 'codigo' && x.coleccion !== 'conceptos') window.pywebview.api.abrir_fuente(x.ruta); };
+      it.onmousedown = function (ev) { ev.preventDefault(); if (h) elegir(h); else if (x.coleccion !== 'codigo' && x.coleccion !== 'conceptos') window.pywebview.api.abrir_fuente(x.ruta, x.ubicacion); };
       ul.appendChild(it);
     });
     ul.hidden = false; pintar();

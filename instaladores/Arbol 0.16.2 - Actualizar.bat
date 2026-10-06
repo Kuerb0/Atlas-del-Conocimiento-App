@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 0.16.1 - Instalador
+title Arbol de la estadistica 0.16.2 - Actualizar
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=0.16.1"
+set "ARBOL_MODO=actualizar"
+set "ARBOL_VERSION=0.16.2"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -483,7 +483,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-0.16.1
+0.16.2
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -501,6 +501,7 @@ Si visor_arbol.html no existe todavía, lo genera antes con py/construir_visor.p
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import webbrowser
@@ -564,13 +565,17 @@ class Api:
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}
 
-    def abrir_fuente(self, ruta):
-        """Abre con su programa un fichero del índice (un PDF, una nota…); nada que no esté indexado."""
+    def abrir_fuente(self, ruta, ubicacion=""):
+        """Abre un fichero del índice. Un PDF se abre en el navegador, en la página del resultado (p. 248 -> #page=248)."""
         import conocimiento
-        if conocimiento.es_fuente(str(ruta)) and Path(ruta).exists():
+        if not (conocimiento.es_fuente(str(ruta)) and Path(ruta).exists()):
+            return False
+        m = re.match(r"p\. (\d+)$", str(ubicacion))
+        if str(ruta).lower().endswith(".pdf") and m:
+            webbrowser.open(Path(ruta).as_uri() + "#page=" + m.group(1))
+        else:
             os.startfile(str(ruta))
-            return True
-        return False
+        return True
 
 
 def abrir_con_pywebview() -> bool:
@@ -2512,7 +2517,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "0.16.1"
+version = "0.16.2"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3192,7 +3197,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "0.16.1"
+__version__ = "0.16.2"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -35257,7 +35262,7 @@ function conocimiento(q) {
       var it = document.createElement('li'); it.className = 'k';
       it.innerHTML = '<span class="pt" style="background:var(--muted)"></span><span class="n"><span class="col">' + esc(x.coleccion) + '</span>' + esc(x.titulo) +
         (x.ubicacion ? ' · ' + esc(x.ubicacion) : '') + '</span><span class="d">' + esc(x.fragmento.replace(/\s+/g, ' ')) + '</span>';
-      it.onmousedown = function (ev) { ev.preventDefault(); if (h) elegir(h); else if (x.coleccion !== 'codigo' && x.coleccion !== 'conceptos') window.pywebview.api.abrir_fuente(x.ruta); };
+      it.onmousedown = function (ev) { ev.preventDefault(); if (h) elegir(h); else if (x.coleccion !== 'codigo' && x.coleccion !== 'conceptos') window.pywebview.api.abrir_fuente(x.ruta, x.ubicacion); };
       ul.appendChild(it);
     });
     ul.hidden = false; pintar();
