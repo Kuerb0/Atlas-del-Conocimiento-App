@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.1.0 - Actualizar
+title Arbol de la estadistica 1.2.0 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=actualizar"
-set "ARBOL_VERSION=1.1.0"
+set "ARBOL_MODO=instalar"
+set "ARBOL_VERSION=1.2.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -494,7 +494,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.1.0
+1.2.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -631,6 +631,10 @@ class Api:
     def biblioteca_reclasificar(self, rel):
         return self._bib("reclasificar_uno", str(rel))
 
+    def biblioteca_comprimir(self):
+        """Comprime sin pérdida todos los libros de la biblioteca (tarda según el tamaño)."""
+        return self._bib("comprimir_todo")
+
     def biblioteca_borrar(self, rel):
         return self._bib("borrar", str(rel))
 
@@ -661,6 +665,15 @@ class Api:
             return telescopio.buscar(str(consulta))
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}
+
+    def abrir_enlace(self, url):
+        """Abre un enlace https en el navegador del usuario (fichas del telescopio)."""
+        import webbrowser
+        url = str(url)
+        if url.startswith("https://"):
+            webbrowser.open(url)
+            return True
+        return False
 
     def telescopio_traer(self, item):
         try:
@@ -2769,7 +2782,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.1.0"
+version = "1.2.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3449,7 +3462,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -14150,6 +14163,7 @@ i.add_argument("-G", "--genero", help="historia | economia | ensayo | estadistic
 t = sub.add_parser("telescopio", help="busca obras de acceso abierto (Gutenberg, arXiv, OpenAlex, Internet Archive); con --traer N descarga e importa la N-ésima")
 t.add_argument("consulta", nargs="+")
 t.add_argument("--traer", type=int, metavar="N", help="trae a la biblioteca el resultado número N")
+sub.add_parser("comprimir", help="reduce sin perder nada el tamaño de los PDF/EPUB de la biblioteca")
 b = sub.add_parser("buscar", help="busca en todas las colecciones")
 b.add_argument("consulta", nargs="+")
 b.add_argument("-c", "--coleccion", help="codigo | conceptos | teoria | libros | finanzas | notas …")
@@ -14169,6 +14183,12 @@ elif a.orden == "importar":
     from .importar import importar
     for r in importar([{"ruta": f, "galaxia": a.galaxia, "subtema": a.subtema, "tipo": a.tipo, "genero": a.genero} for f in a.ficheros]):
         print(f"{r['estado']:10} {r['nombre']}  ->  {r.get('galaxia', '')} › {r.get('subtema', '')} ({r.get('tipo', '')})  {r['mensaje']}")
+elif a.orden == "comprimir":
+    from .importar import comprimir_todo
+    r = comprimir_todo()
+    print(f"{r['comprimidos']} de {r['n']} libros comprimidos: {r['antes'] / 1048576:.1f} MB -> {r['despues'] / 1048576:.1f} MB (ahorro {r['ahorrado'] / 1048576:.1f} MB)")
+    for e in r["errores"]:
+        print("  ✗", e)
 elif a.orden == "telescopio":
     from . import telescopio
     r = telescopio.buscar(" ".join(a.consulta))
@@ -14855,6 +14875,69 @@ def reclasificar_uno(rel: str, carpeta: Path | None = None, db: Path | None = No
     return _ficha(carpeta, rel, m)
 
 
+def _comprimir_pdf(f: Path, destino: Path) -> None:
+    """Reescribe el PDF sin perder nada: flujos de contenido recomprimidos y objetos idénticos fusionados (las imágenes no se tocan)."""
+    from pypdf import PdfWriter
+    w = PdfWriter(clone_from=str(f))
+    for p in w.pages:
+        p.compress_content_streams()
+    try:
+        w.compress_identical_objects(remove_duplicates=True, remove_unreferenced=True)
+    except TypeError:                                                      # pypdf < 6.1
+        w.compress_identical_objects(remove_identicals=True, remove_orphans=True)
+    with open(destino, "wb") as fh:
+        w.write(fh)
+
+
+def _comprimir_epub(f: Path, destino: Path) -> None:
+    """Reescribe el EPUB con deflate al máximo; `mimetype` primero y sin comprimir, como exige el formato. El contenido de cada entrada queda idéntico."""
+    with zipfile.ZipFile(f) as zi, zipfile.ZipFile(destino, "w") as zo:
+        for info in sorted(zi.infolist(), key=lambda i: i.filename != "mimetype"):
+            zo.writestr(zipfile.ZipInfo(info.filename, info.date_time), zi.read(info), zipfile.ZIP_STORED if info.filename == "mimetype" else zipfile.ZIP_DEFLATED, 9)
+
+
+def _igual(a: Path, b: Path) -> bool:
+    """¿Es b el mismo libro que a? Mismo nº de páginas y mismo texto en una muestra (PDF) o mismo contenido de cada entrada (EPUB)."""
+    if a.suffix.lower() == ".epub":
+        with zipfile.ZipFile(a) as za, zipfile.ZipFile(b) as zb:
+            return sorted(za.namelist()) == sorted(zb.namelist()) and all(za.read(n) == zb.read(n) for n in za.namelist())
+    from pypdf import PdfReader
+    ra, rb = PdfReader(str(a)), PdfReader(str(b))
+    n = len(ra.pages)
+    return n == len(rb.pages) and all((ra.pages[i].extract_text() or "") == (rb.pages[i].extract_text() or "") for i in sorted({0, n // 2, n - 1}) if n)
+
+
+def comprimir(rel: str, carpeta: Path | None = None) -> dict:
+    """Reduce el tamaño de un libro de la biblioteca SIN perder nada (mismas páginas, mismo texto, mismas imágenes). Solo sustituye la copia si la nueva es válida y al menos un 2 % menor.
+    Devuelve {rel, antes, despues, estado: 'ok'|'sin_ganancia'|'error', mensaje?}. El original de donde se importó no se toca."""
+    carpeta = Path(carpeta or carpeta_datos()); f = carpeta / "biblioteca" / rel
+    r = {"rel": rel, "antes": f.stat().st_size if f.exists() else 0}
+    tmp = f.with_name(f.name + ".tmp")
+    try:
+        if f.suffix.lower() not in (".pdf", ".epub"):
+            raise ValueError("solo PDF y EPUB")
+        (_comprimir_pdf if f.suffix.lower() == ".pdf" else _comprimir_epub)(f, tmp)
+        if tmp.stat().st_size > .98 * r["antes"]:
+            return {**r, "despues": r["antes"], "estado": "sin_ganancia"}
+        if not _igual(f, tmp):
+            raise ValueError("la versión comprimida no coincide con el original; se deja como estaba")
+        os.replace(tmp, f)
+        return {**r, "despues": f.stat().st_size, "estado": "ok"}
+    except Exception as e:
+        return {**r, "despues": r["antes"], "estado": "error", "mensaje": f"{type(e).__name__}: {e}"}
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def comprimir_todo(carpeta: Path | None = None) -> dict:
+    """Comprime sin pérdida todos los PDF/EPUB de la biblioteca: {n, ahorrado, antes, despues, errores:[…]}."""
+    carpeta = Path(carpeta or carpeta_datos())
+    rs = [comprimir(rel, carpeta) for rel in leer_metadatos(carpeta) if rel.lower().endswith((".pdf", ".epub"))]
+    antes, despues = sum(x["antes"] for x in rs), sum(x["despues"] for x in rs)
+    return {"n": len(rs), "comprimidos": sum(x["estado"] == "ok" for x in rs), "antes": antes, "despues": despues, "ahorrado": antes - despues,
+            "errores": [f"{x['rel']}: {x['mensaje']}" for x in rs if x["estado"] == "error"]}
+
+
 def borrar(rel: str, carpeta: Path | None = None, db: Path | None = None) -> bool:
     """Quita un documento del observatorio: borra SU COPIA (en biblioteca/), su portada, sus metadatos y su texto del índice. El original (de donde se importó) no se toca."""
     carpeta = Path(carpeta or carpeta_datos()); meta = leer_metadatos(carpeta)
@@ -14879,13 +14962,14 @@ def borrar(rel: str, carpeta: Path | None = None, db: Path | None = None) -> boo
 :::BEGIN py/conocimiento/telescopio.py|text
 """Telescopio: busca obras de acceso abierto o dominio público, las trae a la biblioteca y las clasifica con los metadatos reales (materias).
 
-Fuentes (solo legales): Project Gutenberg (Gutendex), arXiv, OpenAlex (artículos en abierto con PDF) e Internet Archive
+Fuentes (solo legales): Google Books (catálogo: ficha y enlace; descarga solo si es dominio público), Project Gutenberg (Gutendex), arXiv, OpenAlex (artículos en abierto con PDF) e Internet Archive
 (solo obras con licencia abierta o publicadas hasta 1929). Open Library aporta las materias para clasificar un título.
 Solo lectura de la web con la biblioteca estándar; lo descargado pasa por `importar.importar` como cualquier otro archivo.
 """
 from __future__ import annotations
 
 import json
+import os
 import re
 import urllib.parse
 import urllib.request
@@ -14897,7 +14981,7 @@ from .importar import _GEN_RE, GENEROS, importar
 
 AGENTE = "ArbolEstadistica/1.0 (biblioteca personal; telescopio)"
 MAX_BYTES = 200 << 20                       # no se descarga nada de más de 200 MB
-FUENTES = ("gutenberg", "arxiv", "openalex", "archive")
+FUENTES = ("googlebooks", "gutenberg", "arxiv", "openalex", "archive")
 _ATOM = "{http://www.w3.org/2005/Atom}"
 
 
@@ -14924,10 +15008,10 @@ def genero_desde_materias(materias: list[str]) -> str:
     return g if p[g] else "otro"
 
 
-def _item(fuente, id_, titulo, autores, anio, url, formato, licencia, materias, resumen=""):
+def _item(fuente, id_, titulo, autores, anio, url, formato, licencia, materias, resumen="", enlace=""):
     materias = [m for m in dict.fromkeys(materias) if m][:12]
     return {"fuente": fuente, "id": str(id_), "titulo": re.sub(r"\s+", " ", titulo or "").strip(), "autores": [a for a in autores if a][:4], "anio": anio, "url": url,
-            "formato": formato, "licencia": licencia, "materias": materias, "genero": genero_desde_materias(materias + [titulo or ""]), "resumen": resumen[:300]}
+            "formato": formato, "licencia": licencia, "materias": materias, "genero": genero_desde_materias(materias + [titulo or ""]), "resumen": resumen[:300], "enlace": enlace}
 
 
 def _gutenberg(q, n):
@@ -14935,7 +15019,7 @@ def _gutenberg(q, n):
         f = b.get("formats", {})
         url = next((f[k] for k in f if k.startswith("application/epub+zip")), None)
         if url and not b.get("copyright"):
-            yield _item("gutenberg", b["id"], b["title"], [a["name"] for a in b.get("authors", [])], None, url, "epub", "Dominio público", b.get("subjects", []) + b.get("bookshelves", []))
+            yield _item("gutenberg", b["id"], b["title"], [a["name"] for a in b.get("authors", [])], None, url, "epub", "Dominio público", b.get("subjects", []) + b.get("bookshelves", []), enlace=f"https://www.gutenberg.org/ebooks/{b['id']}")
 
 
 def _arxiv(q, n):
@@ -14945,7 +15029,7 @@ def _arxiv(q, n):
         if pdf:
             yield _item("arxiv", e.findtext(_ATOM + "id", ""), e.findtext(_ATOM + "title", ""), [a.findtext(_ATOM + "name") for a in e.findall(_ATOM + "author")],
                         int((e.findtext(_ATOM + "published") or "0")[:4]) or None, pdf.replace("http://", "https://"), "pdf", "arXiv (descarga personal)",
-                        [c.get("term") for c in e.findall(_ATOM + "category")], e.findtext(_ATOM + "summary", ""))
+                        [c.get("term") for c in e.findall(_ATOM + "category")], e.findtext(_ATOM + "summary", ""), e.findtext(_ATOM + "id", "").replace("http://", "https://"))
 
 
 def _openalex(q, n):
@@ -14954,7 +15038,7 @@ def _openalex(q, n):
         loc = w.get("best_oa_location") or {}
         if loc.get("pdf_url"):
             yield _item("openalex", w["id"], w.get("display_name"), [a["author"]["display_name"] for a in w.get("authorships", [])], w.get("publication_year"), loc["pdf_url"], "pdf",
-                        loc.get("license") or "acceso abierto", [c["display_name"] for c in w.get("concepts", [])][:8])
+                        loc.get("license") or "acceso abierto", [c["display_name"] for c in w.get("concepts", [])][:8], enlace=w["id"])
 
 
 def _archive(q, n):
@@ -14965,10 +15049,25 @@ def _archive(q, n):
         if re.search(r"creativecommons|publicdomain", lic) or 0 < anio <= 1929:     # licencia abierta (CC / dominio público) o publicada hasta 1929
             sub = d.get("subject", [])
             yield _item("archive", d["identifier"], d.get("title", ""), [d["creator"]] if isinstance(d.get("creator"), str) else d.get("creator", []), anio or None, "", "pdf",
-                        lic or "Dominio público (≤ 1929)", [sub] if isinstance(sub, str) else sub)
+                        lic or "Dominio público (≤ 1929)", [sub] if isinstance(sub, str) else sub, enlace="https://archive.org/details/" + d["identifier"])
 
 
-_BUSCADORES = {"gutenberg": _gutenberg, "arxiv": _arxiv, "openalex": _openalex, "archive": _archive}
+def _googlebooks(q, n):
+    """Catálogo de Google Books: ficha, categorías y enlace para verlo. Solo es descargable si Google lo marca como dominio público y da enlace de PDF/EPUB."""
+    r = json.loads(_get("https://www.googleapis.com/books/v1/volumes?" + _q(q=q, maxResults=n, printType="books", **({"key": os.environ["GOOGLE_BOOKS_KEY"]} if os.environ.get("GOOGLE_BOOKS_KEY") else {}))))
+    for v in r.get("items", []):
+        i, a = v.get("volumeInfo", {}), v.get("accessInfo", {})
+        url, formato = "", "web"
+        if a.get("publicDomain"):
+            for ext in ("epub", "pdf"):
+                if a.get(ext, {}).get("isAvailable") and a[ext].get("downloadLink", "").startswith("https://"):
+                    url, formato = a[ext]["downloadLink"], ext
+                    break
+        yield _item("googlebooks", v["id"], i.get("title", "") + (": " + i["subtitle"] if i.get("subtitle") else ""), i.get("authors", []), int(str(i.get("publishedDate") or 0)[:4]) or None,
+                    url, formato, "Dominio público" if url else "Solo vista previa / compra", i.get("categories", []), i.get("description", ""), i.get("infoLink", "").replace("http://", "https://"))
+
+
+_BUSCADORES = {"googlebooks": _googlebooks, "gutenberg": _gutenberg, "arxiv": _arxiv, "openalex": _openalex, "archive": _archive}
 
 
 def buscar(consulta: str, n: int = 6, fuentes=FUENTES) -> dict:
@@ -15000,6 +15099,8 @@ def _url_archive(identificador: str) -> str:
 
 def traer(item: dict, carpeta: Path = CARPETA) -> dict:
     """Descarga la obra, comprueba que es un PDF/EPUB de verdad y la importa clasificada con el género de sus materias. Devuelve el resultado de importar()."""
+    if not item["url"] and item["fuente"] != "archive":
+        raise ValueError("esta obra solo se puede ver en la web (no es de dominio público): abre el enlace")
     url = item["url"] or _url_archive(item["id"])
     datos = _get(url, binario=True)
     ext = "pdf" if datos[:5] == b"%PDF-" else "epub" if datos[:2] == b"PK" else ""
@@ -31211,6 +31312,65 @@ def test_aviso_n_grande_y_errores():
     with pytest.raises(ValueError):
         elegir_contraste(pd.DataFrame({"v": [1, 2, 3], "g": "A"}), "v", "g")
 :::END
+:::BEGIN py/tests/test_comprimir.py|text
+"""Compresión sin pérdida de la biblioteca: el libro queda idéntico y solo se sustituye si es menor."""
+import json
+import sys
+import zipfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conocimiento import importar as im
+
+
+def _pdf(ruta, paginas=30):
+    from pypdf import PdfWriter
+    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+    w = PdfWriter()
+    for i in range(paginas):
+        p = w.add_blank_page(300, 300)
+        s = DecodedStreamObject()
+        s.set_data(f"BT /F1 12 Tf 20 200 Td (Pagina {i} " .encode() + b"texto repetido " * 200 + b") Tj ET")
+        p[NameObject("/Contents")] = w._add_object(s)
+        p[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): DictionaryObject({NameObject("/F1"): DictionaryObject({
+            NameObject("/Type"): NameObject("/Font"), NameObject("/Subtype"): NameObject("/Type1"), NameObject("/BaseFont"): NameObject("/Helvetica")})})})
+    with open(ruta, "wb") as fh:
+        w.write(fh)
+
+
+def _biblioteca(tmp_path):
+    b = tmp_path / "biblioteca" / "libros" / "x"; b.mkdir(parents=True)
+    _pdf(b / "a.pdf")
+    with zipfile.ZipFile(b / "b.epub", "w") as z:
+        z.writestr("mimetype", "application/epub+zip", zipfile.ZIP_STORED)
+        z.writestr("c.xhtml", "<p>" + "hola " * 5000 + "</p>", zipfile.ZIP_STORED)          # sin comprimir: hay ganancia
+    meta = {"libros/x/a.pdf": {}, "libros/x/b.epub": {}}
+    (tmp_path / "biblioteca" / "metadatos.json").write_text(json.dumps(meta))
+    return b
+
+
+def test_comprime_sin_perdida(tmp_path):
+    b = _biblioteca(tmp_path)
+    antes = {n: (b / n).stat().st_size for n in ("a.pdf", "b.epub")}
+    from pypdf import PdfReader
+    textos = [p.extract_text() for p in PdfReader(str(b / "a.pdf")).pages]
+    r = im.comprimir_todo(tmp_path)
+    assert r["errores"] == [] and r["n"] == 2 and r["ahorrado"] > 0
+    assert (b / "b.epub").stat().st_size < antes["b.epub"]
+    with zipfile.ZipFile(b / "b.epub") as z:
+        assert z.namelist()[0] == "mimetype" and z.read("c.xhtml").startswith(b"<p>hola")
+    if (b / "a.pdf").stat().st_size < antes["a.pdf"]:
+        assert [p.extract_text() for p in PdfReader(str(b / "a.pdf")).pages] == textos           # mismo texto, mismas páginas
+    assert not list(b.glob("*.tmp"))
+    assert im.comprimir("libros/x/b.epub", tmp_path)["estado"] == "sin_ganancia"                 # segunda pasada: nada que ganar
+
+
+def test_no_sustituye_si_no_coincide(tmp_path, monkeypatch):
+    b = _biblioteca(tmp_path); antes = (b / "b.epub").read_bytes()
+    monkeypatch.setattr(im, "_igual", lambda a, c: False)
+    r = im.comprimir("libros/x/b.epub", tmp_path)
+    assert r["estado"] == "error" and (b / "b.epub").read_bytes() == antes and not list(b.glob("*.tmp"))
+:::END
 :::BEGIN py/tests/test_conocimiento.py|text
 """Gestor de conocimiento: índice incremental, acentos, filtros, sinónimos del catálogo y formatos."""
 import sys
@@ -34046,7 +34206,13 @@ from conocimiento import telescopio as t
 ARXIV = """<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>http://arxiv.org/abs/1</id><title>Bayesian regression</title><summary>x</summary>
 <published>2020-01-02T00:00:00Z</published><author><name>A. Gauss</name></author><category term="stat.ME"/>
 <link title="pdf" href="http://arxiv.org/pdf/1"/></entry></feed>"""
+GB = {"items": [
+    {"id": "g1", "volumeInfo": {"title": "Historia", "subtitle": "de la estadística", "authors": ["X"], "publishedDate": "1890-01", "categories": ["History"], "infoLink": "http://books.google.com/g1"},
+     "accessInfo": {"publicDomain": True, "epub": {"isAvailable": True, "downloadLink": "https://books.google.com/g1.epub"}}},
+    {"id": "g2", "volumeInfo": {"title": "Moderno", "infoLink": "http://books.google.com/g2"},
+     "accessInfo": {"publicDomain": False, "pdf": {"isAvailable": True, "downloadLink": "https://books.google.com/g2.pdf"}}}]}
 RESP = {
+    "googleapis.com/books": GB,
     "gutendex": {"results": [{"id": 7, "title": "Essai", "authors": [{"name": "Laplace"}], "subjects": ["Probabilities"], "formats": {"application/epub+zip": "https://g/7.epub"}, "copyright": False},
                              {"id": 8, "title": "Con copyright", "formats": {"application/epub+zip": "https://g/8.epub"}, "copyright": True}]},
     "arxiv": ARXIV,
@@ -34068,6 +34234,9 @@ def test_buscar_filtra_lo_no_legal_y_tolera_fuentes_caidas(monkeypatch):
     monkeypatch.setattr(t, "_get", falso)
     r = t.buscar("probability")
     por = {x["fuente"]: [y["id"] for y in r["resultados"] if y["fuente"] == x["fuente"]] for x in r["resultados"]}
+    gb = {x["id"]: x for x in r["resultados"] if x["fuente"] == "googlebooks"}
+    assert gb["g1"]["url"].endswith(".epub") and gb["g1"]["enlace"].startswith("https://")      # dominio público: descargable
+    assert gb["g2"]["url"] == "" and gb["g2"]["enlace"]                                        # con copyright: solo la ficha, aunque Google dé un PDF
     assert por["gutenberg"] == ["7"]                                      # el de copyright, fuera
     assert por["openalex"] == ["W2"]                                      # sin PDF abierto, fuera
     assert sorted(por["archive"]) == ["cc", "viejo"]                      # solo licencia abierta o ≤ 1929
@@ -34079,6 +34248,11 @@ def test_genero_desde_materias():
     assert t.genero_desde_materias(["Bayesian statistics", "Regression analysis"]) == "estadistica"
     assert t.genero_desde_materias(["Rome -- History", "Ancient history"]) == "historia"
     assert t.genero_desde_materias(["zzz qqq"]) == "otro"
+
+
+def test_traer_no_descarga_lo_que_solo_tiene_ficha(tmp_path):
+    with pytest.raises(ValueError, match="solo se puede ver"):
+        t.traer({"fuente": "googlebooks", "id": "g2", "url": "", "titulo": "T"}, tmp_path)
 
 
 def test_get_solo_https():
@@ -36700,7 +36874,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 .telescopio[hidden]{display:none} .app.modo-telescopio .cuerpo{display:none}
 .telescopio{min-height:0;overflow:auto;padding:12px 16px 40px;background:#02030a;color:#dfe6f5;display:flex;flex-direction:column;align-items:center;gap:10px}
 .tel-lista{width:100%;max-width:1040px;display:flex;flex-direction:column;gap:8px} .tel-card{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:10px 12px;border:1px solid #1c2646;border-radius:10px;background:#0b1224}
-.tel-card b{font-size:14px} .tel-meta{color:#8ea0c0;font-size:12.5px;grid-column:1} .tel-card .btn{grid-row:1/3;grid-column:2;align-self:center}
+.tel-card b{font-size:14px} .tel-meta{color:#8ea0c0;font-size:12.5px;grid-column:1} .tel-acc{grid-row:1/3;grid-column:2;align-self:center;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .bib-barra{width:100%;max-width:1040px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .bib-barra input,.bib-barra select,.bib-card select,.bib-card input[type=text]{min-width:0;padding:6px 9px;border:1px solid #2a3558;border-radius:7px;background:#0b1224;color:#e6ecfa;font:inherit;font-size:12.5px}
 .bib-barra [hidden],.imp-resumen [hidden]{display:none!important}
@@ -36829,11 +37003,11 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
   <section class="biblioteca" id="biblioteca" hidden aria-label="Observatorio">
     <div class="imp-cabeza"><h2>Observatorio</h2><p>Todo lo que has importado. Cambia título, galaxia, género, subtema, tipo o etiquetas: se guarda al momento y el universo se actualiza al volver a él. Al borrar solo se quita la copia del observatorio; el original no se toca.</p></div>
     <div class="bib-barra"><input id="bibQ" type="search" placeholder="Filtrar por título, género, subtema, etiqueta…" aria-label="Filtrar el observatorio"><select id="bibGal" aria-label="Galaxia"></select>
-      <span id="bibN" class="bib-n"></span><button class="btn primario" id="bibAplicar" type="button" hidden>Actualizar el universo ahora</button></div>
+      <span id="bibN" class="bib-n"></span><button class="btn" id="bibComprimir" type="button" title="Reescribe los PDF y EPUB sin perder nada: mismas páginas, mismo texto, mismas imágenes">Comprimir sin pérdida</button><button class="btn primario" id="bibAplicar" type="button" hidden>Actualizar el universo ahora</button></div>
     <div class="bib-lista" id="bibLista"></div>
   </section>
   <section class="telescopio" id="telescopio" hidden aria-label="Telescopio">
-    <div class="imp-cabeza"><h2>Telescopio</h2><p>Busca libros de dominio público (Project Gutenberg, Internet Archive), artículos en abierto (arXiv, OpenAlex) y tráelos a tu biblioteca: se clasifican con las materias reales de la obra. Solo fuentes legales.</p></div>
+    <div class="imp-cabeza"><h2>Telescopio</h2><p>Busca en Google Books (ficha y enlace; descarga solo si es de dominio público), Project Gutenberg, Internet Archive, artículos en abierto (arXiv, OpenAlex) y tráelos a tu biblioteca: se clasifican con las materias reales de la obra. Solo fuentes legales.</p></div>
     <div class="bib-barra"><input id="telQ" type="search" placeholder="Título, autor o tema: «Laplace probability», «Keynes»…" aria-label="Buscar en el telescopio"><button class="btn primario" id="telBuscar" type="button">Buscar</button><span class="bib-n" id="telN" aria-live="polite"></span></div>
     <div class="tel-lista" id="telLista"></div>
   </section>
@@ -37788,12 +37962,13 @@ async function telBuscar() {
   $('#telN').textContent = r.resultados.length + ' resultados' + (e.length ? ' · sin respuesta: ' + e.join(', ') : '');
   $('#telLista').innerHTML = r.resultados.map(function (x, i) {
     return '<div class="tel-card"><b>' + eclEsc(x.titulo) + '</b><span class="tel-meta">' + eclEsc(x.autores.join(', ')) + (x.anio ? ' · ' + x.anio : '') + ' · ' + eclEsc(x.fuente) + ' · ' + eclEsc(x.formato) + ' · ' + eclEsc(x.licencia) + ' · género: ' + eclEsc((IMP_GEN[x.genero] || x.genero)) + '</span>' +
-      '<button class="btn" type="button" data-i="' + i + '">Traer a mi biblioteca</button></div>'; }).join('');
+      '<span class="tel-acc">' + (x.url || x.fuente === 'archive' ? '<button class="btn" type="button" data-i="' + i + '">Traer a mi biblioteca</button>' : '') + (x.enlace ? '<button class="btn" type="button" data-e="' + i + '">Abrir ficha ↗</button>' : '') + '</span></div>'; }).join('');
 }
 var IMP_GEN = {historia: 'Historia', economia: 'Economía y finanzas', ensayo: 'Ensayo y filosofía', estadistica: 'Estadística y matemáticas', ciencia: 'Ciencia y divulgación', novela: 'Novela', biografia: 'Biografía', politica: 'Política y sociedad', tecnologia: 'Tecnología', psicologia: 'Psicología y salud', arte: 'Arte y cultura', otro: 'Otros'};
 $('#telBuscar').onclick = telBuscar;
 $('#telQ').addEventListener('keydown', function (e) { if (e.key === 'Enter') telBuscar(); });
 $('#telLista').addEventListener('click', async function (e) {
+  var o = e.target.closest('button[data-e]'); if (o) { window.pywebview.api.abrir_enlace(tel.lista[+o.dataset.e].enlace); return; }
   var b = e.target.closest('button[data-i]'); if (!b) return; var x = tel.lista[+b.dataset.i], a = window.pywebview.api;
   b.disabled = true; b.textContent = 'Descargando…';
   var r = await a.telescopio_traer(x);
@@ -37864,6 +38039,11 @@ function bibRender() {
 }
 function bibFicha(rel) { return (bib.lista || []).filter(function (x) { return x.rel === rel; })[0]; }
 function bibMarca(card, txt) { var s = card && card.querySelector('.bib-ok'); if (s) { s.textContent = txt; setTimeout(function () { if (s) s.textContent = ''; }, 2200); } }
+$('#bibComprimir').onclick = async function () {
+  var a = impApi(), b = this; if (!a || !a.biblioteca_comprimir) return; b.disabled = true; $('#bibN').textContent = 'Comprimiendo… (puede tardar)';
+  var r = await a.biblioteca_comprimir(); b.disabled = false;
+  $('#bibN').textContent = r.error ? '✗ ' + r.error : r.comprimidos + ' de ' + r.n + ' libros comprimidos: ' + fmtTam(r.antes) + ' → ' + fmtTam(r.despues) + ' (ahorro ' + fmtTam(r.ahorrado) + ')' + (r.errores.length ? ' · ' + r.errores.length + ' con error' : '');
+};
 $('#bibQ').addEventListener('input', function () { bib.filtro = this.value; bibRender(); });
 $('#bibGal').addEventListener('change', function () { bib.gal = this.value; bibRender(); });
 $('#biblioteca').addEventListener('change', async function (ev) {
@@ -39127,6 +39307,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 5i. **Pestañas e importador:** el visor tiene pestañas **🌌 Universo** (el mapa) y **⚫ Importar** (además de 🎓 Aprender). «Importar» es un agujero negro (`py/visor/agujero.js`): clic o soltar archivos abre el explorador de Windows (`Api.elegir_archivos`); `py/conocimiento/importar.py` analiza cada fichero (`clasificar`: galaxia finanzas/libros/notas, **género** —historia, economía, ensayo, estadística, ciencia, novela…—, subtema = tema del catálogo (palabras clave en inglés y español, peso del título) y solo para estadística/economía/tecnología —un libro de historia queda en «General»—, tipo, capítulos, vista previa, idioma, duplicado) y el panel muestra una tarjeta desplegable por archivo (barras con lo detectado: pulsar una fija el género o el subtema; desplegables de galaxia/género/tipo, título editable —los nombres largos se recortan con `titulo_corto`—, etiquetas, «Para todos»). Se importa archivo a archivo con progreso: `importar()` copia a `conocimiento/biblioteca/<galaxia>/<subtema>/` con nombre corto, guarda `biblioteca/metadatos.json` (hash: no duplica) y lo indexa; después `Api.actualizar_visor` regenera `visor_arbol.html` y el visor se recarga. `enriquecer()` completa capítulos/género/títulos de lo importado con versiones anteriores. Al final de la pestaña hay un desplegable «¿Cómo funciona la importación?». **Mapas con tu biblioteca** (`ramas_biblioteca` en `construir_visor.py`): Libros = una rama por género › un módulo por libro › un punto por capítulo (PDF: marcadores o tramos de 25 págs.; EPUB: su índice) con «Abrir en la página N»; los capítulos NO se dibujan hasta que pulsas el libro (`nivel()` en `mapa3d.js`; el panel del libro, `detalleLibro`, los lista siempre); el recuento de una rama son sus libros; Notas = una rama por subtema con un punto por documento; las demás galaxias reciben una rama «Documentos importados». Una galaxia sin nada no tiene mapa ni líneas (solo búsqueda). **Conceptos con vídeo:** los conceptos con fuentes de vídeo (Very Normal, Harvard, MIT, 3Blue1Brown…; `es_video`) llevan un ▶ en el mapa y la lista de vídeos arriba del panel (la cabecera ya no tiene filtros ni chips de ramas: solo buscador y perfil). **Observatorio (pestaña 🔭; internamente «biblioteca»: carpeta `conocimiento/biblioteca`, `biblioteca_*` en la API):** lista lo importado y deja editar título, galaxia, género, subtema, tipo y etiquetas (se guarda al momento; `importar.editar`), reclasificar (`reclasificar_uno`) y borrar (`borrar`: quita la copia de `biblioteca/`, nunca el original); lo que fijas se recuerda (`biblioteca/correcciones.json`: obras de nombre parecido se clasifican igual). El universo se regenera al volver a él. **Importar:** «Original: copiar/mover» (mover quita el original de su carpeta tras importar) y progreso real por páginas (`conocimiento.PROGRESO`, trabajo en segundo plano `Api.importar_archivos` + `estado_trabajo`). **Búsqueda con ámbito:** prefijos `libros:`, `código:`, `conceptos:`, `demos:`, `notas:`, `finanzas:`, `vídeo:` y géneros (`historia:`, `economía:`…), combinables; con la barra vacía salen los atajos; flechas/Enter sirven también para los resultados de tus carpetas y hay indicador de «buscando…».
 **Buscador:** la barra ocupa todo el espacio libre de la cabecera y cada resultado lleva un icono (`iconoNodo`/`iconoRes` en la plantilla): portada del libro (la del EPUB, la primera página del PDF con Poppler si está, o una generada por género; `importar.portada`, `DATA.portadas`), logo de Python (funciones y ejemplos), ∑ (conceptos; con ▶ si tienen vídeo), f(x) (demos), documento (guías) y la etiqueta del formato (PDF, DOCX, MD…). Al buscar, el universo reacciona: la galaxia con más coincidencias late y la cámara se acerca un poco (`cerebro.enfocar`), el resto se atenúa; los capítulos de un mismo libro se agrupan en un resultado. Los `*.pdf` y `*.epub` están en `.gitignore`. Por consola: `cd py && python -m conocimiento importar f.pdf [-g libros] [-G historia] [-s "Inferencia y contrastes"] [-t libro]`.
 5j. **Eclipses (almacenaje):** pestaña «🌘 Eclipses» (`py/visor/eclipses.js`, medición en `py/conocimiento/almacenaje.py`, API `Api.almacenaje`): el Sol es el límite de GitHub (1 GB recomendado, 5 GB tope, 100 MB por archivo) y cada galaxia o tipo de archivo es una luna cuya área es proporcional a lo que ocupa. Dos escenarios: «En disco» (todo) y «En GitHub» (`git ls-files -co --exclude-standard`: respeta `.gitignore`), y dos vistas (por galaxia / por tipo). Avisa de archivos >100 MB. Test: `tests/test_almacenaje.py`.
+5l. **Comprimir la biblioteca:** botón «Comprimir sin pérdida» del Observatorio y `python -m conocimiento comprimir` (`importar.comprimir`/`comprimir_todo`). Reescribe PDF (flujos de contenido recomprimidos, objetos idénticos fusionados) y EPUB (deflate 9) **sin tocar el contenido**; antes de sustituir comprueba mismas páginas y mismo texto y que la copia sea ≥ 2 % menor. No se recomprimen ni reducen imágenes (decisión de Mario: el libro debe quedar idéntico).
 5k. **Telescopio:** pestaña «📡 Telescopio» (`py/conocimiento/telescopio.py`, API `Api.telescopio_buscar/traer`, consola `python -m conocimiento telescopio <consulta> [--traer N]`). Busca **solo fuentes legales**: Project Gutenberg (Gutendex, dominio público), arXiv, OpenAlex (solo con PDF abierto) e Internet Archive (solo licencia CC/dominio público o publicado ≤ 1929). **No se añaden fuentes piratas (Anna's Archive, Z-Library, LibGen…) ni descargadores de ellas.** `traer` descarga (https, ≤ 200 MB, comprueba que es PDF/EPUB de verdad) y pasa por `importar.importar` con el género sacado de las materias de la obra (`genero_desde_materias`); `materias_de` consulta Open Library para clasificar un título que ya tienes. Tests sin red (`_get` se sustituye): `tests/test_telescopio.py`.
 6. **Conceptos:** `conceptos/catalogo.json` lista los conceptos del temario del máster y de Very Normal con las funciones que los implementan. Organización: `temas` (ramas del mapa, con color) > `areas` (módulos, con `ambito`) > conceptos (`area`, `prioridad` opcional, `area_fija` para que la actualización no lo mueva). La migración de 0.6.0 está en `herramientas/reorganizar_catalogo.py`.
    Si un concepto no tiene función (*hueco*), es que el árbol aún no lo cubre: impleméntalo (módulo + test), enlázalo en el catálogo (`funciones`) y regenera el visor.

@@ -132,6 +132,10 @@ class Api:
     def biblioteca_reclasificar(self, rel):
         return self._bib("reclasificar_uno", str(rel))
 
+    def biblioteca_comprimir(self):
+        """Comprime sin pérdida todos los libros de la biblioteca (tarda según el tamaño)."""
+        return self._bib("comprimir_todo")
+
     def biblioteca_borrar(self, rel):
         return self._bib("borrar", str(rel))
 
@@ -162,6 +166,15 @@ class Api:
             return telescopio.buscar(str(consulta))
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}
+
+    def abrir_enlace(self, url):
+        """Abre un enlace https en el navegador del usuario (fichas del telescopio)."""
+        import webbrowser
+        url = str(url)
+        if url.startswith("https://"):
+            webbrowser.open(url)
+            return True
+        return False
 
     def telescopio_traer(self, item):
         try:

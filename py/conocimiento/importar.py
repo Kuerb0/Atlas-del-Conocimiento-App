@@ -579,6 +579,69 @@ def reclasificar_uno(rel: str, carpeta: Path | None = None, db: Path | None = No
     return _ficha(carpeta, rel, m)
 
 
+def _comprimir_pdf(f: Path, destino: Path) -> None:
+    """Reescribe el PDF sin perder nada: flujos de contenido recomprimidos y objetos idénticos fusionados (las imágenes no se tocan)."""
+    from pypdf import PdfWriter
+    w = PdfWriter(clone_from=str(f))
+    for p in w.pages:
+        p.compress_content_streams()
+    try:
+        w.compress_identical_objects(remove_duplicates=True, remove_unreferenced=True)
+    except TypeError:                                                      # pypdf < 6.1
+        w.compress_identical_objects(remove_identicals=True, remove_orphans=True)
+    with open(destino, "wb") as fh:
+        w.write(fh)
+
+
+def _comprimir_epub(f: Path, destino: Path) -> None:
+    """Reescribe el EPUB con deflate al máximo; `mimetype` primero y sin comprimir, como exige el formato. El contenido de cada entrada queda idéntico."""
+    with zipfile.ZipFile(f) as zi, zipfile.ZipFile(destino, "w") as zo:
+        for info in sorted(zi.infolist(), key=lambda i: i.filename != "mimetype"):
+            zo.writestr(zipfile.ZipInfo(info.filename, info.date_time), zi.read(info), zipfile.ZIP_STORED if info.filename == "mimetype" else zipfile.ZIP_DEFLATED, 9)
+
+
+def _igual(a: Path, b: Path) -> bool:
+    """¿Es b el mismo libro que a? Mismo nº de páginas y mismo texto en una muestra (PDF) o mismo contenido de cada entrada (EPUB)."""
+    if a.suffix.lower() == ".epub":
+        with zipfile.ZipFile(a) as za, zipfile.ZipFile(b) as zb:
+            return sorted(za.namelist()) == sorted(zb.namelist()) and all(za.read(n) == zb.read(n) for n in za.namelist())
+    from pypdf import PdfReader
+    ra, rb = PdfReader(str(a)), PdfReader(str(b))
+    n = len(ra.pages)
+    return n == len(rb.pages) and all((ra.pages[i].extract_text() or "") == (rb.pages[i].extract_text() or "") for i in sorted({0, n // 2, n - 1}) if n)
+
+
+def comprimir(rel: str, carpeta: Path | None = None) -> dict:
+    """Reduce el tamaño de un libro de la biblioteca SIN perder nada (mismas páginas, mismo texto, mismas imágenes). Solo sustituye la copia si la nueva es válida y al menos un 2 % menor.
+    Devuelve {rel, antes, despues, estado: 'ok'|'sin_ganancia'|'error', mensaje?}. El original de donde se importó no se toca."""
+    carpeta = Path(carpeta or carpeta_datos()); f = carpeta / "biblioteca" / rel
+    r = {"rel": rel, "antes": f.stat().st_size if f.exists() else 0}
+    tmp = f.with_name(f.name + ".tmp")
+    try:
+        if f.suffix.lower() not in (".pdf", ".epub"):
+            raise ValueError("solo PDF y EPUB")
+        (_comprimir_pdf if f.suffix.lower() == ".pdf" else _comprimir_epub)(f, tmp)
+        if tmp.stat().st_size > .98 * r["antes"]:
+            return {**r, "despues": r["antes"], "estado": "sin_ganancia"}
+        if not _igual(f, tmp):
+            raise ValueError("la versión comprimida no coincide con el original; se deja como estaba")
+        os.replace(tmp, f)
+        return {**r, "despues": f.stat().st_size, "estado": "ok"}
+    except Exception as e:
+        return {**r, "despues": r["antes"], "estado": "error", "mensaje": f"{type(e).__name__}: {e}"}
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def comprimir_todo(carpeta: Path | None = None) -> dict:
+    """Comprime sin pérdida todos los PDF/EPUB de la biblioteca: {n, ahorrado, antes, despues, errores:[…]}."""
+    carpeta = Path(carpeta or carpeta_datos())
+    rs = [comprimir(rel, carpeta) for rel in leer_metadatos(carpeta) if rel.lower().endswith((".pdf", ".epub"))]
+    antes, despues = sum(x["antes"] for x in rs), sum(x["despues"] for x in rs)
+    return {"n": len(rs), "comprimidos": sum(x["estado"] == "ok" for x in rs), "antes": antes, "despues": despues, "ahorrado": antes - despues,
+            "errores": [f"{x['rel']}: {x['mensaje']}" for x in rs if x["estado"] == "error"]}
+
+
 def borrar(rel: str, carpeta: Path | None = None, db: Path | None = None) -> bool:
     """Quita un documento del observatorio: borra SU COPIA (en biblioteca/), su portada, sus metadatos y su texto del índice. El original (de donde se importó) no se toca."""
     carpeta = Path(carpeta or carpeta_datos()); meta = leer_metadatos(carpeta)

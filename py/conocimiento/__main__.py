@@ -18,6 +18,7 @@ i.add_argument("-G", "--genero", help="historia | economia | ensayo | estadistic
 t = sub.add_parser("telescopio", help="busca obras de acceso abierto (Gutenberg, arXiv, OpenAlex, Internet Archive); con --traer N descarga e importa la N-ésima")
 t.add_argument("consulta", nargs="+")
 t.add_argument("--traer", type=int, metavar="N", help="trae a la biblioteca el resultado número N")
+sub.add_parser("comprimir", help="reduce sin perder nada el tamaño de los PDF/EPUB de la biblioteca")
 b = sub.add_parser("buscar", help="busca en todas las colecciones")
 b.add_argument("consulta", nargs="+")
 b.add_argument("-c", "--coleccion", help="codigo | conceptos | teoria | libros | finanzas | notas …")
@@ -37,6 +38,12 @@ elif a.orden == "importar":
     from .importar import importar
     for r in importar([{"ruta": f, "galaxia": a.galaxia, "subtema": a.subtema, "tipo": a.tipo, "genero": a.genero} for f in a.ficheros]):
         print(f"{r['estado']:10} {r['nombre']}  ->  {r.get('galaxia', '')} › {r.get('subtema', '')} ({r.get('tipo', '')})  {r['mensaje']}")
+elif a.orden == "comprimir":
+    from .importar import comprimir_todo
+    r = comprimir_todo()
+    print(f"{r['comprimidos']} de {r['n']} libros comprimidos: {r['antes'] / 1048576:.1f} MB -> {r['despues'] / 1048576:.1f} MB (ahorro {r['ahorrado'] / 1048576:.1f} MB)")
+    for e in r["errores"]:
+        print("  ✗", e)
 elif a.orden == "telescopio":
     from . import telescopio
     r = telescopio.buscar(" ".join(a.consulta))

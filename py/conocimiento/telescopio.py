@@ -1,12 +1,13 @@
 """Telescopio: busca obras de acceso abierto o dominio público, las trae a la biblioteca y las clasifica con los metadatos reales (materias).
 
-Fuentes (solo legales): Project Gutenberg (Gutendex), arXiv, OpenAlex (artículos en abierto con PDF) e Internet Archive
+Fuentes (solo legales): Google Books (catálogo: ficha y enlace; descarga solo si es dominio público), Project Gutenberg (Gutendex), arXiv, OpenAlex (artículos en abierto con PDF) e Internet Archive
 (solo obras con licencia abierta o publicadas hasta 1929). Open Library aporta las materias para clasificar un título.
 Solo lectura de la web con la biblioteca estándar; lo descargado pasa por `importar.importar` como cualquier otro archivo.
 """
 from __future__ import annotations
 
 import json
+import os
 import re
 import urllib.parse
 import urllib.request
@@ -18,7 +19,7 @@ from .importar import _GEN_RE, GENEROS, importar
 
 AGENTE = "ArbolEstadistica/1.0 (biblioteca personal; telescopio)"
 MAX_BYTES = 200 << 20                       # no se descarga nada de más de 200 MB
-FUENTES = ("gutenberg", "arxiv", "openalex", "archive")
+FUENTES = ("googlebooks", "gutenberg", "arxiv", "openalex", "archive")
 _ATOM = "{http://www.w3.org/2005/Atom}"
 
 
@@ -45,10 +46,10 @@ def genero_desde_materias(materias: list[str]) -> str:
     return g if p[g] else "otro"
 
 
-def _item(fuente, id_, titulo, autores, anio, url, formato, licencia, materias, resumen=""):
+def _item(fuente, id_, titulo, autores, anio, url, formato, licencia, materias, resumen="", enlace=""):
     materias = [m for m in dict.fromkeys(materias) if m][:12]
     return {"fuente": fuente, "id": str(id_), "titulo": re.sub(r"\s+", " ", titulo or "").strip(), "autores": [a for a in autores if a][:4], "anio": anio, "url": url,
-            "formato": formato, "licencia": licencia, "materias": materias, "genero": genero_desde_materias(materias + [titulo or ""]), "resumen": resumen[:300]}
+            "formato": formato, "licencia": licencia, "materias": materias, "genero": genero_desde_materias(materias + [titulo or ""]), "resumen": resumen[:300], "enlace": enlace}
 
 
 def _gutenberg(q, n):
@@ -56,7 +57,7 @@ def _gutenberg(q, n):
         f = b.get("formats", {})
         url = next((f[k] for k in f if k.startswith("application/epub+zip")), None)
         if url and not b.get("copyright"):
-            yield _item("gutenberg", b["id"], b["title"], [a["name"] for a in b.get("authors", [])], None, url, "epub", "Dominio público", b.get("subjects", []) + b.get("bookshelves", []))
+            yield _item("gutenberg", b["id"], b["title"], [a["name"] for a in b.get("authors", [])], None, url, "epub", "Dominio público", b.get("subjects", []) + b.get("bookshelves", []), enlace=f"https://www.gutenberg.org/ebooks/{b['id']}")
 
 
 def _arxiv(q, n):
@@ -66,7 +67,7 @@ def _arxiv(q, n):
         if pdf:
             yield _item("arxiv", e.findtext(_ATOM + "id", ""), e.findtext(_ATOM + "title", ""), [a.findtext(_ATOM + "name") for a in e.findall(_ATOM + "author")],
                         int((e.findtext(_ATOM + "published") or "0")[:4]) or None, pdf.replace("http://", "https://"), "pdf", "arXiv (descarga personal)",
-                        [c.get("term") for c in e.findall(_ATOM + "category")], e.findtext(_ATOM + "summary", ""))
+                        [c.get("term") for c in e.findall(_ATOM + "category")], e.findtext(_ATOM + "summary", ""), e.findtext(_ATOM + "id", "").replace("http://", "https://"))
 
 
 def _openalex(q, n):
@@ -75,7 +76,7 @@ def _openalex(q, n):
         loc = w.get("best_oa_location") or {}
         if loc.get("pdf_url"):
             yield _item("openalex", w["id"], w.get("display_name"), [a["author"]["display_name"] for a in w.get("authorships", [])], w.get("publication_year"), loc["pdf_url"], "pdf",
-                        loc.get("license") or "acceso abierto", [c["display_name"] for c in w.get("concepts", [])][:8])
+                        loc.get("license") or "acceso abierto", [c["display_name"] for c in w.get("concepts", [])][:8], enlace=w["id"])
 
 
 def _archive(q, n):
@@ -86,10 +87,25 @@ def _archive(q, n):
         if re.search(r"creativecommons|publicdomain", lic) or 0 < anio <= 1929:     # licencia abierta (CC / dominio público) o publicada hasta 1929
             sub = d.get("subject", [])
             yield _item("archive", d["identifier"], d.get("title", ""), [d["creator"]] if isinstance(d.get("creator"), str) else d.get("creator", []), anio or None, "", "pdf",
-                        lic or "Dominio público (≤ 1929)", [sub] if isinstance(sub, str) else sub)
+                        lic or "Dominio público (≤ 1929)", [sub] if isinstance(sub, str) else sub, enlace="https://archive.org/details/" + d["identifier"])
 
 
-_BUSCADORES = {"gutenberg": _gutenberg, "arxiv": _arxiv, "openalex": _openalex, "archive": _archive}
+def _googlebooks(q, n):
+    """Catálogo de Google Books: ficha, categorías y enlace para verlo. Solo es descargable si Google lo marca como dominio público y da enlace de PDF/EPUB."""
+    r = json.loads(_get("https://www.googleapis.com/books/v1/volumes?" + _q(q=q, maxResults=n, printType="books", **({"key": os.environ["GOOGLE_BOOKS_KEY"]} if os.environ.get("GOOGLE_BOOKS_KEY") else {}))))
+    for v in r.get("items", []):
+        i, a = v.get("volumeInfo", {}), v.get("accessInfo", {})
+        url, formato = "", "web"
+        if a.get("publicDomain"):
+            for ext in ("epub", "pdf"):
+                if a.get(ext, {}).get("isAvailable") and a[ext].get("downloadLink", "").startswith("https://"):
+                    url, formato = a[ext]["downloadLink"], ext
+                    break
+        yield _item("googlebooks", v["id"], i.get("title", "") + (": " + i["subtitle"] if i.get("subtitle") else ""), i.get("authors", []), int(str(i.get("publishedDate") or 0)[:4]) or None,
+                    url, formato, "Dominio público" if url else "Solo vista previa / compra", i.get("categories", []), i.get("description", ""), i.get("infoLink", "").replace("http://", "https://"))
+
+
+_BUSCADORES = {"googlebooks": _googlebooks, "gutenberg": _gutenberg, "arxiv": _arxiv, "openalex": _openalex, "archive": _archive}
 
 
 def buscar(consulta: str, n: int = 6, fuentes=FUENTES) -> dict:
@@ -121,6 +137,8 @@ def _url_archive(identificador: str) -> str:
 
 def traer(item: dict, carpeta: Path = CARPETA) -> dict:
     """Descarga la obra, comprueba que es un PDF/EPUB de verdad y la importa clasificada con el género de sus materias. Devuelve el resultado de importar()."""
+    if not item["url"] and item["fuente"] != "archive":
+        raise ValueError("esta obra solo se puede ver en la web (no es de dominio público): abre el enlace")
     url = item["url"] or _url_archive(item["id"])
     datos = _get(url, binario=True)
     ext = "pdf" if datos[:5] == b"%PDF-" else "epub" if datos[:2] == b"PK" else ""

@@ -11,7 +11,13 @@ from conocimiento import telescopio as t
 ARXIV = """<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>http://arxiv.org/abs/1</id><title>Bayesian regression</title><summary>x</summary>
 <published>2020-01-02T00:00:00Z</published><author><name>A. Gauss</name></author><category term="stat.ME"/>
 <link title="pdf" href="http://arxiv.org/pdf/1"/></entry></feed>"""
+GB = {"items": [
+    {"id": "g1", "volumeInfo": {"title": "Historia", "subtitle": "de la estadística", "authors": ["X"], "publishedDate": "1890-01", "categories": ["History"], "infoLink": "http://books.google.com/g1"},
+     "accessInfo": {"publicDomain": True, "epub": {"isAvailable": True, "downloadLink": "https://books.google.com/g1.epub"}}},
+    {"id": "g2", "volumeInfo": {"title": "Moderno", "infoLink": "http://books.google.com/g2"},
+     "accessInfo": {"publicDomain": False, "pdf": {"isAvailable": True, "downloadLink": "https://books.google.com/g2.pdf"}}}]}
 RESP = {
+    "googleapis.com/books": GB,
     "gutendex": {"results": [{"id": 7, "title": "Essai", "authors": [{"name": "Laplace"}], "subjects": ["Probabilities"], "formats": {"application/epub+zip": "https://g/7.epub"}, "copyright": False},
                              {"id": 8, "title": "Con copyright", "formats": {"application/epub+zip": "https://g/8.epub"}, "copyright": True}]},
     "arxiv": ARXIV,
@@ -33,6 +39,9 @@ def test_buscar_filtra_lo_no_legal_y_tolera_fuentes_caidas(monkeypatch):
     monkeypatch.setattr(t, "_get", falso)
     r = t.buscar("probability")
     por = {x["fuente"]: [y["id"] for y in r["resultados"] if y["fuente"] == x["fuente"]] for x in r["resultados"]}
+    gb = {x["id"]: x for x in r["resultados"] if x["fuente"] == "googlebooks"}
+    assert gb["g1"]["url"].endswith(".epub") and gb["g1"]["enlace"].startswith("https://")      # dominio público: descargable
+    assert gb["g2"]["url"] == "" and gb["g2"]["enlace"]                                        # con copyright: solo la ficha, aunque Google dé un PDF
     assert por["gutenberg"] == ["7"]                                      # el de copyright, fuera
     assert por["openalex"] == ["W2"]                                      # sin PDF abierto, fuera
     assert sorted(por["archive"]) == ["cc", "viejo"]                      # solo licencia abierta o ≤ 1929
@@ -44,6 +53,11 @@ def test_genero_desde_materias():
     assert t.genero_desde_materias(["Bayesian statistics", "Regression analysis"]) == "estadistica"
     assert t.genero_desde_materias(["Rome -- History", "Ancient history"]) == "historia"
     assert t.genero_desde_materias(["zzz qqq"]) == "otro"
+
+
+def test_traer_no_descarga_lo_que_solo_tiene_ficha(tmp_path):
+    with pytest.raises(ValueError, match="solo se puede ver"):
+        t.traer({"fuente": "googlebooks", "id": "g2", "url": "", "titulo": "T"}, tmp_path)
 
 
 def test_get_solo_https():

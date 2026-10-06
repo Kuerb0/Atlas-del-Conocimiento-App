@@ -299,7 +299,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 .telescopio[hidden]{display:none} .app.modo-telescopio .cuerpo{display:none}
 .telescopio{min-height:0;overflow:auto;padding:12px 16px 40px;background:#02030a;color:#dfe6f5;display:flex;flex-direction:column;align-items:center;gap:10px}
 .tel-lista{width:100%;max-width:1040px;display:flex;flex-direction:column;gap:8px} .tel-card{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:10px 12px;border:1px solid #1c2646;border-radius:10px;background:#0b1224}
-.tel-card b{font-size:14px} .tel-meta{color:#8ea0c0;font-size:12.5px;grid-column:1} .tel-card .btn{grid-row:1/3;grid-column:2;align-self:center}
+.tel-card b{font-size:14px} .tel-meta{color:#8ea0c0;font-size:12.5px;grid-column:1} .tel-acc{grid-row:1/3;grid-column:2;align-self:center;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .bib-barra{width:100%;max-width:1040px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .bib-barra input,.bib-barra select,.bib-card select,.bib-card input[type=text]{min-width:0;padding:6px 9px;border:1px solid #2a3558;border-radius:7px;background:#0b1224;color:#e6ecfa;font:inherit;font-size:12.5px}
 .bib-barra [hidden],.imp-resumen [hidden]{display:none!important}
@@ -428,11 +428,11 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
   <section class="biblioteca" id="biblioteca" hidden aria-label="Observatorio">
     <div class="imp-cabeza"><h2>Observatorio</h2><p>Todo lo que has importado. Cambia título, galaxia, género, subtema, tipo o etiquetas: se guarda al momento y el universo se actualiza al volver a él. Al borrar solo se quita la copia del observatorio; el original no se toca.</p></div>
     <div class="bib-barra"><input id="bibQ" type="search" placeholder="Filtrar por título, género, subtema, etiqueta…" aria-label="Filtrar el observatorio"><select id="bibGal" aria-label="Galaxia"></select>
-      <span id="bibN" class="bib-n"></span><button class="btn primario" id="bibAplicar" type="button" hidden>Actualizar el universo ahora</button></div>
+      <span id="bibN" class="bib-n"></span><button class="btn" id="bibComprimir" type="button" title="Reescribe los PDF y EPUB sin perder nada: mismas páginas, mismo texto, mismas imágenes">Comprimir sin pérdida</button><button class="btn primario" id="bibAplicar" type="button" hidden>Actualizar el universo ahora</button></div>
     <div class="bib-lista" id="bibLista"></div>
   </section>
   <section class="telescopio" id="telescopio" hidden aria-label="Telescopio">
-    <div class="imp-cabeza"><h2>Telescopio</h2><p>Busca libros de dominio público (Project Gutenberg, Internet Archive), artículos en abierto (arXiv, OpenAlex) y tráelos a tu biblioteca: se clasifican con las materias reales de la obra. Solo fuentes legales.</p></div>
+    <div class="imp-cabeza"><h2>Telescopio</h2><p>Busca en Google Books (ficha y enlace; descarga solo si es de dominio público), Project Gutenberg, Internet Archive, artículos en abierto (arXiv, OpenAlex) y tráelos a tu biblioteca: se clasifican con las materias reales de la obra. Solo fuentes legales.</p></div>
     <div class="bib-barra"><input id="telQ" type="search" placeholder="Título, autor o tema: «Laplace probability», «Keynes»…" aria-label="Buscar en el telescopio"><button class="btn primario" id="telBuscar" type="button">Buscar</button><span class="bib-n" id="telN" aria-live="polite"></span></div>
     <div class="tel-lista" id="telLista"></div>
   </section>
@@ -1387,12 +1387,13 @@ async function telBuscar() {
   $('#telN').textContent = r.resultados.length + ' resultados' + (e.length ? ' · sin respuesta: ' + e.join(', ') : '');
   $('#telLista').innerHTML = r.resultados.map(function (x, i) {
     return '<div class="tel-card"><b>' + eclEsc(x.titulo) + '</b><span class="tel-meta">' + eclEsc(x.autores.join(', ')) + (x.anio ? ' · ' + x.anio : '') + ' · ' + eclEsc(x.fuente) + ' · ' + eclEsc(x.formato) + ' · ' + eclEsc(x.licencia) + ' · género: ' + eclEsc((IMP_GEN[x.genero] || x.genero)) + '</span>' +
-      '<button class="btn" type="button" data-i="' + i + '">Traer a mi biblioteca</button></div>'; }).join('');
+      '<span class="tel-acc">' + (x.url || x.fuente === 'archive' ? '<button class="btn" type="button" data-i="' + i + '">Traer a mi biblioteca</button>' : '') + (x.enlace ? '<button class="btn" type="button" data-e="' + i + '">Abrir ficha ↗</button>' : '') + '</span></div>'; }).join('');
 }
 var IMP_GEN = {historia: 'Historia', economia: 'Economía y finanzas', ensayo: 'Ensayo y filosofía', estadistica: 'Estadística y matemáticas', ciencia: 'Ciencia y divulgación', novela: 'Novela', biografia: 'Biografía', politica: 'Política y sociedad', tecnologia: 'Tecnología', psicologia: 'Psicología y salud', arte: 'Arte y cultura', otro: 'Otros'};
 $('#telBuscar').onclick = telBuscar;
 $('#telQ').addEventListener('keydown', function (e) { if (e.key === 'Enter') telBuscar(); });
 $('#telLista').addEventListener('click', async function (e) {
+  var o = e.target.closest('button[data-e]'); if (o) { window.pywebview.api.abrir_enlace(tel.lista[+o.dataset.e].enlace); return; }
   var b = e.target.closest('button[data-i]'); if (!b) return; var x = tel.lista[+b.dataset.i], a = window.pywebview.api;
   b.disabled = true; b.textContent = 'Descargando…';
   var r = await a.telescopio_traer(x);
@@ -1463,6 +1464,11 @@ function bibRender() {
 }
 function bibFicha(rel) { return (bib.lista || []).filter(function (x) { return x.rel === rel; })[0]; }
 function bibMarca(card, txt) { var s = card && card.querySelector('.bib-ok'); if (s) { s.textContent = txt; setTimeout(function () { if (s) s.textContent = ''; }, 2200); } }
+$('#bibComprimir').onclick = async function () {
+  var a = impApi(), b = this; if (!a || !a.biblioteca_comprimir) return; b.disabled = true; $('#bibN').textContent = 'Comprimiendo… (puede tardar)';
+  var r = await a.biblioteca_comprimir(); b.disabled = false;
+  $('#bibN').textContent = r.error ? '✗ ' + r.error : r.comprimidos + ' de ' + r.n + ' libros comprimidos: ' + fmtTam(r.antes) + ' → ' + fmtTam(r.despues) + ' (ahorro ' + fmtTam(r.ahorrado) + ')' + (r.errores.length ? ' · ' + r.errores.length + ' con error' : '');
+};
 $('#bibQ').addEventListener('input', function () { bib.filtro = this.value; bibRender(); });
 $('#bibGal').addEventListener('change', function () { bib.gal = this.value; bibRender(); });
 $('#biblioteca').addEventListener('change', async function (ev) {
