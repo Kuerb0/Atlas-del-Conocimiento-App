@@ -23,7 +23,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from . import CARPETA, DB, EXT, RAIZ, _extraer, _norm, indexar
+from . import CARPETA, DB, EXT, RAIZ, _abrir, _extraer, _norm, _prog, indexar
 
 GALAXIAS = {"codigo": "Código", "conceptos": "Conceptos", "demos": "Demos y guías", "finanzas": "Finanzas", "libros": "Libros", "notas": "Notas y enlaces"}
 TIPOS = {"libro": "Libro", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "otro": "Otro"}
@@ -246,6 +246,44 @@ def portada_datauri(carpeta: Path, rel: str) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(f.read_bytes()).decode() if rel and f.is_file() else ""
 
 
+_STOP = set("with from that this their about which edition third second first fourth volume and for the los las del una por con para como mas pero sus book books libro libros".split())
+
+
+def _tokens(texto: str) -> set:
+    return {w for w in re.findall(r"[a-z]{4,}", _norm(str(texto))) if w not in _STOP}
+
+
+def _ruta_correcciones(carpeta: Path | None = None) -> Path:
+    return Path(carpeta or carpeta_datos()) / "biblioteca" / "correcciones.json"
+
+
+def recordar_correccion(m: dict, carpeta: Path | None = None) -> None:
+    """Guarda lo que el usuario fijó a mano (género y subtema) con las palabras del nombre original: una obra parecida que se importe después se clasifica igual."""
+    f = _ruta_correcciones(carpeta)
+    lista = json.loads(f.read_text(encoding="utf-8")) if f.exists() else []
+    nombre = Path(m.get("origen", "")).stem or m.get("titulo", "")
+    nueva = {"titulo": m.get("titulo", ""), "tokens": sorted(_tokens(nombre)), "genero": m.get("genero"), "subtema": m.get("subtema"), "hash": m.get("hash", "")}
+    lista = [c for c in lista if c.get("hash") != nueva["hash"] or not nueva["hash"]] + [nueva]
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps(lista, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def por_correcciones(nombre: str, carpeta: Path | None = None) -> dict | None:
+    """La corrección guardada cuyo nombre se parece al de `nombre` (al menos 2 palabras y la mitad en común), o None."""
+    f = _ruta_correcciones(carpeta)
+    if not f.exists():
+        return None
+    tk = _tokens(nombre)
+    mejor, mj = None, 0.0
+    for c in json.loads(f.read_text(encoding="utf-8")):
+        ct = set(c.get("tokens", []))
+        com = len(tk & ct)
+        j = com / max(len(tk | ct), 1)
+        if com >= 2 and j >= .5 and j > mj:
+            mejor, mj = c, j
+    return mejor
+
+
 def _catalogo() -> dict:
     return json.loads((RAIZ / "conceptos" / "catalogo.json").read_text(encoding="utf-8"))
 
@@ -289,9 +327,10 @@ def _muestra(f: Path, max_pag: int = 12) -> tuple[str, int]:
     return "\n".join(x for _, x, _ in trozos[:30])[:30000], 0
 
 
-def clasificar(ruta: str | Path) -> dict:
+def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
     """Propone galaxia, subtema, tipo y título de un fichero, con el motivo. {'galaxia','subtema','tipo','titulo','motivo','paginas'}"""
     f = Path(ruta)
+    carpeta = Path(carpeta or carpeta_datos())
     texto, paginas = _muestra(f)
     t = " " + _norm(texto[:40000]) + " "
     nombre = _norm(re.sub(r"[_\-.]+", " ", f.stem))
@@ -321,11 +360,15 @@ def clasificar(ruta: str | Path) -> dict:
         galaxia, motivo = "notas", "documento corto o de apuntes"
     if subtema != "General":
         motivo += f"; el tema «{subtema}» puntúa {p}"
+    corr = por_correcciones(f.stem, carpeta)
+    if corr:                                                              # algo parecido que corregiste a mano antes: se clasifica igual
+        genero, subtema = corr["genero"] or genero, corr["subtema"] or subtema
+        motivo += f"; como «{corr['titulo'][:30]}», que corregiste"
     caps, _ = capitulos(f)
     palabras = re.findall(r"[a-z]+", t[:20000])
     es, en = sum(w in _ES for w in palabras), sum(w in _EN for w in palabras)
     h = _sha1(f)
-    dup = next((rel for rel, m in leer_metadatos(carpeta_datos()).items() if m.get("hash") == h), "")
+    dup = next((rel for rel, m in leer_metadatos(carpeta).items() if m.get("hash") == h), "")
     return {"galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "titulo": titulo_corto(f.stem), "titulo_largo": f.stem, "motivo": motivo, "paginas": paginas,
             "tamano": f.stat().st_size, "extension": ext.lstrip("."), "idioma": "es" if es > en else "en" if en else "", "duplicado": dup,
             "vista_previa": re.sub(r"\s+", " ", texto[:1500]).strip()[:380],
@@ -377,11 +420,12 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
                 raise ValueError("no existe el fichero")
             if f.suffix.lower() not in EXT:
                 raise ValueError(f"formato no admitido ({f.suffix or 'sin extensión'}); sirven {', '.join(sorted(EXT))}")
+            _prog(f"Analizando «{f.name[:40]}»", .02)
             h = _sha1(f)
             if h in hashes:
                 salida.append({**r, "estado": "duplicado", "mensaje": f"ya estaba importado ({hashes[h]})"})
                 continue
-            auto = clasificar(f)
+            auto = clasificar(f, carpeta)
             galaxia = d.get("galaxia") if d.get("galaxia") in GALAXIAS else auto["galaxia"]
             subtema = (d.get("subtema") or "").strip() or auto["subtema"]
             tipo = d.get("tipo") if d.get("tipo") in TIPOS else auto["tipo"]
@@ -393,6 +437,7 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
             fin, n = destino / f"{nombre}{f.suffix}", 1
             while fin.exists():
                 n += 1; fin = destino / f"{nombre}_{n}{f.suffix}"
+            _prog(f"Copiando «{f.name[:40]}»", .06)
             shutil.copy2(f, fin)
             rel = fin.relative_to(base).as_posix()
             caps, pags = capitulos(fin)
@@ -403,13 +448,21 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
                 nom = "portadas/" + h[:10] + ".jpg"
                 if portada(fin, base / nom, titulo, genero):
                     meta[rel]["portada"] = nom
-            salida.append({**r, "estado": "ok", "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "destino": str(fin), "mensaje": auto["motivo"]})
+            movido = False
+            if d.get("modo") == "mover" and fin.stat().st_size == f.stat().st_size:     # «mover»: el original desaparece de su carpeta (la copia queda en la biblioteca)
+                try:
+                    f.unlink()
+                    movido = True
+                except OSError:
+                    pass
+            salida.append({**r, "movido": movido, "estado": "ok", "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "destino": str(fin), "mensaje": auto["motivo"]})
         except Exception as e:
             salida.append({**r, "estado": "error", "mensaje": str(e)})
     if any(s["estado"] == "ok" for s in salida):
         base.mkdir(parents=True, exist_ok=True)
         (base / "metadatos.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
         if indexar_ahora:
+            _prog("Indexando el texto…", .1)
             ind = indexar(db or carpeta / "indice.db", {}, carpeta=carpeta)
             sin = set(ind["sin_leer"])
             for s in salida:
@@ -434,7 +487,7 @@ def enriquecer(carpeta: Path | None = None) -> int:
         if len(m.get("titulo", "")) > 60 or " -- " in m.get("titulo", ""):
             m["titulo"] = titulo_corto(m["titulo"]); n += 1
         if "genero" not in m:
-            m["genero"] = clasificar(f)["genero"]; n += 1
+            m["genero"] = clasificar(f, carpeta)["genero"]; n += 1
     if n:
         (carpeta / "biblioteca" / "metadatos.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
     return n
@@ -448,10 +501,101 @@ def reclasificar(carpeta: Path | None = None) -> list[tuple]:
         f = carpeta / "biblioteca" / rel
         if not f.is_file() or not m.get("automatico", False):
             continue
-        c = clasificar(f)
+        c = clasificar(f, carpeta)
         if (c["subtema"], c["genero"]) != (m.get("subtema"), m.get("genero")):
             cambios.append((m.get("titulo", rel)[:40], m.get("subtema"), c["subtema"], m.get("genero"), c["genero"]))
             m["subtema"], m["genero"] = c["subtema"], c["genero"]
     if cambios:
         (carpeta / "biblioteca" / "metadatos.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
     return cambios
+
+
+# ---------- gestionar lo importado (pestaña «Observatorio») ----------
+CAMPOS = ("titulo", "galaxia", "genero", "subtema", "tipo", "etiquetas")
+
+
+def _guardar(carpeta: Path, meta: dict) -> None:
+    base = Path(carpeta) / "biblioteca"
+    base.mkdir(parents=True, exist_ok=True)
+    (base / "metadatos.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def _ficha(carpeta: Path, rel: str, m: dict, con_portada: bool = True) -> dict:
+    f = Path(carpeta) / "biblioteca" / rel
+    return {"rel": rel, "existe": f.is_file(), "titulo": m.get("titulo", ""), "titulo_largo": Path(m.get("origen", "")).stem or m.get("titulo", ""), "galaxia": m.get("galaxia", ""),
+            "genero": m.get("genero", "otro"), "subtema": m.get("subtema", ""), "tipo": m.get("tipo", ""), "etiquetas": m.get("etiquetas", ""), "paginas": m.get("paginas", 0),
+            "capitulos": len(m.get("capitulos", [])), "fecha": m.get("fecha", "")[:10], "automatico": bool(m.get("automatico")), "extension": f.suffix.lstrip(".").lower(),
+            "tamano": f.stat().st_size if f.is_file() else 0, "ruta": str(f), "portada": portada_datauri(carpeta, m.get("portada", "")) if con_portada else ""}
+
+
+def listar(carpeta: Path | None = None) -> list[dict]:
+    """Todo lo importado, ordenado por galaxia y título."""
+    carpeta = Path(carpeta or carpeta_datos())
+    return sorted((_ficha(carpeta, rel, m) for rel, m in leer_metadatos(carpeta).items()), key=lambda x: (x["galaxia"], x["titulo"].lower()))
+
+
+def _galaxia_en_indice(db: Path, ruta: str, galaxia: str) -> None:
+    con = _abrir(Path(db))
+    con.execute("update trozos set coleccion = ? where ruta = ?", (galaxia, ruta))
+    con.execute("update ficheros set coleccion = ? where ruta = ?", (galaxia, ruta))
+    con.commit(); con.close()
+
+
+def editar(rel: str, cambios: dict, carpeta: Path | None = None, db: Path | None = None) -> dict:
+    """Cambia título, galaxia, género, subtema, tipo o etiquetas de un documento importado. El fichero no se mueve; el índice se pone al día y la corrección se recuerda
+    (algo parecido que importes después se clasificará igual). Devuelve la ficha."""
+    carpeta = Path(carpeta or carpeta_datos()); meta = leer_metadatos(carpeta)
+    if rel not in meta:
+        raise KeyError(f"no está en el observatorio: {rel}")
+    m, antes = meta[rel], meta[rel].get("galaxia")
+    for k, v in cambios.items():
+        if k not in CAMPOS:
+            continue
+        v = str(v).strip()
+        if (k == "galaxia" and v not in GALAXIAS) or (k == "genero" and v not in GENEROS) or (k == "tipo" and v not in TIPOS):
+            raise ValueError(f"valor no válido para {k}: {v}")
+        if k == "titulo" and not v:
+            continue
+        m[k] = v
+    m["automatico"] = False
+    _guardar(carpeta, meta)
+    if m.get("galaxia") != antes:
+        _galaxia_en_indice(db or carpeta / "indice.db", str(carpeta / "biblioteca" / rel), m["galaxia"])
+    if {"genero", "subtema"} & set(cambios):
+        recordar_correccion(m, carpeta)
+    return _ficha(carpeta, rel, m)
+
+
+def reclasificar_uno(rel: str, carpeta: Path | None = None, db: Path | None = None) -> dict:
+    """Vuelve a poner en «automático» la galaxia, el género y el subtema de un documento (según el contenido y tus correcciones guardadas). Devuelve la ficha."""
+    carpeta = Path(carpeta or carpeta_datos()); meta = leer_metadatos(carpeta)
+    m, f = meta[rel], carpeta / "biblioteca" / rel
+    c = clasificar(f, carpeta)
+    antes = m.get("galaxia")
+    m["galaxia"], m["genero"], m["subtema"], m["automatico"] = c["galaxia"], c["genero"], c["subtema"], True
+    _guardar(carpeta, meta)
+    if m["galaxia"] != antes:
+        _galaxia_en_indice(db or carpeta / "indice.db", str(f), m["galaxia"])
+    return _ficha(carpeta, rel, m)
+
+
+def borrar(rel: str, carpeta: Path | None = None, db: Path | None = None) -> bool:
+    """Quita un documento del observatorio: borra SU COPIA (en biblioteca/), su portada, sus metadatos y su texto del índice. El original (de donde se importó) no se toca."""
+    carpeta = Path(carpeta or carpeta_datos()); meta = leer_metadatos(carpeta)
+    m = meta.pop(rel, None)
+    if m is None:
+        return False
+    base = carpeta / "biblioteca"
+    f = base / rel
+    for x in (f, base / m["portada"] if m.get("portada") else None):
+        if x is not None:
+            try:
+                x.unlink()
+            except OSError:
+                pass
+    _guardar(carpeta, meta)
+    con = _abrir(Path(db or carpeta / "indice.db"))
+    con.execute("delete from trozos where ruta = ?", (str(f),))
+    con.execute("delete from ficheros where ruta = ?", (str(f),))
+    con.commit(); con.close()
+    return True

@@ -47,6 +47,7 @@ class Api:
 
     def __init__(self) -> None:
         self._cuaderno = None
+        self._job = {"fase": "", "texto": "", "frac": 0.0, "resultado": None}      # la importación en curso (se consulta con estado_trabajo)
 
     def _c(self):
         if self._cuaderno is None:
@@ -90,11 +91,49 @@ class Api:
             return {"error": f"{type(e).__name__}: {e}"}
 
     def importar_archivos(self, items):
+        """Importa en segundo plano (un PDF grande tarda): vuelve enseguida y el visor consulta estado_trabajo() hasta que acabe."""
+        import threading
+        if self._job.get("fase") == "trabajando":
+            return {"error": "ya hay una importación en curso"}
+        self._job = {"fase": "trabajando", "texto": "Empezando…", "frac": 0.0, "resultado": None}
+        items = list(items)
+
+        def correr():
+            import conocimiento
+            from conocimiento import importar
+            conocimiento.PROGRESO = lambda txt, fr: self._job.update(texto=txt, frac=(.1 + .85 * fr) if txt.startswith("Leyendo") else fr)
+            try:
+                self._job.update(resultado=importar.importar(items))
+            except Exception as e:
+                self._job.update(resultado={"error": f"{type(e).__name__}: {e}"})
+            finally:
+                conocimiento.PROGRESO = None
+                self._job.update(fase="fin", frac=1.0)
+        threading.Thread(target=correr, daemon=True).start()
+        return {"ok": True}
+
+    def estado_trabajo(self):
+        return dict(self._job)
+
+    # ---- biblioteca: gestionar lo importado ----
+    def _bib(self, nombre, *args):
         try:
             from conocimiento import importar
-            return importar.importar(list(items))
+            return getattr(importar, nombre)(*args)
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}
+
+    def biblioteca_listar(self):
+        return self._bib("listar")
+
+    def biblioteca_editar(self, rel, cambios):
+        return self._bib("editar", str(rel), dict(cambios))
+
+    def biblioteca_reclasificar(self, rel):
+        return self._bib("reclasificar_uno", str(rel))
+
+    def biblioteca_borrar(self, rel):
+        return self._bib("borrar", str(rel))
 
     def actualizar_visor(self):
         """Regenera visor_arbol.html (con lo recién importado) para que el universo lo incluya; el visor se recarga después."""
@@ -123,11 +162,11 @@ class Api:
         except Exception:
             return {}
 
-    def buscar_conocimiento(self, consulta, n=12, coleccion=None):
+    def buscar_conocimiento(self, consulta, n=12, coleccion=None, genero=None):
         """Gestor de conocimiento (py/conocimiento): los mejores trozos de código, conceptos, teoría, libros, finanzas y notas."""
         try:
             import conocimiento
-            return {"resultados": conocimiento.buscar(str(consulta), coleccion or None, int(n))}
+            return {"resultados": conocimiento.buscar(str(consulta), coleccion or None, int(n), genero=genero or None)}
         except FileNotFoundError as e:
             return {"error": str(e)}
         except Exception as e:

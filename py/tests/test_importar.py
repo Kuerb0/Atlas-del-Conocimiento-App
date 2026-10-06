@@ -183,3 +183,65 @@ def test_el_visor_tiene_iconos_en_el_buscador_y_animaciones_al_buscar():
     html = cv.ensamblar(cv.construir())
     for pieza in ("iconoNodo", "iconoRes", "SVG_PY", 'class="ico-t sig"', "enfocar: function", "cerebro.enfocar(", "flex:1 1 480px"):
         assert pieza in html
+
+
+def _nota(tmp_path, nombre, texto):
+    f = tmp_path / nombre
+    f.write_text(texto, encoding="utf-8")
+    return f
+
+
+def test_biblioteca_editar_cambia_la_galaxia_en_el_indice_y_recuerda_la_correccion(tmp_path):
+    c, db = tmp_path / "datos", tmp_path / "datos" / "i.db"
+    f = _nota(tmp_path, "Ancient_Rome_Collapse_Empire.txt", "history of the roman empire and its wars. " * 40)
+    r = imp.importar([f], carpeta=c, db=db)[0]
+    rel = next(iter(imp.leer_metadatos(c)))
+    ficha = imp.editar(rel, {"galaxia": "finanzas", "genero": "economia", "subtema": "Historia económica", "titulo": "Roma y su economía"}, carpeta=c, db=db)
+    assert ficha["galaxia"] == "finanzas" and ficha["genero"] == "economia" and ficha["titulo"] == "Roma y su economía" and ficha["automatico"] is False
+    assert k.buscar("roman empire", coleccion="finanzas", db=db) and not k.buscar("roman empire", coleccion=r["galaxia"], db=db)    # el índice sigue a la galaxia
+    assert k.buscar("roman empire", genero="economia", db=db) and not k.buscar("roman empire", genero="historia", db=db)         # y el filtro por género
+    g = _nota(tmp_path, "Ancient_Rome_Collapse_Empire_segunda_parte.txt", "otra cosa distinta " * 40)
+    assert imp.clasificar(g, c)["genero"] == "economia" and "corregiste" in imp.clasificar(g, c)["motivo"]                              # algo parecido se clasifica como corregiste
+    try:
+        imp.editar(rel, {"galaxia": "marte"}, carpeta=c, db=db); assert False
+    except ValueError:
+        pass
+
+
+def test_biblioteca_borrar_quita_la_copia_pero_no_el_original(tmp_path):
+    c, db = tmp_path / "datos", tmp_path / "datos" / "i.db"
+    f = _nota(tmp_path, "apunte_borrable.txt", "texto sobre el unicornio morado " * 30)
+    imp.importar([f], carpeta=c, db=db)
+    rel = next(iter(imp.leer_metadatos(c)))
+    copia = c / "biblioteca" / rel
+    assert copia.is_file() and k.buscar("unicornio", db=db) and imp.listar(c)[0]["rel"] == rel
+    assert imp.borrar(rel, carpeta=c, db=db) is True
+    assert not copia.exists() and f.exists() and not imp.leer_metadatos(c) and not k.buscar("unicornio", db=db)
+    assert imp.borrar(rel, carpeta=c, db=db) is False
+
+
+def test_importar_mover_quita_el_original_y_avisa_del_progreso(tmp_path):
+    c, db = tmp_path / "datos", tmp_path / "datos" / "i.db"
+    f = _nota(tmp_path, "para_mover.txt", "contenido movible " * 30)
+    g = _nota(tmp_path, "para_copiar.txt", "contenido copiable " * 30)
+    avisos = []
+    k.PROGRESO = lambda txt, fr: avisos.append((txt, fr))
+    try:
+        r = imp.importar([{"ruta": f, "modo": "mover"}, {"ruta": g}], carpeta=c, db=db)
+    finally:
+        k.PROGRESO = None
+    assert r[0]["movido"] is True and not f.exists() and r[1]["movido"] is False and g.exists()
+    assert any("Copiando" in a for a, _ in avisos) and any("Indexando" in a for a, _ in avisos)
+
+
+def test_el_visor_tiene_biblioteca_ambitos_de_busqueda_y_progreso():
+    import construir_visor as cv
+    html = cv.ensamblar(cv.construir())
+    for pieza in ('id="pestBiblioteca"', "bibTarjeta", "biblioteca_borrar", "parseAmbito", "mostrarAtajos", "Buscando en tu conocimiento", "estado_trabajo", 'id="gModo"'[:0] + "gModo", "li._accion"[:0] + "_accion"):
+        assert pieza in html
+
+
+def test_la_pestana_se_llama_observatorio():
+    import construir_visor as cv
+    html = cv.ensamblar(cv.construir())
+    assert "🔭 Observatorio" in html and "<h2>Observatorio</h2>" in html and "📚 Biblioteca" not in html

@@ -26,6 +26,22 @@ DB = CARPETA / "indice.db"
 EXT = {".md", ".txt", ".pdf", ".epub", ".docx"}
 
 
+PROGRESO = None                                                  # función(texto, fracción 0-1): la pone quien quiera ver el avance (la app, mientras importa un PDF grande)
+
+
+def _prog(texto: str, frac: float) -> None:
+    if PROGRESO:
+        try:
+            PROGRESO(texto, frac)
+        except Exception:
+            pass
+
+
+def _metadatos(carpeta: Path) -> dict:
+    f = Path(carpeta) / "biblioteca" / "metadatos.json"
+    return json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+
+
 def _norm(s: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFKD", s.lower()) if not unicodedata.combining(c))
 
@@ -66,8 +82,11 @@ def _pdf(f: Path):
     except ImportError:
         return None                                          # sin pypdf no se marca como indexado: se reintenta al instalarlo
     out = []
-    for i, pag in enumerate(PdfReader(str(f)).pages):
+    paginas = PdfReader(str(f)).pages
+    for i, pag in enumerate(paginas):
         out += _trocear(pag.extract_text() or "", f.stem, f"p. {i + 1}")
+        if i % 8 == 0:
+            _prog(f"Leyendo «{f.stem[:40]}»: página {i + 1} de {len(paginas)}", (i + 1) / len(paginas))
     return out
 
 
@@ -154,9 +173,11 @@ def _unidades(fuentes: dict, carpeta: Path = CARPETA):
         yield "teoria", f
     base = Path(carpeta) / "biblioteca"                       # lo importado con el importador: biblioteca/<galaxia>/<subtema>/fichero
     if base.is_dir():
+        meta = _metadatos(carpeta)
         for f in sorted(base.rglob("*")):
             if f.is_file() and f.suffix.lower() in EXT and f.relative_to(base).parts[0] != f.name:
-                yield f.relative_to(base).parts[0], f
+                rel = f.relative_to(base)
+                yield (meta.get(rel.as_posix(), {}).get("galaxia") or rel.parts[0]), f
     for col, carpetas in fuentes.items():
         for c in carpetas:
             if not Path(c).is_dir():
@@ -182,6 +203,7 @@ def indexar(db: Path = DB, fuentes: dict | None = None, carpeta: Path = CARPETA)
         if fila and fila[0] == huella:
             r["iguales"] += 1
             continue
+        _prog(f"Indexando {f.name[:50]}", 0.0)
         try:
             trozos = _extraer(col, f)
         except Exception as e:                               # un PDF cifrado o un .py roto no debe parar el resto
@@ -226,15 +248,16 @@ def _portada_cache(base: Path, rel: str) -> str:
     return _PORTADAS[rel]
 
 
-def buscar(consulta: str, coleccion: str | None = None, n: int = 10, db: Path = DB) -> list[dict]:
-    """Mejores `n` trozos para la consulta, por BM25 (el título pesa 8×). Cada resultado: coleccion, titulo, ubicacion, ruta, fragmento."""
+def buscar(consulta: str, coleccion: str | None = None, n: int = 10, db: Path = DB, genero: str | None = None) -> list[dict]:
+    """Mejores `n` trozos para la consulta, por BM25 (el título pesa 8×); `genero` limita a lo importado con ese género. Cada resultado: coleccion, titulo, ubicacion, ruta, fragmento."""
     if not Path(db).exists():
         raise FileNotFoundError("no hay índice: ejecuta primero `python -m conocimiento indexar`")
     con = _abrir(Path(db))
     sql = ("select coleccion, titulo, ubicacion, ruta, snippet(trozos, 1, '«', '»', ' … ', 24) from trozos where trozos match ?"
            + (" and coleccion = ?" if coleccion else "") + " order by bm25(trozos, 8.0, 1.0) limit ?")
+    n_sql = n * 8 if genero else n                                 # con filtro de género se piden más y se recorta después
     for expr in _expresiones(con, consulta):
-        filas = con.execute(sql, (expr, *([coleccion] if coleccion else []), n)).fetchall()
+        filas = con.execute(sql, (expr, *([coleccion] if coleccion else []), n_sql)).fetchall()
         if filas:
             break
     else:
@@ -252,9 +275,11 @@ def buscar(consulta: str, coleccion: str | None = None, n: int = 10, db: Path = 
         r.update(subtema=(m or {}).get("subtema", ""), tipo=(m or {}).get("tipo", ""), etiquetas=(m or {}).get("etiquetas", ""))
         if (m or {}).get("portada"):
             r["portada"] = _portada_cache(base, m["portada"])
+        if genero and (m or {}).get("genero") != genero:
+            continue
         r["interno"] = m is None and (r["coleccion"] in ("codigo", "teoria") or r["ruta"].endswith("catalogo.json"))   # código, teoría y catálogo del propio árbol: no son ficheros que abrir
         out.append(r)
-    return out
+    return out[:n]
 
 
 def estado(db: Path = DB) -> list[tuple]:
