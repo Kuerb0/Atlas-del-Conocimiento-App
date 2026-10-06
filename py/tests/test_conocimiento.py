@@ -26,6 +26,14 @@ def test_indexa_busca_y_es_incremental(tmp_path):
     assert k.buscar("duracion", coleccion="codigo", db=db) == [] or all(x["coleccion"] == "codigo" for x in k.buscar("duracion", "codigo", db=db))
 
 
+def test_filtra_por_tipo_de_archivo(tmp_path):
+    fuentes, db = _montar(tmp_path)
+    k.indexar(db, fuentes)
+    assert {Path(x["ruta"]).suffix for x in k.buscar("frontera eficiente", "finanzas", db=db, formato="md")} == {".md"}
+    assert [Path(x["ruta"]).suffix for x in k.buscar("duracion", "finanzas", db=db, formato=".docx")] == [".docx"]
+    assert k.buscar("duracion", "finanzas", db=db, formato="pdf") == []
+
+
 def test_codigo_conceptos_y_sinonimos(tmp_path):
     db = tmp_path / "i.db"; k.indexar(db, {})
     assert any(x["titulo"] == "tabla_odds_ratios" for x in k.buscar("odds ratios tabla", "codigo", 5, db))

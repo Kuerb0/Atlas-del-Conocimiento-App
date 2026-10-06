@@ -16,9 +16,12 @@ i.add_argument("-s", "--subtema", help="p. ej. «Inferencia y contrastes» (por 
 i.add_argument("-t", "--tipo", help="libro | articulo | apuntes | nota | otro (por defecto, automático)")
 i.add_argument("-G", "--genero", help="historia | economia | ensayo | estadistica | ciencia | novela | biografia | politica | tecnologia | psicologia | arte | otro (por defecto, automático)")
 t = sub.add_parser("telescopio", help="busca obras de acceso abierto (Gutenberg, arXiv, OpenAlex, Internet Archive); con --traer N descarga e importa la N-ésima")
-t.add_argument("consulta", nargs="+")
+t.add_argument("consulta", nargs="*", help="palabras sueltas (opcional si das título o autor)")
+t.add_argument("-T", "--titulo", default="")
+t.add_argument("-a", "--autor", default="")
+t.add_argument("--tipo", choices=["todo", "libro", "articulo"], default="todo", help="libro: Google Books, Open Library, Gutenberg, Internet Archive; articulo: arXiv, OpenAlex")
+t.add_argument("--formato", choices=["", "pdf", "epub"], default="", help="solo lo descargable en ese formato")
 t.add_argument("--traer", type=int, metavar="N", help="trae a la biblioteca el resultado número N")
-sub.add_parser("comprimir", help="reduce sin perder nada el tamaño de los PDF/EPUB de la biblioteca")
 b = sub.add_parser("buscar", help="busca en todas las colecciones")
 b.add_argument("consulta", nargs="+")
 b.add_argument("-c", "--coleccion", help="codigo | conceptos | teoria | libros | finanzas | notas …")
@@ -38,15 +41,9 @@ elif a.orden == "importar":
     from .importar import importar
     for r in importar([{"ruta": f, "galaxia": a.galaxia, "subtema": a.subtema, "tipo": a.tipo, "genero": a.genero} for f in a.ficheros]):
         print(f"{r['estado']:10} {r['nombre']}  ->  {r.get('galaxia', '')} › {r.get('subtema', '')} ({r.get('tipo', '')})  {r['mensaje']}")
-elif a.orden == "comprimir":
-    from .importar import comprimir_todo
-    r = comprimir_todo()
-    print(f"{r['comprimidos']} de {r['n']} libros comprimidos: {r['antes'] / 1048576:.1f} MB -> {r['despues'] / 1048576:.1f} MB (ahorro {r['ahorrado'] / 1048576:.1f} MB)")
-    for e in r["errores"]:
-        print("  ✗", e)
 elif a.orden == "telescopio":
     from . import telescopio
-    r = telescopio.buscar(" ".join(a.consulta))
+    r = telescopio.buscar(" ".join(a.consulta), titulo=a.titulo, autor=a.autor, tipo=a.tipo, formato=a.formato)
     for i, x in enumerate(r["resultados"], 1):
         print(f"{i:2}. [{x['fuente']}] {x['titulo'][:80]} — {', '.join(x['autores'][:2])} ({x['anio'] or '?'}) · {x['formato']} · {x['licencia']} · género: {x['genero']}")
     for f, e in r["errores"].items():

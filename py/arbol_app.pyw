@@ -132,10 +132,6 @@ class Api:
     def biblioteca_reclasificar(self, rel):
         return self._bib("reclasificar_uno", str(rel))
 
-    def biblioteca_comprimir(self):
-        """Comprime sin pérdida todos los libros de la biblioteca (tarda según el tamaño)."""
-        return self._bib("comprimir_todo")
-
     def biblioteca_borrar(self, rel):
         return self._bib("borrar", str(rel))
 
@@ -160,10 +156,10 @@ class Api:
             return {"error": f"{type(e).__name__}: {e}"}
 
     # ---- telescopio (pestaña «Telescopio»): ver py/conocimiento/telescopio.py ----
-    def telescopio_buscar(self, consulta):
+    def telescopio_buscar(self, consulta="", titulo="", autor="", tipo="todo", formato=""):
         try:
             from conocimiento import telescopio
-            return telescopio.buscar(str(consulta))
+            return telescopio.buscar(str(consulta), titulo=str(titulo), autor=str(autor), tipo=str(tipo), formato=str(formato))
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}
 
@@ -198,11 +194,11 @@ class Api:
         except Exception:
             return {}
 
-    def buscar_conocimiento(self, consulta, n=12, coleccion=None, genero=None):
+    def buscar_conocimiento(self, consulta, n=12, coleccion=None, genero=None, formato=None):
         """Gestor de conocimiento (py/conocimiento): los mejores trozos de código, conceptos, teoría, libros, finanzas y notas."""
         try:
             import conocimiento
-            return {"resultados": conocimiento.buscar(str(consulta), coleccion or None, int(n), genero=genero or None)}
+            return {"resultados": conocimiento.buscar(str(consulta), coleccion or None, int(n), genero=genero or None, formato=formato or None)}
         except FileNotFoundError as e:
             return {"error": str(e)}
         except Exception as e:

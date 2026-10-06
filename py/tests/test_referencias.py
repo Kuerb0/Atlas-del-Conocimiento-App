@@ -29,7 +29,6 @@ def test_referencia_sin_archivo_y_restauracion(tmp_path):
     assert len(meta) == 1
     ficha = im.listar(k)[0]
     assert ficha["existe"] is False and ficha["galaxia"] == "libros"
-    assert im.comprimir_todo(k)["n"] == 0                                    # lo que no está no se comprime ni da error
 
     # al importar el mismo archivo se restaura en su sitio, sin duplicado
     r2 = im.importar([orig], k, db=tmp_path / "i.db")[0]

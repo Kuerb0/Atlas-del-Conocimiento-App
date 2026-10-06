@@ -382,7 +382,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
     </nav>
     <div class="search">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-      <input id="q" type="search" placeholder="Buscar…  ( / )   ·   acota con  libros:  código:  historia:  vídeo:" autocomplete="off" spellcheck="false" aria-label="Buscar">
+      <input id="q" type="search" placeholder="Buscar…  ( / )   ·   acota con  libros:  pdf:  epub:  historia:  vídeo:" autocomplete="off" spellcheck="false" aria-label="Buscar">
       <ul id="resultados" class="resultados" role="listbox" hidden></ul>
     </div>
     <div class="tools">
@@ -428,12 +428,12 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
   <section class="biblioteca" id="biblioteca" hidden aria-label="Observatorio">
     <div class="imp-cabeza"><h2>Observatorio</h2><p>Todo lo que has importado. Cambia título, galaxia, género, subtema, tipo o etiquetas: se guarda al momento y el universo se actualiza al volver a él. Al borrar solo se quita la copia del observatorio; el original no se toca.</p></div>
     <div class="bib-barra"><input id="bibQ" type="search" placeholder="Filtrar por título, género, subtema, etiqueta…" aria-label="Filtrar el observatorio"><select id="bibGal" aria-label="Galaxia"></select>
-      <span id="bibN" class="bib-n"></span><button class="btn" id="bibComprimir" type="button" title="Reescribe los PDF y EPUB sin perder nada: mismas páginas, mismo texto, mismas imágenes">Comprimir sin pérdida</button><button class="btn primario" id="bibAplicar" type="button" hidden>Actualizar el universo ahora</button></div>
+      <span id="bibN" class="bib-n"></span><button class="btn primario" id="bibAplicar" type="button" hidden>Actualizar el universo ahora</button></div>
     <div class="bib-lista" id="bibLista"></div>
   </section>
   <section class="telescopio" id="telescopio" hidden aria-label="Telescopio">
     <div class="imp-cabeza"><h2>Telescopio</h2><p>Busca en Google Books (ficha y enlace; descarga solo si es de dominio público), Project Gutenberg, Internet Archive, artículos en abierto (arXiv, OpenAlex) y tráelos a tu biblioteca: se clasifican con las materias reales de la obra. Solo fuentes legales.</p></div>
-    <div class="bib-barra"><input id="telQ" type="search" placeholder="Título, autor o tema: «Laplace probability», «Keynes»…" aria-label="Buscar en el telescopio"><button class="btn primario" id="telBuscar" type="button">Buscar</button><span class="bib-n" id="telN" aria-live="polite"></span></div>
+    <div class="bib-barra"><label class="ecl-nota" for="telTipo">Qué buscamos</label><select id="telTipo" aria-label="Qué buscamos"><option value="todo">Todo</option><option value="libro">Un libro</option><option value="articulo">Un artículo</option></select><input id="telTit" type="search" placeholder="Título" aria-label="Título" hidden><input id="telAut" type="search" placeholder="Autor" aria-label="Autor" hidden><input id="telQ" type="search" placeholder="Tema o palabras: «Laplace probability», «Keynes»…" aria-label="Palabras para buscar en el telescopio"><select id="telFmt" aria-label="Tipo de archivo"><option value="">Cualquier archivo</option><option value="pdf">Solo PDF</option><option value="epub">Solo EPUB</option></select><button class="btn primario" id="telBuscar" type="button">Buscar</button><span class="bib-n" id="telN" aria-live="polite"></span></div>
     <div class="tel-lista" id="telLista"></div>
   </section>
   <section class="eclipses" id="eclipses" hidden aria-label="Eclipses">
@@ -751,8 +751,8 @@ var resultados = [], listaVista = [], idxRes = -1;
 var ALIAS_AMBITO = {libros: {g: 'libros'}, libro: {g: 'libros'}, codigo: {g: 'codigo'}, 'código': {g: 'codigo'}, conceptos: {g: 'conceptos'}, concepto: {g: 'conceptos'}, demos: {g: 'demos'}, demo: {g: 'demos'},
   finanzas: {g: 'finanzas'}, notas: {g: 'notas'}, nota: {g: 'notas'}, historia: {ge: 'historia'}, economia: {ge: 'economia'}, 'economía': {ge: 'economia'}, ensayo: {ge: 'ensayo'}, filosofia: {ge: 'ensayo'}, 'filosofía': {ge: 'ensayo'},
   estadistica: {ge: 'estadistica'}, 'estadística': {ge: 'estadistica'}, ciencia: {ge: 'ciencia'}, novela: {ge: 'novela'}, biografia: {ge: 'biografia'}, 'biografía': {ge: 'biografia'}, politica: {ge: 'politica'}, 'política': {ge: 'politica'},
-  tecnologia: {ge: 'tecnologia'}, 'tecnología': {ge: 'tecnologia'}, psicologia: {ge: 'psicologia'}, 'psicología': {ge: 'psicologia'}, arte: {ge: 'arte'}, video: {video: true}, 'vídeo': {video: true}};
-var ATAJOS = ['libros:', 'código:', 'conceptos:', 'demos:', 'notas:', 'finanzas:', 'vídeo:', 'historia:', 'economía:', 'ensayo:', 'ciencia:', 'estadística:', 'novela:'];
+  tecnologia: {ge: 'tecnologia'}, 'tecnología': {ge: 'tecnologia'}, psicologia: {ge: 'psicologia'}, 'psicología': {ge: 'psicologia'}, arte: {ge: 'arte'}, video: {video: true}, 'vídeo': {video: true}, pdf: {fmt: 'pdf'}, epub: {fmt: 'epub'}, docx: {fmt: 'docx'}, md: {fmt: 'md'}, txt: {fmt: 'txt'}};
+var ATAJOS = ['libros:', 'código:', 'conceptos:', 'demos:', 'notas:', 'finanzas:', 'vídeo:', 'pdf:', 'epub:', 'historia:', 'economía:', 'ensayo:', 'ciencia:', 'estadística:', 'novela:'];
 var ambito = {}, activa = false;
 function parseAmbito(q) {        /* «libros: historia: roma» -> ámbito {g: libros, ge: historia} y texto «roma» */
   var amb = {}, rest = q, m, re = /^\s*([a-záéíóúñ]+):\s*/i;
@@ -760,14 +760,14 @@ function parseAmbito(q) {        /* «libros: historia: roma» -> ámbito {g: li
   return {ambito: amb, texto: rest.trim()};
 }
 function etiquetaAmbito() {
-  var p = []; if (ambito.g && GAL[ambito.g]) p.push(GAL[ambito.g].nombre); if (ambito.ge) p.push(GENEROS_NOM[ambito.ge]); if (ambito.video) p.push('con vídeo'); return p.join(' · ');
+  var p = []; if (ambito.g && GAL[ambito.g]) p.push(GAL[ambito.g].nombre); if (ambito.ge) p.push(GENEROS_NOM[ambito.ge]); if (ambito.video) p.push('con vídeo'); if (ambito.fmt) p.push('archivos ' + ambito.fmt.toUpperCase()); return p.join(' · ');
 }
 function buscar() {
   var pq = parseAmbito($('#q').value.trim()); ambito = pq.ambito; soloVideo = !!ambito.video; query = pq.texto; activa = !!(query || Object.keys(ambito).length);
   var tokens = norm(query).split(/\s+/).filter(Boolean);
   coincide = {}; conCoincidencia = {}; resultados = [];
   hojas.forEach(function (h) {
-    var okSas = (!soloSas || (h.sas && h.sas !== '—' && h.sas.trim() !== '')) && (!soloHuecos || esHueco(h)) && (!soloAlta || h.prioridad === 'alta') && (!soloVideo || h.video);
+    var okSas = (!soloSas || (h.sas && h.sas !== '—' && h.sas.trim() !== '')) && (!soloHuecos || esHueco(h)) && (!soloAlta || h.prioridad === 'alta') && (!soloVideo || h.video) && !ambito.fmt;
     var sc = tokens.length ? puntuar(h, tokens) : 1;
     if (okSas && (!ambito.g || galaxiaDe(h).id === ambito.g) && (!ambito.ge || h.genero === ambito.ge) && sc > 0) { coincide[h.id] = sc; resultados.push({n: h, s: sc});
       for (var p = h.parent; p; p = p.parent) conCoincidencia[p.id] = (conCoincidencia[p.id] || 0) + 1; }
@@ -814,9 +814,9 @@ function conocimiento(q) {
   if (!q) { resK = {}; luces(); }
   if (!q || !hayPython() || !window.pywebview.api.buscar_conocimiento) return;
   var ulb = $('#resultados'); if (!ulb.querySelector('.k')) { var ind = document.createElement('li'); ind.className = 'sec vacio k'; ind.innerHTML = '<span class="spin"></span>Buscando en tu conocimiento…'; ulb.appendChild(ind); ulb.hidden = false; }
-  var colAmb = ambito.g && ['libros', 'notas', 'finanzas'].indexOf(ambito.g) >= 0 ? ambito.g : null, genAmb = ambito.ge || null;
+  var colAmb = ambito.g && ['libros', 'notas', 'finanzas'].indexOf(ambito.g) >= 0 ? ambito.g : null, genAmb = ambito.ge || null, fmtAmb = ambito.fmt || null;
   temporizadorK = setTimeout(async function () {
-    var r = await window.pywebview.api.buscar_conocimiento(q, 12, colAmb || coleccionK || null, genAmb);
+    var r = await window.pywebview.api.buscar_conocimiento(q, 12, colAmb || coleccionK || null, genAmb, fmtAmb);
     if (q !== query) return;                                   // ya se escribió otra cosa
     var ul = $('#resultados'); Array.prototype.forEach.call(ul.querySelectorAll('.k'), function (e) { e.remove(); });
     var li = document.createElement('li'); li.className = 'sec vacio k'; ul.appendChild(li);
@@ -1380,8 +1380,8 @@ var tel = {lista: []};
 async function telBuscar() {
   var a = window.pywebview && window.pywebview.api, q = $('#telQ').value.trim();
   if (!a || !a.telescopio_buscar) { $('#telN').textContent = 'El telescopio funciona desde la app («Árbol de la estadística» del Escritorio).'; return; }
-  if (!q) return; $('#telN').textContent = 'Buscando…'; $('#telBuscar').disabled = true;
-  var r = await a.telescopio_buscar(q); $('#telBuscar').disabled = false;
+  var tit = $('#telTit').value.trim(), aut = $('#telAut').value.trim(); if (!q && !tit && !aut) return; $('#telN').textContent = 'Buscando…'; $('#telBuscar').disabled = true;
+  var r = await a.telescopio_buscar(q, tit, aut, $('#telTipo').value, $('#telFmt').value); $('#telBuscar').disabled = false;
   if (r.error) { $('#telN').textContent = r.error; return; }
   tel.lista = r.resultados; var e = Object.keys(r.errores);
   $('#telN').textContent = r.resultados.length + ' resultados' + (e.length ? ' · sin respuesta: ' + e.map(function (k) { return k + ' (' + String(r.errores[k]).replace(/^\w+: /, '').slice(0, 60) + ')'; }).join('; ') : '');
@@ -1391,6 +1391,8 @@ async function telBuscar() {
 }
 var IMP_GEN = {historia: 'Historia', economia: 'Economía y finanzas', ensayo: 'Ensayo y filosofía', estadistica: 'Estadística y matemáticas', ciencia: 'Ciencia y divulgación', novela: 'Novela', biografia: 'Biografía', politica: 'Política y sociedad', tecnologia: 'Tecnología', psicologia: 'Psicología y salud', arte: 'Arte y cultura', otro: 'Otros'};
 $('#telBuscar').onclick = telBuscar;
+$('#telTipo').onchange = function () { var c = this.value === 'todo'; $('#telTit').hidden = c; $('#telAut').hidden = c; (c ? $('#telQ') : $('#telTit')).focus(); };
+['#telTit', '#telAut'].forEach(function (s) { $(s).addEventListener('keydown', function (e) { if (e.key === 'Enter') telBuscar(); }); });
 $('#telQ').addEventListener('keydown', function (e) { if (e.key === 'Enter') telBuscar(); });
 $('#telLista').addEventListener('click', async function (e) {
   var o = e.target.closest('button[data-e]'); if (o) { window.pywebview.api.abrir_enlace(tel.lista[+o.dataset.e].enlace); return; }
@@ -1464,11 +1466,6 @@ function bibRender() {
 }
 function bibFicha(rel) { return (bib.lista || []).filter(function (x) { return x.rel === rel; })[0]; }
 function bibMarca(card, txt) { var s = card && card.querySelector('.bib-ok'); if (s) { s.textContent = txt; setTimeout(function () { if (s) s.textContent = ''; }, 2200); } }
-$('#bibComprimir').onclick = async function () {
-  var a = impApi(), b = this; if (!a || !a.biblioteca_comprimir) return; b.disabled = true; $('#bibN').textContent = 'Comprimiendo… (puede tardar)';
-  var r = await a.biblioteca_comprimir(); b.disabled = false;
-  $('#bibN').textContent = r.error ? '✗ ' + r.error : r.comprimidos + ' de ' + r.n + ' libros comprimidos: ' + fmtTam(r.antes) + ' → ' + fmtTam(r.despues) + ' (ahorro ' + fmtTam(r.ahorrado) + ')' + (r.errores.length ? ' · ' + r.errores.length + ' con error' : '');
-};
 $('#bibQ').addEventListener('input', function () { bib.filtro = this.value; bibRender(); });
 $('#bibGal').addEventListener('change', function () { bib.gal = this.value; bibRender(); });
 $('#biblioteca').addEventListener('change', async function (ev) {

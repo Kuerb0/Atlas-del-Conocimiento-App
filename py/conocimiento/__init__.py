@@ -249,14 +249,15 @@ def _portada_cache(base: Path, rel: str) -> str:
     return _PORTADAS[rel]
 
 
-def buscar(consulta: str, coleccion: str | None = None, n: int = 10, db: Path = DB, genero: str | None = None) -> list[dict]:
-    """Mejores `n` trozos para la consulta, por BM25 (el título pesa 8×); `genero` limita a lo importado con ese género. Cada resultado: coleccion, titulo, ubicacion, ruta, fragmento."""
+def buscar(consulta: str, coleccion: str | None = None, n: int = 10, db: Path = DB, genero: str | None = None, formato: str | None = None) -> list[dict]:
+    """Mejores `n` trozos para la consulta, por BM25 (el título pesa 8×); `genero` limita a lo importado con ese género y `formato` (pdf, epub, docx, md, txt) al tipo de archivo. Cada resultado: coleccion, titulo, ubicacion, ruta, fragmento."""
     if not Path(db).exists():
         raise FileNotFoundError("no hay índice: ejecuta primero `python -m conocimiento indexar`")
     con = _abrir(Path(db))
     sql = ("select coleccion, titulo, ubicacion, ruta, snippet(trozos, 1, '«', '»', ' … ', 24) from trozos where trozos match ?"
            + (" and coleccion = ?" if coleccion else "") + " order by bm25(trozos, 8.0, 1.0) limit ?")
-    n_sql = n * 8 if genero else n                                 # con filtro de género se piden más y se recorta después
+    formato = (formato or "").lower().lstrip(".")
+    n_sql = n * 8 if genero or formato else n                      # con filtro de género o de formato se piden más y se recorta después
     for expr in _expresiones(con, consulta):
         filas = con.execute(sql, (expr, *([coleccion] if coleccion else []), n_sql)).fetchall()
         if filas:
@@ -269,6 +270,8 @@ def buscar(consulta: str, coleccion: str | None = None, n: int = 10, db: Path = 
     out = []
     for f in filas:
         r = dict(zip(("coleccion", "titulo", "ubicacion", "ruta", "fragmento"), f))
+        if formato and not r["ruta"].lower().endswith("." + formato):
+            continue
         try:
             m = meta.get(Path(r["ruta"]).relative_to(base).as_posix())
         except ValueError:

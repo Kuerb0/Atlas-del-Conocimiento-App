@@ -53,6 +53,19 @@ def test_buscar_filtra_lo_no_legal_y_tolera_fuentes_caidas(monkeypatch):
     assert r["errores"] == {} and "zzz" in t.buscar("x", fuentes=("zzz",))["errores"]       # una fuente que falla no tira las demás
 
 
+def test_titulo_autor_tipo_y_formato(monkeypatch):
+    vistas = []
+    monkeypatch.setattr(t, "_get", lambda url, *a, **k: (vistas.append(url), falso(url))[1])
+    r = t.buscar(titulo="Essai", autor="laplace", tipo="libro")
+    assert {x["fuente"] for x in r["resultados"]} <= set(t.LIBROS) and not any("arxiv" in u or "openalex" in u for u in vistas)
+    assert [x["id"] for x in r["resultados"] if x["fuente"] == "gutenberg"] == ["7"]            # el autor coincide («Laplace»)
+    assert t.buscar(titulo="Essai", autor="Newton", tipo="libro", fuentes=("gutenberg",))["resultados"] == []   # otro autor: fuera
+    assert any("intitle" in u and "inauthor" in u for u in vistas) and any("title=Essai" in u and "author=laplace" in u for u in vistas)
+    assert {x["formato"] for x in t.buscar("probability", formato="epub")["resultados"]} == {"epub"}
+    assert t.buscar("probability", tipo="articulo")["resultados"] and {x["fuente"] for x in t.buscar("probability", tipo="articulo")["resultados"]} <= set(t.ARTICULOS)
+    assert t.buscar() == {"resultados": [], "errores": {}}                                          # sin nada que buscar no se llama a la red
+
+
 def test_genero_desde_materias():
     assert t.genero_desde_materias(["Bayesian statistics", "Regression analysis"]) == "estadistica"
     assert t.genero_desde_materias(["Rome -- History", "Ancient history"]) == "historia"

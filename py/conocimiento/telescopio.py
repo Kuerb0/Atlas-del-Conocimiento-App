@@ -12,6 +12,7 @@ import re
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from collections import namedtuple
 from pathlib import Path
 
 from . import CARPETA, _norm
@@ -21,6 +22,9 @@ AGENTE = "ArbolEstadistica/1.0 (biblioteca personal; telescopio)"
 MAX_BYTES = 200 << 20                       # no se descarga nada de más de 200 MB
 FUENTES = ("googlebooks", "openlibrary", "gutenberg", "arxiv", "openalex", "archive")
 _ATOM = "{http://www.w3.org/2005/Atom}"
+LIBROS = ("googlebooks", "openlibrary", "gutenberg", "archive")
+ARTICULOS = ("arxiv", "openalex")
+Consulta = namedtuple("Consulta", "texto titulo autor")             # lo que se busca: palabras sueltas, título y autor (cualquiera puede ir vacío)
 
 
 def _get(url: str, binario: bool = False, limite: int = MAX_BYTES):
@@ -52,9 +56,13 @@ def _item(fuente, id_, titulo, autores, anio, url, formato, licencia, materias, 
             "formato": formato, "licencia": licencia, "materias": materias, "genero": genero_desde_materias(materias + [titulo or ""]), "resumen": resumen[:300], "enlace": enlace}
 
 
-def _gutenberg(q, n):
+def _libre(c) -> str:
+    return " ".join(x for x in (c.texto, c.titulo, c.autor) if x)
+
+
+def _gutenberg(c, n):
     """Catálogo OPDS oficial de Project Gutenberg (todo es dominio público). Gutendex se descartó: tardaba más de 30 s."""
-    raiz = ET.fromstring(_get("https://www.gutenberg.org/ebooks/search.opds/?" + _q(query=q)).encode("utf-8"))
+    raiz = ET.fromstring(_get("https://www.gutenberg.org/ebooks/search.opds/?" + _q(query=_libre(c))).encode("utf-8"))
     hay = 0
     for e in raiz.findall(_ATOM + "entry"):
         m = re.search(r"/ebooks/(\d+)\.opds$", e.findtext(_ATOM + "id", ""))
@@ -64,8 +72,8 @@ def _gutenberg(q, n):
                         "Dominio público", [], enlace=f"https://www.gutenberg.org/ebooks/{m.group(1)}")
 
 
-def _arxiv(q, n):
-    raiz = ET.fromstring(_get("https://export.arxiv.org/api/query?" + _q(search_query="all:" + q, max_results=n)))
+def _arxiv(c, n):
+    raiz = ET.fromstring(_get("https://export.arxiv.org/api/query?" + _q(search_query=" AND ".join(p for p in (f'all:"{c.texto}"' if c.texto else "", f'ti:"{c.titulo}"' if c.titulo else "", f'au:"{c.autor}"' if c.autor else "") if p), max_results=n)))
     for e in raiz.findall(_ATOM + "entry"):
         pdf = next((l.get("href") for l in e.findall(_ATOM + "link") if l.get("title") == "pdf"), None)
         if pdf:
@@ -74,8 +82,8 @@ def _arxiv(q, n):
                         [c.get("term") for c in e.findall(_ATOM + "category")], e.findtext(_ATOM + "summary", ""), e.findtext(_ATOM + "id", "").replace("http://", "https://"))
 
 
-def _openalex(q, n):
-    r = json.loads(_get("https://api.openalex.org/works?" + _q(search=q, filter="open_access.is_oa:true", **{"per-page": n * 2})))
+def _openalex(c, n):
+    r = json.loads(_get("https://api.openalex.org/works?" + _q(search=_libre(c), filter="open_access.is_oa:true", **{"per-page": n * 2})))
     for w in r["results"]:
         loc = w.get("best_oa_location") or {}
         if loc.get("pdf_url"):
@@ -83,8 +91,8 @@ def _openalex(q, n):
                         loc.get("license") or "acceso abierto", [c["display_name"] for c in w.get("concepts", [])][:8], enlace=w["id"])
 
 
-def _archive(q, n):
-    r = json.loads(_get("https://archive.org/advancedsearch.php?" + _q(q=f"({q}) AND mediatype:texts AND NOT access-restricted-item:true", fl="identifier,title,creator,year,subject,licenseurl", rows=n * 3, output="json")))
+def _archive(c, n):
+    r = json.loads(_get("https://archive.org/advancedsearch.php?" + _q(q="(" + " AND ".join(p for p in (c.texto, f"title:({c.titulo})" if c.titulo else "", f"creator:({c.autor})" if c.autor else "") if p) + ") AND mediatype:texts AND NOT access-restricted-item:true", fl="identifier,title,creator,year,subject,licenseurl", rows=n * 3, output="json")))
     for d in r["response"]["docs"]:
         anio = int(str(d.get("year") or 0)[:4] or 0)
         lic = str(d.get("licenseurl") or "")
@@ -100,9 +108,9 @@ def _clave_google() -> str:
     return os.environ.get("GOOGLE_BOOKS_KEY") or (f.read_text(encoding="utf-8").strip() if f.exists() else "")
 
 
-def _openlibrary(q, n):
+def _openlibrary(c, n):
     """Open Library (sin clave): ficha con materias; si es de lectura abierta en Internet Archive se puede traer."""
-    r = json.loads(_get("https://openlibrary.org/search.json?" + _q(q=q, limit=n, fields="key,title,author_name,first_publish_year,subject,ebook_access,ia")))
+    r = json.loads(_get("https://openlibrary.org/search.json?" + _q(**{k: v for k, v in (("q", c.texto), ("title", c.titulo), ("author", c.autor)) if v}, limit=n, fields="key,title,author_name,first_publish_year,subject,ebook_access,ia")))
     for d in r.get("docs", []):
         enlace = "https://openlibrary.org" + d["key"]
         args = (d.get("title", ""), d.get("author_name", []), d.get("first_publish_year"))
@@ -112,9 +120,9 @@ def _openlibrary(q, n):
             yield _item("openlibrary", d["key"], *args, "", "web", "Solo ficha / préstamo", d.get("subject", []), enlace=enlace)
 
 
-def _googlebooks(q, n):
+def _googlebooks(c, n):
     """Catálogo de Google Books: ficha, categorías y enlace para verlo. Solo es descargable si Google lo marca como dominio público y da enlace de PDF/EPUB."""
-    r = json.loads(_get("https://www.googleapis.com/books/v1/volumes?" + _q(q=q, maxResults=n, printType="books", **({"key": _clave_google()} if _clave_google() else {}))))
+    r = json.loads(_get("https://www.googleapis.com/books/v1/volumes?" + _q(q=" ".join(p for p in (c.texto, f'intitle:"{c.titulo}"' if c.titulo else "", f'inauthor:"{c.autor}"' if c.autor else "") if p), maxResults=n, printType="books", **({"key": _clave_google()} if _clave_google() else {}))))
     for v in r.get("items", []):
         i, a = v.get("volumeInfo", {}), v.get("accessInfo", {})
         url, formato = "", "web"
@@ -130,12 +138,21 @@ def _googlebooks(q, n):
 _BUSCADORES = {"googlebooks": _googlebooks, "openlibrary": _openlibrary, "gutenberg": _gutenberg, "arxiv": _arxiv, "openalex": _openalex, "archive": _archive}
 
 
-def buscar(consulta: str, n: int = 6, fuentes=FUENTES) -> dict:
-    """{'resultados': [item…], 'errores': {fuente: motivo}}: n por fuente; una fuente caída no impide las demás."""
+def buscar(consulta: str = "", n: int = 6, fuentes=None, titulo: str = "", autor: str = "", tipo: str = "todo", formato: str = "") -> dict:
+    """{'resultados': [item…], 'errores': {fuente: motivo}}: n por fuente; una fuente caída no impide las demás.
+    `titulo` y `autor` afinan la búsqueda (y el autor se comprueba en cada resultado); `tipo` = todo | libro | articulo elige las fuentes; `formato` = pdf | epub deja solo lo descargable en ese formato."""
+    c = Consulta(consulta.strip(), titulo.strip(), autor.strip())
+    if not _libre(c):
+        return {"resultados": [], "errores": {}}
+    fuentes = fuentes or {"libro": LIBROS, "articulo": ARTICULOS}.get(tipo, FUENTES)
+    toks = _norm(c.autor).split()
     res, err = [], {}
     for f in fuentes:
         try:
-            res += list(_BUSCADORES[f](consulta, n))[:n]
+            for it in list(_BUSCADORES[f](c, n))[:n]:
+                quien = _norm(" ".join(it["autores"]))
+                if (not toks or all(t in quien for t in toks)) and (not formato or it["formato"] == formato.lower()):
+                    res.append(it)
         except Exception as e:
             err[f] = f"{type(e).__name__}: {e}"
     return {"resultados": res, "errores": err}
