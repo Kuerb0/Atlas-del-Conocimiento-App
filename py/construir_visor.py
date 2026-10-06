@@ -28,6 +28,7 @@ import base64
 import datetime as dt
 import json
 import re
+import zlib
 from pathlib import Path
 
 CODIGO = Path(__file__).resolve().parent      # .../py  (paquete, tests, plantilla del visor)
@@ -310,6 +311,14 @@ def funciones_de(archivo: Path, rama: str, exp: set[str], indice: dict) -> list[
     return items
 
 
+_VIDEO = re.compile(r"youtube|youtu[.]be|vimeo|3blue1brown|ocw[.]mit[.]edu/.*(video|lecture)|stat110|video", re.I)
+
+
+def es_video(f: dict) -> bool:
+    """Una fuente del catálogo es un vídeo si es de Very Normal o su enlace es de YouTube, Vimeo, 3Blue1Brown, las lecciones en vídeo del MIT…"""
+    return bool(f.get("url")) and (f.get("tipo") == "very_normal" or bool(_VIDEO.search(f["url"])))
+
+
 def ramas_conceptos(funciones: set[str]) -> list[dict]:
     """Ramas de conceptos: una por TEMA del catálogo (módulo = área; hoja = concepto, con o sin código).
 
@@ -338,6 +347,7 @@ def ramas_conceptos(funciones: set[str]) -> list[dict]:
             "lineas": 8 + 4 * len(k["funciones"]), "codigo": "", "importar": "", "llamada": "", "opcionales": "", "aviso": "",
             "texto": "", "funciones": k["funciones"], "sinonimos": k["sinonimos"], "fuentes": k["fuentes"],
             "ambito": ambito_de.get(k.get("area"), ""), "prioridad": k.get("prioridad", ""),
+            "videos": [{"ref": f["ref"], "url": f["url"], "base": f.get("base", "")} for f in k["fuentes"] if es_video(f)],
             "ejemplo": (EJEMPLOS.celdas_concepto(k["id"], k["funciones"]) if EJEMPLOS else None) or [],
         }
 
@@ -491,11 +501,76 @@ def construir() -> dict:
                   "modulos": [{"id": "teoria", "nombre": "teoria/", "desc": "Guías en Markdown", "archivo": "teoria", "items": guias},
                               {"id": "ejemplos", "nombre": "ejemplos/", "desc": "Scripts de ejemplo", "archivo": "ejemplos", "items": ejemplos}]})
 
+    ramas.extend(ramas_biblioteca())
+
     n_tests = sum(len(re.findall(r"^def test_", p.read_text(encoding="utf-8"), re.M)) for p in (CODIGO / "tests").glob("test_*.py"))
     ids_conceptos = {k["id"] for k in json.loads(CATALOGO.read_text(encoding="utf-8"))["conceptos"]}
     ids_demos = {d["id"] for _, _, ds in DEMOS for d in ds}
     return {"raiz": RAIZ_POR_DEFECTO, "generado": dt.date.today().isoformat(), "pruebas": n_tests, "ramas": ramas,
             "propiedades": meta_prop, "rutas": cargar_rutas(nombres_fn, ids_conceptos, ids_demos)}
+
+
+# ---------- la biblioteca del usuario (conocimiento/biblioteca, ver conocimiento/importar.py) ----------
+PALETA_BIB = [("#2458C8", "#6FA2FF"), ("#137A6E", "#45C3B3"), ("#A8700A", "#E5A23A"), ("#A81A64", "#F08CC0"), ("#2E8B3C", "#6FCF7B"),
+              ("#6B3DB5", "#B18CF0"), ("#BF3D26", "#FF8A73"), ("#8A7A10", "#D4BD45"), ("#167A92", "#4FC3DC"), ("#5F6F8A", "#93A3BD")]
+
+
+def _hoja_bib(rid: str, nombre: str, tipo: str, desc: str, ruta: str, rel: str, **extra) -> dict:
+    return {"id": rid, "nombre": nombre, "tipo": tipo, "firma": "", "doc": "", "desc": desc, "sas": "", "origen": "", "archivo": "biblioteca/" + rel, "linea": 1,
+            "lineas": 8, "codigo": "", "importar": "", "llamada": "", "opcionales": "", "aviso": "", "texto": "", "ruta": ruta, **extra}
+
+
+def ramas_biblioteca() -> list[dict]:
+    """Ramas de lo importado por el usuario. Libros: una rama por género (Historia, Economía…), un módulo por libro y un punto por capítulo.
+    Notas: una rama por subtema con un punto por documento. Código, Conceptos, Demos y Finanzas: una rama «Documentos importados». Sin datos: lista vacía."""
+    try:
+        from conocimiento.importar import GENEROS, GALAXIAS, carpeta_datos, leer_metadatos, titulo_corto
+    except Exception:
+        return []
+    carpeta = carpeta_datos()
+    meta = leer_metadatos(carpeta)
+    if not meta:
+        return []
+    base = carpeta / "biblioteca"
+    ramas, k = [], 0
+
+    def color() -> dict:
+        nonlocal k
+        c = PALETA_BIB[k % len(PALETA_BIB)]
+        k += 1
+        return {"claro": c[0], "oscuro": c[1]}
+
+    def doc(rid: str, rel: str, m: dict) -> dict:
+        t = titulo_corto(m.get("titulo", rel))
+        return _hoja_bib(rid, t, "documento", f"{m.get('tipo', '')} · {m.get('subtema', '')}", str(base / rel), rel, subtema=m.get("subtema", ""), etiquetas=m.get("etiquetas", ""),
+                         fecha=m.get("fecha", "")[:10], genero=m.get("genero", ""), paginas=m.get("paginas", 0), titulo_largo=m.get("titulo", ""))
+
+    libros = {rel: m for rel, m in meta.items() if m.get("galaxia") == "libros"}
+    por_genero: dict[str, list] = {}
+    for rel, m in sorted(libros.items(), key=lambda kv: kv[1].get("titulo", "")):
+        por_genero.setdefault(m.get("genero") or "otro", []).append((rel, m))
+    for g, lista in sorted(por_genero.items(), key=lambda kv: GENEROS.get(kv[0], kv[0])):
+        modulos = []
+        for i, (rel, m) in enumerate(lista):
+            libro = titulo_corto(m.get("titulo", rel))
+            caps = m.get("capitulos") or [{"titulo": libro, "pagina": 1}]
+            items = [_hoja_bib(f"lib_{g}_{i}_{j}", c["titulo"][:90], "capitulo", f"{libro}" + (f" — p. {c['pagina']}" if c.get("pagina") else ""), str(base / rel), rel,
+                               pagina=c.get("pagina") or 0, libro=libro, subtema=m.get("subtema", ""), genero=g, paginas=m.get("paginas", 0), etiquetas=m.get("etiquetas", ""),
+                               fecha=m.get("fecha", "")[:10], titulo_largo=m.get("titulo", ""), lineas=8 + min(12, 2 * len(c["titulo"]) // 10)) for j, c in enumerate(caps)]
+            modulos.append({"id": f"lib_{g}_{i}", "nombre": libro, "desc": f"{m.get('subtema', '')} · {m.get('paginas') or '?'} págs. · {len(caps)} capítulos", "archivo": "biblioteca/" + rel, "items": items})
+        ramas.append({"id": f"gen_{g}", "nombre": GENEROS.get(g, g), "desc": f"{len(lista)} libro{'s' if len(lista) != 1 else ''} de {GENEROS.get(g, g).lower()}",
+                      "modulos": modulos, "galaxia": "libros", "biblioteca": True, "color": color()})
+
+    otros: dict[tuple, list] = {}
+    for rel, m in sorted(meta.items(), key=lambda kv: kv[1].get("titulo", "")):
+        g = m.get("galaxia")
+        if g and g != "libros":
+            otros.setdefault((g, m.get("subtema", "General") if g == "notas" else "Documentos importados"), []).append((rel, m))
+    for (g, nombre), lista in sorted(otros.items()):
+        items = [doc(f"doc_{g}_{zlib.crc32(rel.encode())}", rel, m) for rel, m in lista]
+        ramas.append({"id": f"doc_{g}_{len(ramas)}", "nombre": nombre, "desc": f"{len(items)} documento{'s' if len(items) != 1 else ''} en {GALAXIAS.get(g, g)}",
+                      "modulos": [{"id": "docs", "nombre": nombre, "desc": "", "archivo": "biblioteca/" + g, "items": items}], "galaxia": g, "biblioteca": True, "color": color()})
+    return ramas
 
 
 def ensamblar(datos: dict) -> str:

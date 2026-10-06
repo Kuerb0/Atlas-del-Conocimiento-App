@@ -79,7 +79,7 @@ window.crearMapa3D = function (o) {
       mn.hijos.forEach(function (h) {
         var r = rl * (.3 + .7 * Math.cbrt(rnd())), u = 2 * rnd() - 1, ph = 2 * Math.PI * rnd(), s = Math.sqrt(1 - u * u);
         h.p3 = {rgb: col, lx: r * s * Math.cos(ph), ly: r * u * .8, lz: r * s * Math.sin(ph), w: .1 + .22 * (1 - r / rl) + .05 * rnd(),
-                rad: 2.1 + .42 * Math.sqrt(Math.max(h.lineas || 10, 5)), hueco: h.tipo === 'concepto' && !(h.funciones || []).length && h.ambito !== 'normativo',
+                rad: 2.1 + .42 * Math.sqrt(Math.max(h.lineas || 10, 5)), video: !!h.video, hueco: h.tipo === 'concepto' && !(h.funciones || []).length && h.ambito !== 'normativo',
                 x: 0, y: 0, z: 0, a: 1, rama: rn, modulo: mn, vec: []};
         todas.push(h);
       });
@@ -345,6 +345,8 @@ window.crearMapa3D = function (o) {
         if (q.hueco) { ctx.strokeStyle = rgba(q.rgb, Math.min(1, a * .95)); ctx.fillStyle = rgba(q.rgb, a * .14); ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(nd.x, nd.y, r, 0, 6.2832); ctx.fill();
           ctx.setLineDash([2, 2]); ctx.stroke(); ctx.setLineDash([]); }
         else { ctx.fillStyle = rgba(mez(q.rgb, [255, 255, 255], .25), Math.min(1, a)); ctx.beginPath(); ctx.arc(nd.x, nd.y, r, 0, 6.2832); ctx.fill(); }
+        if (q.video && a > .35) { var vx = nd.x + r * .95 + 2, vy = nd.y - r * .95 - 1, vs = Math.max(3.2, r * .6);      /* ▶ : el concepto tiene vídeo */
+          ctx.fillStyle = rgba([255, 255, 255], Math.min(1, a) * .95); ctx.beginPath(); ctx.moveTo(vx - vs * .45, vy - vs * .62); ctx.lineTo(vx + vs * .75, vy); ctx.lineTo(vx - vs * .45, vy + vs * .62); ctx.closePath(); ctx.fill(); }
         if (marcado || coin) { ctx.strokeStyle = rgba([255, 255, 255], n === sel ? 1 : (coin && !marcado ? .55 : .9)); ctx.lineWidth = n === sel ? 2 : 1.2;
           ctx.beginPath(); ctx.arc(nd.x, nd.y, r + (n === sel ? 4.5 + Math.sin(t * 4) * .8 : 3.2), 0, 6.2832); ctx.stroke(); }
         if (a > .25) items.push({n: n, x: nd.x, y: nd.y, r: Math.max(r, 3.5) + 3, d: nd.d});
@@ -388,8 +390,8 @@ window.crearMapa3D = function (o) {
     });
     if (nuc) {
       var fn = acota(12 * Math.sqrt(nuc.s / (F / 1400)), 10, 14), yN = nuc.y + acota(34 * nuc.s, 20, 44);
-      fuente(fn, 700); espaciado(2); texto('NÚCLEO', nuc.x, yN, [255, 210, 150], .95, 'center');
-      fuente(fn - 2.5, 500); espaciado(.4); texto('arbol_estadistica', nuc.x, yN + fn + 1, [200, 190, 175], .65, 'center');
+      fuente(fn, 700); espaciado(2); texto(String(root.nombre || 'Núcleo').toUpperCase(), nuc.x, yN, mez(NUC, [255, 255, 255], .55), .95, 'center');
+      fuente(fn - 2.5, 500); espaciado(.4); texto('núcleo de la galaxia', nuc.x, yN + fn + 1, [200, 190, 175], .65, 'center');
     }
     espaciado(0);
     var cola = nodos.filter(function (x) { return x.n.kind !== 'rama' && (x.n.kind === 'modulo' || x.a > .5); }).sort(function (a, b) {

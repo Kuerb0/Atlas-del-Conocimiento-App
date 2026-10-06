@@ -9,10 +9,13 @@ Uso: `python -m conocimiento importar f1.pdf f2.docx [-g libros] [-s "Inferencia
 from __future__ import annotations
 
 import hashlib
+import html
 import json
+import os
 import re
 import shutil
 import unicodedata
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -20,8 +23,93 @@ from . import CARPETA, DB, EXT, RAIZ, _extraer, _norm, indexar
 
 GALAXIAS = {"codigo": "Código", "conceptos": "Conceptos", "demos": "Demos y guías", "finanzas": "Finanzas", "libros": "Libros", "notas": "Notas y enlaces"}
 TIPOS = {"libro": "Libro", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "otro": "Otro"}
+GENEROS = {"historia": "Historia", "economia": "Economía y finanzas", "ensayo": "Ensayo y filosofía", "estadistica": "Estadística y matemáticas", "ciencia": "Ciencia y divulgación",
+           "novela": "Novela y ficción", "biografia": "Biografía y memorias", "politica": "Política y sociedad", "tecnologia": "Tecnología e informática",
+           "psicologia": "Psicología y salud", "arte": "Arte, música y cultura", "otro": "Otros"}
+_GEN_PALABRAS = {
+    "historia": r"history|historia|empire|imperio|war|guerra|century|siglo|ancient|antigu|medieval|revolution|revolucion|dynasty|dinastia|republic|republica|romans?|romanos?|civilization|civilizacion|kingdom|reino|conquest|conquista",
+    "economia": r"economics|economy|economia|economist|market|mercado|capitalism|capitalismo|trade|comercio|inflation|inflacion|monetary|monetaria|fiscal|growth|crecimiento|bank|banco|poverty|pobreza|wealth|riqueza|gdp|pib|labor|empresa|business|inversion|invest|finanzas|finance",
+    "estadistica": r"statistic\w*|estadistic\w*|regression|regresion|probability|probabilidad|estimat\w*|hypothesis|hipotesis|bayes\w*|variance|varianza|econometric\w*|machine learning|theorem|teorema|calculus|algebra|matrix|matriz|likelihood|verosimilitud",
+    "ciencia": r"physics|fisica|biology|biologia|chemistry|quimica|universe|universo|evolution|evolucion|neuroscience|neurociencia|quantum|cuantic\w*|genome|genoma|climate|clima|cosmos|astronomy|astronomia|scientific|cientific\w*|science|ciencia",
+    "novela": r"novel|novela|cuento|thriller|mystery|misterio|detective|fantasy|fantasia|romance|once upon|chapter one|capitulo uno|he said|she said|dijo",
+    "ensayo": r"philosoph\w*|filosof\w*|essay|ensayo|ethic\w*|etic\w*|metaphysic\w*|stoic\w*|estoic\w*|reason|razon|liberty|libertad|freedom|truth|verdad|meaning|sentido|virtue|virtud|moral\w*",
+    "biografia": r"biograph\w*|memoir\w*|memorias|autobiograph\w*|life of|vida de|my life|mi vida",
+    "politica": r"politic\w*|democracy|democracia|government|gobierno|election|eleccion\w*|geopolit\w*|society|sociedad|social|state|estado|policy|nationalism|nacionalismo",
+    "tecnologia": r"software|programming|programacion|python|algorithm\w*|algoritmo\w*|computer|ordenador|internet|artificial intelligence|inteligencia artificial|data science|linux|codigo|developer",
+    "psicologia": r"psycholog\w*|psicolog\w*|behavior|conducta|cognitive|cognitiv\w*|therapy|terapia|emotion\w*|emocion\w*|health|salud|mental",
+    "arte": r"art|arte|music|musica|painting|pintura|film|cine|literature|literatura|architecture|arquitectura|poetry|poesia|theatre|teatro|museum|museo"}
+_GEN_RE = {g: re.compile(r"\b(?:" + p + r")\b") for g, p in _GEN_PALABRAS.items()}
+_ES = set("el la de que y en los las un una por con para es se del al lo como mas pero sus le ya o este si porque esta entre cuando muy sin sobre tambien me hasta hay donde quien desde todo nos durante".split())
+_EN = set("the of and to in is that for with as on by it this are was be at from or an which have has not but they their its been were all more can will one also".split())
 FINANZAS = re.compile(r"\b(bonos?|carteras?|rentabilidad|volatilidad|derivados?|opcion(?:es)?|futuros?|tipos? de interes|capm|markowitz|renta fija|renta variable|tesoreria|"
                       r"solvencia|var|valoracion|acciones|mercados?|activos?|pasivos?|riesgo de credito|fiscalidad|impuestos?|bancari[oa]s?|swaps?|duracion|rating)\b")
+
+
+def carpeta_datos() -> Path:
+    """Carpeta de datos del usuario (`conocimiento/`; ARBOL_CONOCIMIENTO la cambia), leída al llamar."""
+    return Path(os.environ.get("ARBOL_CONOCIMIENTO", RAIZ / "conocimiento"))
+
+
+def capitulos(ruta: str | Path) -> tuple[list[dict], int]:
+    """([{titulo, pagina}], nº de páginas). PDF: el índice (marcadores) del libro, o tramos de 25 páginas si no lo tiene; EPUB: su tabla de contenidos;
+    DOCX/MD: los títulos. Siempre devuelve al menos una entrada."""
+    f = Path(ruta); ext = f.suffix.lower(); caps: list[dict] = []; paginas = 0
+    try:
+        if ext == ".pdf":
+            from pypdf import PdfReader
+            r = PdfReader(str(f)); paginas = len(r.pages); planos: list = []
+
+            def rec(lista, nivel):
+                for it in lista:
+                    if isinstance(it, list):
+                        rec(it, nivel + 1)
+                    else:
+                        try:
+                            pg = r.get_destination_page_number(it) + 1
+                        except Exception:
+                            pg = None
+                        planos.append((nivel, str(it.title).strip(), pg))
+            rec(r.outline, 0)
+            top = [p for p in planos if p[0] == 0]
+            usar = top if len(top) >= 4 else [p for p in planos if p[0] <= 1]
+            caps = [{"titulo": tt, "pagina": pg} for _, tt, pg in usar if tt][:80]
+            if not caps and paginas:
+                caps = [{"titulo": f"Páginas {a}–{min(a + 24, paginas)}", "pagina": a} for a in range(1, paginas + 1, 25)][:60]
+        elif ext == ".epub":
+            with zipfile.ZipFile(f) as z:
+                nombres = z.namelist(); titulos: list = []
+                ncx = next((n for n in nombres if n.endswith(".ncx")), None)
+                nav = next((n for n in nombres if re.search(r"(nav|toc)[^/]*\.x?html?$", n, re.I)), None)
+                if ncx:
+                    titulos = re.findall(r"<navLabel>\s*<text>(.*?)</text>", z.read(ncx).decode("utf-8", "replace"), re.S)
+                elif nav:
+                    titulos = [re.sub(r"<[^>]+>", "", x) for x in re.findall(r"<a[^>]*>(.*?)</a>", z.read(nav).decode("utf-8", "replace"), re.S)]
+                caps = [{"titulo": re.sub(r"\s+", " ", html.unescape(x)).strip(), "pagina": None} for x in titulos if x.strip()][:80]
+        elif ext == ".docx":
+            with zipfile.ZipFile(f) as z:
+                xml = z.read("word/document.xml").decode("utf-8", "replace")
+            for par in re.findall(r"<w:p[ >].*?</w:p>", xml, re.S):
+                if re.search(r'w:pStyle w:val="(Heading|Ttulo|Título)\d', par):
+                    tt = html.unescape(re.sub(r"<[^>]+>", "", par)).strip()
+                    if tt:
+                        caps.append({"titulo": tt, "pagina": None})
+            caps = caps[:80]
+        elif ext in (".md", ".txt"):
+            caps = [{"titulo": m.strip(), "pagina": None} for m in re.findall(r"(?m)^#{1,3}\s+(.+)$", f.read_text(encoding="utf-8", errors="replace"))][:80]
+    except Exception:
+        caps = []
+    return (caps or [{"titulo": f.stem, "pagina": 1 if ext == ".pdf" else None}]), paginas
+
+
+def titulo_corto(nombre: str, n: int = 60) -> str:
+    """Recorta nombres largos de fichero («3. Regression Modeling Strategies_ With Applications -- Autor -- 2016 -- Springer -- isbn… -- Anna's Archive»):
+    primer tramo antes de « -- », sin numeración inicial, sin guiones bajos y como mucho `n` caracteres (corta en una palabra y añade «…»)."""
+    s = re.sub(r"[.]\w{2,4}$", "", str(nombre)).split(" -- ")[0]
+    s = re.sub(r"^\s*\d+[.)]\s+", "", s).replace(";_", ";").replace("_ ", ": ").replace("_", " ")
+    s = re.sub(r"\s+", " ", s).strip(" -;,")
+    if len(s) > n:
+        s = s[:n].rsplit(" ", 1)[0].rstrip(" ,;:-") + "…"
+    return s or str(nombre)[:n]
 
 
 def _catalogo() -> dict:
@@ -44,7 +132,8 @@ def opciones() -> dict:
     """Lo que ofrecen los desplegables: galaxias, tipos y subtemas (los temas del catálogo, las ramas de código y 'General')."""
     ramas = sorted(p.name for p in (RAIZ / "py" / "arbol_estadistica").iterdir() if p.is_dir() and not p.name.startswith("_")) if (RAIZ / "py" / "arbol_estadistica").is_dir() else []
     temas = [t["nombre"] for t in _catalogo()["temas"]]
-    return {"galaxias": [{"id": k, "nombre": v} for k, v in GALAXIAS.items()], "tipos": [{"id": k, "nombre": v} for k, v in TIPOS.items()],
+    return {"generos": [{"id": k, "nombre": v} for k, v in GENEROS.items()],
+            "galaxias": [{"id": k, "nombre": v} for k, v in GALAXIAS.items()], "tipos": [{"id": k, "nombre": v} for k, v in TIPOS.items()],
             "subtemas": {"codigo": ramas + ["General"], "conceptos": temas + ["General"], "demos": ["Demos", "Guías", "General"],
                          "finanzas": ["Carteras y riesgo", "Renta fija", "Derivados", "Actuarial y seguros", "General"] + [t for t in temas if "inanz" in t],
                          "libros": temas + ["General"], "notas": temas + ["General"]}}
@@ -97,7 +186,21 @@ def clasificar(ruta: str | Path) -> dict:
     subtema = tnombre if p >= 3 else "General"
     if subtema != "General":
         motivo += f"; el tema «{subtema}» sale {p} veces"
-    return {"galaxia": galaxia, "subtema": subtema, "tipo": tipo, "titulo": re.sub(r"\s+", " ", re.sub(r"[_]+", " ", f.stem)).strip(), "motivo": motivo, "paginas": paginas}
+    gp = {g: len(r.findall(t)) + 6 * len(r.findall(nombre)) for g, r in _GEN_RE.items()}
+    gp["estadistica"] += p // 2 + fin // 6 * 0                      # lo que casa con el catálogo de conceptos de estadística también cuenta como estadística
+    gp["economia"] += fin // 2
+    genero = max(gp, key=gp.get) if max(gp.values()) >= 4 else "otro"
+    caps, _ = capitulos(f)
+    palabras = re.findall(r"[a-z]+", t[:20000])
+    es, en = sum(w in _ES for w in palabras), sum(w in _EN for w in palabras)
+    h = _sha1(f)
+    dup = next((rel for rel, m in leer_metadatos(carpeta_datos()).items() if m.get("hash") == h), "")
+    return {"galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "titulo": titulo_corto(f.stem), "titulo_largo": f.stem, "motivo": motivo, "paginas": paginas,
+            "tamano": f.stat().st_size, "extension": ext.lstrip("."), "idioma": "es" if es > en else "en" if en else "", "duplicado": dup,
+            "vista_previa": re.sub(r"\s+", " ", texto[:1500]).strip()[:380],
+            "temas": [{"tema": nombre_t, "puntos": pt} for (_, nombre_t), pt in sorted(puntos.items(), key=lambda kv: -kv[1])[:4]],
+            "generos": [{"id": g, "nombre": GENEROS[g], "puntos": pt} for g, pt in sorted(gp.items(), key=lambda kv: -kv[1])[:4] if pt],
+            "n_capitulos": len(caps), "capitulos": [c["titulo"] for c in caps[:6]]}
 
 
 def _slug(s: str) -> str:
@@ -151,17 +254,21 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
             galaxia = d.get("galaxia") if d.get("galaxia") in GALAXIAS else auto["galaxia"]
             subtema = (d.get("subtema") or "").strip() or auto["subtema"]
             tipo = d.get("tipo") if d.get("tipo") in TIPOS else auto["tipo"]
+            genero = d.get("genero") if d.get("genero") in GENEROS else auto["genero"]
+            titulo = (d.get("titulo") or "").strip() or auto["titulo"]
             destino = base / galaxia / _slug(subtema)
             destino.mkdir(parents=True, exist_ok=True)
-            fin, n = destino / f.name, 1
+            nombre = _slug(titulo)[:80] or "documento"                          # nombre corto: evita rutas larguísimas (límite de Windows) y es legible
+            fin, n = destino / f"{nombre}{f.suffix}", 1
             while fin.exists():
-                n += 1; fin = destino / f"{f.stem}_{n}{f.suffix}"
+                n += 1; fin = destino / f"{nombre}_{n}{f.suffix}"
             shutil.copy2(f, fin)
             rel = fin.relative_to(base).as_posix()
-            meta[rel] = {"titulo": auto["titulo"], "galaxia": galaxia, "subtema": subtema, "tipo": tipo, "etiquetas": (d.get("etiquetas") or "").strip(), "origen": str(f), "hash": h,
-                         "fecha": datetime.now().isoformat(timespec="seconds"), "automatico": not (d.get("galaxia") or d.get("subtema") or d.get("tipo"))}
+            caps, pags = capitulos(fin)
+            meta[rel] = {"capitulos": caps, "paginas": pags, "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "etiquetas": (d.get("etiquetas") or "").strip(), "origen": str(f), "hash": h,
+                         "fecha": datetime.now().isoformat(timespec="seconds"), "automatico": not (d.get("titulo") or d.get("galaxia") or d.get("subtema") or d.get("tipo") or d.get("genero"))}
             hashes[h] = rel
-            salida.append({**r, "estado": "ok", "galaxia": galaxia, "subtema": subtema, "tipo": tipo, "destino": str(fin), "mensaje": auto["motivo"]})
+            salida.append({**r, "estado": "ok", "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "destino": str(fin), "mensaje": auto["motivo"]})
         except Exception as e:
             salida.append({**r, "estado": "error", "mensaje": str(e)})
     if any(s["estado"] == "ok" for s in salida):
@@ -174,3 +281,21 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
                 if s["estado"] == "ok" and s["destino"] in sin:
                     s["mensaje"] += " · sin indexar (¿falta `pip install pypdf`?)"
     return salida
+
+
+def enriquecer(carpeta: Path | None = None) -> int:
+    """Completa lo ya importado a lo que le falte (capítulos, nº de páginas, género): sirve para lo importado con versiones anteriores. Devuelve cuántos tocó."""
+    carpeta = Path(carpeta or carpeta_datos()); meta = leer_metadatos(carpeta); n = 0
+    for rel, m in meta.items():
+        f = carpeta / "biblioteca" / rel
+        if not f.is_file():
+            continue
+        if "capitulos" not in m:
+            m["capitulos"], m["paginas"] = capitulos(f); n += 1
+        if len(m.get("titulo", "")) > 60 or " -- " in m.get("titulo", ""):
+            m["titulo"] = titulo_corto(m["titulo"]); n += 1
+        if "genero" not in m:
+            m["genero"] = clasificar(f)["genero"]; n += 1
+    if n:
+        (carpeta / "biblioteca" / "metadatos.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+    return n

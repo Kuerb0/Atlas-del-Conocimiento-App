@@ -1,6 +1,6 @@
 /* cerebro.js — primera capa del visor: el universo (todo tu conocimiento), con una galaxia por parte del árbol y por colección.
    (El fichero y las variables se siguen llamando «cerebro» por historia: antes esta capa era un cerebro.)
-   Paisaje: estrellas con paralaje, nebulosas, galaxias lejanas y hilos tenues entre las galaxias.
+   Paisaje: estrellas con paralaje, nebulosas y galaxias lejanas (sin líneas entre galaxias).
    Cada galaxia es una miniatura exacta de su mapa de dentro (mismas ramas, ángulos, giro y color; ver mapa3d.js). «Libros» y «Notas» no tienen mapa: son ámbitos de búsqueda.
    Canvas 2D con perspectiva escrita a mano, como mapa3d.js: sin librerías ni WebGL. Lo incrusta construir_visor.py en la plantilla.
    Navegación: arrastrar = girar · rueda = acercar · clic en una galaxia = entrar.
@@ -30,7 +30,7 @@ var NEBULOSAS_COL = [[110, 80, 255], [60, 140, 255], [220, 80, 200], [40, 190, 1
 window.crearCerebro = function (o) {
   var cv = o.canvas, ctx = cv.getContext('2d'), G = o.galaxias, rnd = azar(11), gauss = function () { return (rnd() + rnd() + rnd() - 1.5) * 1.15; };
   var W = 800, H = 600, DPR = 1, yaw = .5, pitch = .62, zoom = 1, t = 0, tPrev = 0, raf = 0, vivo = false, hover = -1, arr = null, res = {};
-  var mundo = [], estrellas = [], nebulosas = [], lejos = [], hilos = [];
+  var mundo = [], estrellas = [], nebulosas = [], lejos = [];
 
   /* ---- el paisaje ---- */
   function esfera(r0, r1) { var r = r0 + (r1 - r0) * rnd(), u = 2 * rnd() - 1, ph = 2 * Math.PI * rnd(), s = Math.sqrt(1 - u * u); return [r * s * Math.cos(ph), r * u, r * s * Math.sin(ph)]; }
@@ -48,12 +48,6 @@ window.crearCerebro = function (o) {
     mundo.push({g: g, s: SITIOS[i] || [0, 0, 0], R: 26 + 24 * (g.peso || 0), polvo: polvo, sx: 0, sy: 0, sr: 40, rgb: g.color});
   });
   function escala(m) { return m.R / ((m.g.sistema && m.g.sistema.extent) || 520); }   /* unidades del mapa de dentro -> unidades del universo */
-  mundo.forEach(function (m, i) {                         /* hilos tenues: cada galaxia con sus dos vecinas y con una galaxia lejana */
-    mundo.map(function (n, j) { return {j: j, d: Math.hypot(m.s[0] - n.s[0], m.s[1] - n.s[1], m.s[2] - n.s[2])}; }).filter(function (e) { return e.j !== i; })
-      .sort(function (a, b) { return a.d - b.d; }).slice(0, 2).forEach(function (e) { hilos.push([m.s, mundo[e.j].s]); });
-    hilos.push([m.s, lejos[i % lejos.length].p]);
-  });
-
   /* ---- proyección ---- */
   var cY, sY, cP, sP, CX, CY, F, DIST = 470, dist = DIST, foco = {x: 0, y: 0, z: 0}, an = null, vel = 1;
   function prep() { cY = Math.cos(yaw); sY = Math.sin(yaw); cP = Math.cos(pitch); sP = Math.sin(pitch); CX = W / 2; CY = H / 2; F = 760 * Math.min(W / 800, H / 600) * zoom; }
@@ -62,7 +56,7 @@ window.crearCerebro = function (o) {
     var x1 = x * cY + z * sY, z1 = -x * sY + z * cY, y2 = y * cP + z1 * sP, z2 = -y * sP + z1 * cP, d = z2 + dist; if (d < 30) return false;
     var s = F / d; out.x = CX + x1 * s; out.y = CY - y2 * s; out.s = s; out.d = d; return true;
   }
-  var O = {}, O2 = {};
+  var O = {};
   function luz(c, x, y, tam, al) { ctx.globalAlpha = al > 1 ? 1 : al; ctx.drawImage(sprite(c), x - tam / 2, y - tam / 2, tam, tam); }
 
   function dibujar() {
@@ -75,16 +69,14 @@ window.crearCerebro = function (o) {
       if (!pr(g.p[0], g.p[1], g.p[2], O)) return; var tam = g.tam * O.s; if (tam < 2 || O.x < -tam || O.x > W + tam || O.y < -tam || O.y > H + tam) return;
       ctx.save(); ctx.translate(O.x, O.y); ctx.rotate(g.rot); ctx.scale(1, g.asp); ctx.globalAlpha = g.a; ctx.drawImage(sprite(g.c), -tam / 2, -tam / 2, tam, tam); ctx.restore();
       luz([255, 255, 255], O.x, O.y, Math.max(2, tam * .16), g.a); });
-    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(150,170,255,.07)'; ctx.globalAlpha = 1; ctx.beginPath();
-    hilos.forEach(function (h) { if (pr(h[0][0], h[0][1], h[0][2], O) && pr(h[1][0], h[1][1], h[1][2], O2)) { ctx.moveTo(O.x, O.y); ctx.lineTo(O2.x, O2.y); } });
-    ctx.stroke();
     mundo.forEach(function (m, gi) {
       var hot = gi === hover || res[m.g.id], k = escala(m), gc = Math.cos(GIRO * t), gs = Math.sin(GIRO * t), s0 = m.s;
       m.polvo.forEach(function (d) {                          /* el polvo: puntos pequeños, como en el mapa de dentro */
         if (pr(s0[0] + (d.lx * gc + d.lz * gs) * k, s0[1] + d.y * k, s0[2] + (-d.lx * gs + d.lz * gc) * k, O)) luz(d.c, O.x, O.y, 3.6 + 2.6 * d.s, Math.min(1, d.al * 1.35) * (hot ? 1 : .9));
       });
+      var vacia = !(m.g.sistema && m.g.sistema.ramas.length);        /* una galaxia sin nada dentro no lleva líneas: solo su polvo, su núcleo y su título */
       ctx.strokeStyle = 'rgba(' + m.rgb.join(',') + ',' + (hot ? .5 : .28) + ')'; ctx.lineWidth = 1; ctx.beginPath();   /* los dos brazos, como líneas finas */
-      for (var br = 0; br < 2; br++) { var vis = false;
+      for (var br = 0; br < (vacia ? 0 : 2); br++) { var vis = false;
         for (var rr = 30; rr <= 620; rr += 24) { var aa = br * Math.PI + (rr - 190) * ESPIRAL + GIRO * t;
           if (pr(s0[0] + rr * Math.cos(aa) * k, s0[1], s0[2] + rr * Math.sin(aa) * k, O)) { if (vis) ctx.lineTo(O.x, O.y); else ctx.moveTo(O.x, O.y); vis = true; } else vis = false; } }
       ctx.stroke(); ctx.globalAlpha = 1;
@@ -105,7 +97,7 @@ window.crearCerebro = function (o) {
       puestas.forEach(function (q) { if (Math.abs(e.m.sx - q.m.sx) < 130 && e.y < q.y + 28) e.y = q.y + 28; });
       puestas.push(e);
       var m = e.m, hot = e.gi === hover, n = res[m.g.id], col = 'rgb(' + m.rgb.join(',') + ')';
-      ctx.strokeStyle = 'rgba(' + m.rgb.join(',') + ',' + (hot ? .85 : .45) + ')'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(m.sx, m.sy + 4); ctx.lineTo(m.sx, e.y - 12); ctx.stroke();   /* línea guía: de la galaxia a su título */
+      if (m.g.sistema && m.g.sistema.ramas.length) { ctx.strokeStyle = 'rgba(' + m.rgb.join(',') + ',' + (hot ? .85 : .45) + ')'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(m.sx, m.sy + 4); ctx.lineTo(m.sx, e.y - 12); ctx.stroke(); }   /* línea guía: de la galaxia a su título (solo si tiene contenido) */
       var txt = m.g.nombre + (n ? '  · ' + n + ' ✓' : ''), yy = e.y - 2;
       ctx.lineJoin = 'round'; ctx.lineWidth = 3.5; ctx.strokeStyle = 'rgba(3,4,10,.95)';
       ctx.font = '700 11px ' + SANS; var tw = ctx.measureText(txt).width;

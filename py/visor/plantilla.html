@@ -284,6 +284,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 }
 @media (prefers-reduced-motion:reduce){ .toast{transition:none} }
 
+.enlaces a.btn{display:block;max-width:100%;white-space:normal;text-align:left;line-height:1.35;overflow-wrap:anywhere}
 /* pestañas (Universo / Importar) */
 .pestanas{display:flex;gap:2px;flex:none;padding:2px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}
 .pest{border:0;background:none;color:var(--muted);font:600 12.5px var(--sans,inherit);padding:5px 11px;border-radius:7px;cursor:pointer;white-space:nowrap}
@@ -298,14 +299,38 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 .imp-msg{margin:0;min-height:1.2em;color:#9fb0cc;font-size:13px;text-align:center}
 .imp-panel{width:100%;max-width:980px;display:grid;gap:8px}
 .imp-panel[hidden]{display:none}
-.imp-fila,.imp-global{display:grid;grid-template-columns:minmax(150px,1.3fr) 150px minmax(130px,1fr) 120px minmax(90px,.7fr) 30px;gap:6px;align-items:center;padding:8px;border:1px solid #1d2742;border-radius:9px;background:rgba(14,20,38,.7)}
-.imp-global{border-style:dashed} .imp-global .imp-nom{font-weight:600}
-.imp-fila select,.imp-fila input,.imp-global select,.imp-global input{min-width:0;padding:6px 8px;border:1px solid #2a3558;border-radius:7px;background:#0b1224;color:#e6ecfa;font:inherit;font-size:12.5px}
-.imp-nom b{display:block;font-size:13px;overflow-wrap:anywhere} .imp-nom small{display:block;color:#8ea0c0;font-size:11.5px;line-height:1.35}
-.imp-acc{display:flex;gap:8px;justify-content:flex-end;align-items:center}
+.imp-resumen{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:8px 10px;border:1px solid #1d2742;border-radius:9px;background:rgba(14,20,38,.7);font-size:13px}
+.imp-resumen b{color:#fff} .imp-resumen .sep{flex:1}
+.imp-barra{height:6px;border-radius:4px;background:#121a30;overflow:hidden;flex:1 1 100%} .imp-barra i{display:block;height:100%;width:0;background:linear-gradient(90deg,#6fa2ff,#b18cf0,#f08cc0);transition:width .25s}
+.imp-global{display:grid;grid-template-columns:minmax(120px,1fr) repeat(4,minmax(110px,1fr)) minmax(90px,.8fr);gap:6px;align-items:center;padding:8px;border:1px dashed #2a3558;border-radius:9px;background:rgba(14,20,38,.5)}
+.imp-global .imp-nom b{font-size:13px}
+.imp-global select,.imp-global input,.imp-card select,.imp-card input[type=text]{min-width:0;padding:6px 8px;border:1px solid #2a3558;border-radius:7px;background:#0b1224;color:#e6ecfa;font:inherit;font-size:12.5px}
+.imp-card{border:1px solid #1d2742;border-radius:10px;background:rgba(14,20,38,.7);overflow:hidden}
+.imp-card.off{opacity:.55} .imp-card.listo{border-color:#2f6b3a} .imp-card.error{border-color:#8a3a2c}
+.imp-cab{display:grid;grid-template-columns:22px minmax(160px,1.5fr) auto auto 30px 30px;gap:8px;align-items:center;padding:8px 10px}
+.imp-cab input[type=text]{width:100%;font-weight:600}
+.imp-ins{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end}
+.imp-ins span,.imp-chips span{padding:2px 7px;border-radius:999px;background:#131c35;border:1px solid #26335a;color:#b9c7e4;font-size:11px;white-space:nowrap}
+.imp-ins .gal{color:#fff;border-color:currentColor}
+.imp-ins .aviso{background:#3a2a10;border-color:#8a6a1c;color:#ffd27a}
+.imp-est{font-size:12px;min-width:90px;text-align:right}
+.imp-cuerpo{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px;padding:2px 12px 12px 40px;border-top:1px solid #151e38}
+.imp-cuerpo[hidden]{display:none}
+.imp-campos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;grid-column:1/-1;padding-top:10px}
+.imp-campos label{display:grid;gap:3px;font-size:11px;color:#8ea0c0}
+.imp-det h4{margin:0 0 5px;font-size:11.5px;color:#9fb0cc;text-transform:uppercase;letter-spacing:.05em}
+.imp-bar{display:grid;grid-template-columns:minmax(80px,1.4fr) 1fr 28px;gap:6px;align-items:center;margin:2px 0;font-size:12px;cursor:pointer;border-radius:5px;padding:1px 3px}
+.imp-bar:hover,.imp-bar.sel{background:#16213f} .imp-bar.sel{outline:1px solid #6fa2ff}
+.imp-bar i{display:block;height:6px;border-radius:3px;background:#3b5bb5} .imp-bar em{font-style:normal;color:#8ea0c0;text-align:right}
+.imp-prev{font-style:italic;color:#9fb0cc;font-size:12px;line-height:1.45;margin:0}
+.imp-caps{margin:0;padding-left:16px;font-size:12px;color:#b9c7e4} .imp-nota{font-size:11.5px;color:#8ea0c0;margin:4px 0 0}
 .imp-res{display:flex;gap:8px;align-items:baseline;padding:6px 8px;border-radius:8px;background:rgba(14,20,38,.6);font-size:13px}
 .imp-res .ok{color:#7be08a} .imp-res .dup{color:#e5c06a} .imp-res .err{color:#ff8a73}
-@media (max-width:900px){ .imp-fila,.imp-global{grid-template-columns:1fr 1fr} .imp-nom{grid-column:1/-1} }
+.imp-ayuda{width:100%;max-width:980px;border:1px solid #1d2742;border-radius:10px;background:rgba(14,20,38,.55);margin-top:10px}
+.imp-ayuda summary{cursor:pointer;padding:10px 14px;font-weight:600;font-size:13.5px;color:#cfe0ff}
+.imp-ayuda div{padding:2px 16px 14px;font-size:13px;line-height:1.55;color:#b9c7e4}
+.imp-ayuda ol{margin:6px 0 8px;padding-left:20px} .imp-ayuda li{margin:4px 0} .imp-ayuda code{background:#10192f;padding:1px 5px;border-radius:4px;font-size:12px}
+@media (max-width:900px){ .imp-global{grid-template-columns:1fr 1fr} .imp-cab{grid-template-columns:22px 1fr 30px 30px} .imp-ins,.imp-est{grid-column:2/-1} .imp-cuerpo{grid-template-columns:1fr;padding-left:12px} }
 </style>
 </head>
 <body>
@@ -328,6 +353,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
         <div class="pop">
           <label class="chk"><input type="checkbox" id="soloSas"> Solo con equivalente SAS</label>
           <label class="chk" title="Conceptos de método (estadística, actuarial, finanzas) que todavía no tienen una función en el árbol. Los normativos no cuentan: no se programan"><input type="checkbox" id="soloHuecos"> Solo huecos (sin código)</label>
+          <label class="chk" title="Conceptos con algún vídeo (Very Normal, Harvard, MIT, 3Blue1Brown…): llevan un ▶ en el mapa"><input type="checkbox" id="soloVideo"> Solo conceptos con vídeo</label>
           <label class="chk" title="Conceptos marcados como prioritarios en el catálogo"><input type="checkbox" id="soloAlta"> Solo prioridad alta</label>
           <p id="resumen"></p><p id="pista"></p>
         </div></details>
@@ -357,6 +383,16 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
     <div class="imp-agujero"><canvas id="agujero" tabindex="0" role="button" aria-label="Agujero negro: haz clic para añadir archivos"></canvas></div>
     <p class="imp-msg" id="impMsg" aria-live="polite"></p>
     <div class="imp-panel" id="impPanel" hidden></div>
+    <details class="imp-ayuda"><summary>¿Cómo funciona la importación?</summary><div>
+      <ol>
+        <li><b>Añade archivos</b>: haz clic en el agujero negro (o suelta archivos encima). Se abre el explorador de Windows y puedes elegir varios a la vez. Sirven <b>PDF</b> (hace falta <code>pypdf</code>; el instalador lo trae), <b>EPUB</b>, <b>DOCX</b>, <b>MD</b> y <b>TXT</b>.</li>
+        <li><b>Se clasifica solo</b>: para cada archivo se lee el principio y se propone una <b>galaxia</b> (Finanzas si domina el vocabulario financiero; Libros si es un PDF largo o un EPUB; Notas si es corto o de apuntes), un <b>género</b> (historia, economía, ensayo, ciencia, novela…), un <b>subtema</b> (el tema del catálogo de conceptos que más aparece), un <b>tipo</b> y los <b>capítulos</b> (los marcadores del PDF, la tabla de contenidos del EPUB o los títulos).</li>
+        <li><b>Tú mandas</b>: despliega cada tarjeta (▾) para ver qué se ha detectado (barras con las puntuaciones, capítulos, vista previa del texto). Pulsa una barra para fijar ese género o subtema, cambia los desplegables, edita el título o añade etiquetas. «Para todos» aplica una elección a toda la lista. Lo que dejes en <i>Automático</i> lo decide el importador.</li>
+        <li><b>Nombres largos</b>: los nombres tipo «Título -- Autor -- 2016 -- Editorial -- ISBN…» se recortan al título (60 caracteres como mucho). Lo puedes editar; el nombre completo se conserva en la ficha.</li>
+        <li><b>Al importar</b>: cada archivo se copia (el original no se toca) a <code>conocimiento/biblioteca/&lt;galaxia&gt;/&lt;subtema&gt;/</code>, se indexa su texto, y el universo se regenera: en <b>Libros</b> aparece una rama por género, un módulo por libro y un punto por capítulo. Lo que ya estaba importado se detecta y se salta.</li>
+        <li><b>Después</b>: el buscador de arriba encuentra el texto con su página y, al pulsar un resultado, abre el PDF en esa página. En el mapa, cada capítulo tiene su botón «Abrir en la página N».</li>
+        <li><b>Tus datos</b> viven en <code>conocimiento/</code> (no se publican). También puedes importar desde la consola: <code>python -m conocimiento importar libro.pdf -G historia</code>.</li>
+      </ol></div></details>
   </section>
 </div>
 <div class="toast" id="toast" role="status"></div>
@@ -388,33 +424,36 @@ var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, fu
 var reducir = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* ---------- árbol ---------- */
+var VIDEO_RE = /youtube|youtu\.be|vimeo|3blue1brown|ocw\.mit\.edu\/.*(video|lecture)|stat110|video/i;
+function esVideo(f) { return !!f.url && (f.tipo === 'very_normal' || VIDEO_RE.test(f.url)); }
 var root = {id: 'raiz', nombre: 'Árbol de la estadística', kind: 'raiz', hijos: [], depth: 0, parent: null};
 DATA.ramas.forEach(function (rm) {
-  var rn = {id: 'r-' + rm.id, rama: rm.id, nombre: rm.nombre, desc: rm.desc, kind: 'rama', hijos: [], parent: root, depth: 1, colorHex: rm.color ? rm.color.oscuro : null, grupo: rm.grupo || ''};
+  var rn = {id: 'r-' + rm.id, rama: rm.id, nombre: rm.nombre, desc: rm.desc, kind: 'rama', hijos: [], parent: root, depth: 1, colorHex: rm.color ? rm.color.oscuro : null, grupo: rm.grupo || '', galaxia: rm.galaxia || '', biblioteca: !!rm.biblioteca};
   rm.modulos.forEach(function (md) {
     var mn = {id: 'm-' + rm.id + '-' + md.id, rama: rm.id, nombre: md.nombre, desc: md.desc, archivo: md.archivo, kind: 'modulo', hijos: [], parent: rn, depth: 2};
     md.items.forEach(function (it) {
       var h = Object.assign({}, it, {rid: it.id, nid: 'f-' + it.id, rama: rm.id, kind: 'hoja', hijos: [], parent: mn, depth: 3, modulo: md.nombre, ramaNombre: rm.nombre});
-      h.id = 'f-' + it.id; mn.hijos.push(h);
+      h.id = 'f-' + it.id; h.video = it.tipo === 'concepto' && (it.fuentes || []).some(esVideo); mn.hijos.push(h);
     });
     rn.hijos.push(mn);
   });
   root.hijos.push(rn);
 });
-/* ---------- galaxias: cada una es una parte del árbol con su propio mapa 3D (Libros y Notas son solo ámbitos de búsqueda) ---------- */
+/* ---------- galaxias: cada una con su propio mapa 3D si tiene contenido (Libros y Notas lo tienen en cuanto importas algo; vacías son solo ámbitos de búsqueda) ---------- */
 var GALAXIAS = [
   {id: 'codigo', nombre: 'Código', color: [255, 150, 40], peso: 1},
   {id: 'conceptos', nombre: 'Conceptos', color: [177, 140, 240], peso: .9},
   {id: 'demos', nombre: 'Demos y guías', color: [79, 195, 220], peso: .45},
   {id: 'finanzas', nombre: 'Finanzas', color: [111, 207, 123], peso: .6},
-  {id: 'libros', nombre: 'Libros', color: [111, 162, 255], peso: .4, solo: true},
-  {id: 'notas', nombre: 'Notas y enlaces', color: [240, 140, 192], peso: .25, solo: true}];
+  {id: 'libros', nombre: 'Libros', color: [111, 162, 255], peso: .4},
+  {id: 'notas', nombre: 'Notas y enlaces', color: [240, 140, 192], peso: .25}];
 var GAL = {}, COL_GAL = {codigo: 'codigo', conceptos: 'conceptos', teoria: 'demos'};
-GALAXIAS.forEach(function (g) { GAL[g.id] = g; if (!g.solo) g.raiz = {id: 'g-' + g.id, nombre: g.nombre, kind: 'raiz', hijos: [], depth: 0, parent: null, galaxia: g}; });
+GALAXIAS.forEach(function (g) { GAL[g.id] = g; g.raiz = {id: 'g-' + g.id, nombre: g.nombre, kind: 'raiz', hijos: [], depth: 0, parent: null, galaxia: g}; });
 root.hijos.forEach(function (rn) {
-  var g = GAL[rn.rama === 'finanzas' || rn.rama === 't_fin' ? 'finanzas' : rn.grupo === 'conceptos' ? 'conceptos' : rn.rama === 'demos' || rn.rama === 'guias' ? 'demos' : 'codigo'];
+  var g = GAL[rn.galaxia || (rn.rama === 'finanzas' || rn.rama === 't_fin' ? 'finanzas' : rn.grupo === 'conceptos' ? 'conceptos' : rn.rama === 'demos' || rn.rama === 'guias' ? 'demos' : 'codigo')];
   rn.parent = g.raiz; g.raiz.hijos.push(rn);
 });
+GALAXIAS.forEach(function (g) { g.solo = !g.raiz.hijos.length; });      /* sin ramas no hay mapa que abrir */
 function galaxiaDe(n) { for (var p = n; p.parent; p = p.parent); return p.galaxia || null; }
 var porId = {}, hojas = [];
 (function reg(n) { porId[n.id] = n; if (n.kind === 'hoja') {
@@ -439,7 +478,7 @@ function cuenta(n) { return n.kind === 'hoja' ? 1 : n.hijos.reduce(function (a, 
 /* ---------- mapa 3D (el motor está en visor/mapa3d.js; aquí solo se conecta con el resto del visor) ----------
    Núcleo = el árbol; ramas = nodos con anillo que orbitan; módulos y hojas = puntos alrededor de su rama.
    `focus` es el nivel en el que estamos (raíz, rama o módulo); la cámara vuela hasta él. */
-var focus = null, sel = null, query = '', soloSas = false, soloHuecos = false, soloAlta = false, coincide = null, conCoincidencia = {};
+var focus = null, sel = null, query = '', soloSas = false, soloHuecos = false, soloAlta = false, soloVideo = false, coincide = null, conCoincidencia = {};
 function esDesc(n, a) { for (var p = n; p; p = p.parent) if (p === a) return true; return false; }
 function moduloPrincipal(rn) {      /* el «planeta» de la rama: su módulo con más elementos */
   return rn.hijos.reduce(function (m, c) { return !m || c.hijos.length > m.hijos.length ? c : m; }, null) || rn;
@@ -462,7 +501,7 @@ function instancia(g) {
   $('#cerebro').parentNode.insertBefore(cv, $('#cerebro'));
   var m = crearMapa3D({
     canvas: cv, color: g.color, root: g.raiz, hojas: hojas.filter(function (h) { return esDesc(h, g.raiz); }), esDesc: esDesc, reducir: reducir,
-    estado: function () { return {focus: focus && esDesc(focus, g.raiz) ? focus : g.raiz, sel: sel, filtrando: !!(query || soloSas || soloHuecos || soloAlta), coincide: coincide || {}, conCoincidencia: conCoincidencia}; },
+    estado: function () { return {focus: focus && esDesc(focus, g.raiz) ? focus : g.raiz, sel: sel, filtrando: !!(query || soloSas || soloHuecos || soloAlta || soloVideo), coincide: coincide || {}, conCoincidencia: conCoincidencia}; },
     alNodo: clicNodo,
     alFondo: function () { if (focus.parent) ir(focus.parent); }
   });
@@ -512,9 +551,16 @@ function medir() { if (mapa) mapa.medir(); }
 /* ---------- cerebro: primera capa (motor en visor/cerebro.js). Cada galaxia es una parte del árbol (Código, Conceptos, Demos, Finanzas) o una colección del gestor de conocimiento ---------- */
 var coleccionK = '', resArbol = {}, resK = {};
 (function () {                                /* el rótulo de cada galaxia: cuántos elementos tiene */
-  var n = {}; hojas.forEach(function (h) { var g = galaxiaDe(h); n[g.id] = (n[g.id] || 0) + 1; });
-  GAL.codigo.base = n.codigo + ' funciones'; GAL.conceptos.base = n.conceptos + ' conceptos'; GAL.demos.base = n.demos + ' demos y guías'; GAL.finanzas.base = n.finanzas + ' funciones y conceptos';
-  GALAXIAS.forEach(function (g) { g.sub = g.base || 'sin indexar'; });
+  var n = {}, docs = {}, caps = {};
+  hojas.forEach(function (h) { var g = galaxiaDe(h).id;
+    if (h.tipo === 'capitulo') caps[g] = (caps[g] || 0) + 1; else if (h.tipo === 'documento') docs[g] = (docs[g] || 0) + 1; else n[g] = (n[g] || 0) + 1; });
+  var nVideo = hojas.filter(function (h) { return h.video; }).length;
+  GAL.codigo.base = (n.codigo || 0) + ' funciones'; GAL.conceptos.base = (n.conceptos || 0) + ' conceptos · ' + nVideo + ' con vídeo';
+  GAL.demos.base = (n.demos || 0) + ' demos y guías'; GAL.finanzas.base = (n.finanzas || 0) + ' funciones y conceptos';
+  if (caps.libros) GAL.libros.base = GAL.libros.raiz.hijos.reduce(function (s, r) { return s + r.hijos.length; }, 0) + ' libros · ' + caps.libros + ' capítulos';
+  if (docs.notas) GAL.notas.base = docs.notas + ' notas';
+  ['codigo', 'conceptos', 'demos', 'finanzas'].forEach(function (c) { if (docs[c]) GAL[c].base += ' · +' + docs[c] + ' docs'; });
+  GALAXIAS.forEach(function (g) { g.sub = g.base || 'vacía: importa algo'; });
 })();
 function luces() {                            /* las galaxias con coincidencias (del árbol y de tus carpetas) se iluminan */
   var m = {}; [resArbol, resK].forEach(function (o) { Object.keys(o).forEach(function (k) { m[k] = Math.max(m[k] || 0, o[k]); }); }); cerebro.resaltar(m);
@@ -541,23 +587,13 @@ function mostrarCerebro() {
 $('#cerebroBtn').onclick = mostrarCerebro;
 setTimeout(function () {                      /* los mapas de dentro se crean ya (en silencio): las galaxias pequeñas son su miniatura y los usan para el vuelo */
   GALAXIAS.forEach(function (g) {
-    if (!g.raiz) return;
+    if (g.solo) return;
     var inst = instancia(g); inst.mapa.rotacion(false);
     g.sistema = {ramas: g.raiz.hijos.map(function (rn) { return rn.p3; }), extent: inst.mapa.geometria().extent, px: 1};
   });
   cerebro.resaltar(resK);
 }, 60);
 if (window.ResizeObserver) new ResizeObserver(function () { cerebro.medir(); }).observe($('#cerebro')); else window.addEventListener('resize', function () { cerebro.medir(); });
-async function actualizarColecciones() {      /* cuántos ficheros hay en cada galaxia (solo en la app, con el índice hecho) */
-  var api = window.pywebview && window.pywebview.api; if (!api) return;
-  try {
-    var e = api.estado_conocimiento ? await api.estado_conocimiento() : {}, b = api.resumen_biblioteca ? await api.resumen_biblioteca() : {}, d = {};
-    ['libros', 'finanzas', 'notas'].forEach(function (c) { if (e[c]) d[c] = (GAL[c].base ? GAL[c].base + ' · ' : '') + e[c] + ' ficheros'; });
-    ['codigo', 'conceptos', 'demos'].forEach(function (c) { if (b[c]) d[c] = GAL[c].base + ' · +' + b[c] + ' docs'; });
-    cerebro.datos(d);
-  } catch (x) {}
-}
-window.addEventListener('pywebviewready', actualizarColecciones);
 
 /* ---------- divisor: cambiar el ancho del mapa / panel ---------- */
 (function () {
@@ -611,6 +647,7 @@ function migas() {
 var nCon = hojas.filter(function (h) { return h.tipo === 'concepto'; }), nHuecos = nCon.filter(esHueco).length;
 $('#resumen').textContent = hojas.filter(function (h) { return h.tipo === 'funcion'; }).length + ' funciones · ' + nCon.length + ' conceptos (' + nHuecos + ' huecos) · ' + hojas.filter(function (h) { return h.tipo === 'demo'; }).length + ' demos · ' + DATA.pruebas + ' pruebas · generado ' + DATA.generado;
 root.hijos.forEach(function (rn) {
+  if (rn.biblioteca) return;
   var b = document.createElement('button'); b.type = 'button'; b.className = 'chip b-' + rn.rama; b.dataset.id = rn.id;
   b.innerHTML = '<i style="background:var(--c)"></i>' + esc(rn.nombre) + ' <b>' + cuenta(rn) + '</b>';
   b.onclick = function () { var dst = focus === rn ? rn.parent : rn; ir(dst); if (dst === rn) detalleGrupoFunciones(rn); }; $('#chips').appendChild(b);
@@ -649,11 +686,11 @@ function puntuar(n, tokens) {
 }
 var resultados = [], idxRes = -1;
 function buscar() {
-  query = $('#q').value.trim(); soloSas = $('#soloSas').checked; soloHuecos = $('#soloHuecos').checked; soloAlta = $('#soloAlta').checked;
+  query = $('#q').value.trim(); soloSas = $('#soloSas').checked; soloHuecos = $('#soloHuecos').checked; soloAlta = $('#soloAlta').checked; soloVideo = $('#soloVideo').checked;
   var tokens = norm(query).split(/\s+/).filter(Boolean);
   coincide = {}; conCoincidencia = {}; resultados = [];
   hojas.forEach(function (h) {
-    var okSas = (!soloSas || (h.sas && h.sas !== '—' && h.sas.trim() !== '')) && (!soloHuecos || esHueco(h)) && (!soloAlta || h.prioridad === 'alta');
+    var okSas = (!soloSas || (h.sas && h.sas !== '—' && h.sas.trim() !== '')) && (!soloHuecos || esHueco(h)) && (!soloAlta || h.prioridad === 'alta') && (!soloVideo || h.video);
     var sc = tokens.length ? puntuar(h, tokens) : 1;
     if (okSas && sc > 0) { coincide[h.id] = sc; resultados.push({n: h, s: sc});
       for (var p = h.parent; p; p = p.parent) conCoincidencia[p.id] = (conCoincidencia[p.id] || 0) + 1; }
@@ -722,7 +759,7 @@ $('#q').addEventListener('keydown', function (ev) {
   else if (ev.key === 'Enter') { var r = resultados[idxRes >= 0 ? idxRes : 0]; if (r) { ev.preventDefault(); elegir(r.n); } }
   else if (ev.key === 'Escape') { this.value = ''; buscar(); this.blur(); }
 });
-$('#soloSas').addEventListener('change', buscar); $('#soloAlta').addEventListener('change', buscar);
+$('#soloSas').addEventListener('change', buscar); $('#soloAlta').addEventListener('change', buscar); $('#soloVideo').addEventListener('change', buscar);
 $('#soloHuecos').addEventListener('change', buscar);
 document.addEventListener('keydown', function (ev) {
   var t = ev.target && ev.target.tagName;
@@ -783,6 +820,7 @@ function seleccionar(n, zoom) {
   var d = $('#detalle'), esFn = n.tipo === 'funcion', esDoc = n.tipo === 'doc';
   if (n.tipo === 'concepto') { detalleConcepto(n, d); return; }
   if (n.tipo === 'demo') { detalleDemo(n, d); return; }
+  if (n.tipo === 'capitulo' || n.tipo === 'documento') { detalleDocumento(n, d); return; }
   var h = '<div class="det-cab b-' + n.rama + '"><i></i><span>' + esc(n.ramaNombre) + ' › ' + esc(n.modulo) + '</span></div>' +
     '<h2>' + esc(n.nombre) + '</h2>' + (n.desc ? '<p class="desc">' + esc(n.desc) + '</p>' : '');
   var meta = '';
@@ -893,6 +931,9 @@ function detalleConcepto(n, d) {
     (n.prioridad === 'alta' ? ' <span class="estado">Prioridad alta</span>' : '') +
     '<p class="desc">' + esc(n.desc) + '</p>';
   if ((n.sinonimos || []).length) h += '<dl class="meta"><dt>También</dt><dd>' + esc(n.sinonimos.join(', ')) + '</dd></dl>';
+  var vids = (n.fuentes || []).filter(esVideo);
+  if (vids.length) h += '<h3>▶ Vídeos (' + vids.length + ')</h3><div class="enlaces">' + vids.map(function (f) {
+    return '<a class="btn" href="' + esc(f.url) + '" target="_blank" rel="noopener noreferrer" title="' + esc(f.ref) + '">▶ ' + esc(f.ref.length > 52 ? f.ref.slice(0, 50) + '…' : f.ref) + (f.base ? ' <small style="opacity:.7">· ' + esc(f.base.length > 28 ? f.base.slice(0, 26) + '…' : f.base) + '</small>' : '') + '</a>'; }).join('') + '</div>';
   var demoIn = (demosDe[n.rid] || [])[0];
   if (demoIn) h += '<h3>' + esc(demoIn.nombre) + '</h3><div class="dm" id="demoIn"></div>';
   if ((n.ejemplo || []).length) h += '<h3>Probar con datos simulados</h3><div class="nb" id="nb"></div>';
@@ -922,6 +963,23 @@ function detalleConcepto(n, d) {
   };
 }
 
+function detalleDocumento(n, d) {         /* un capítulo de un libro o un documento importado (ver conocimiento/importar.py) */
+  var cap = n.tipo === 'capitulo', gen = n.genero && GENEROS_NOM[n.genero] ? GENEROS_NOM[n.genero] : '';
+  var h = '<div class="det-cab b-' + n.rama + '"><i></i><span>' + esc(n.ramaNombre) + ' › ' + esc(n.modulo) + '</span></div><h2 class="sans">' + esc(n.nombre) + '</h2><p class="desc">' + esc(n.desc) + '</p><dl class="meta">' +
+    (n.libro ? '<dt>Libro</dt><dd>' + esc(n.libro) + '</dd>' : '') + (n.pagina ? '<dt>Página</dt><dd>' + n.pagina + (n.paginas ? ' de ' + n.paginas : '') + '</dd>' : '') +
+    (gen ? '<dt>Género</dt><dd>' + esc(gen) + '</dd>' : '') + (n.subtema ? '<dt>Subtema</dt><dd>' + esc(n.subtema) + '</dd>' : '') + (n.etiquetas ? '<dt>Etiquetas</dt><dd>' + esc(n.etiquetas) + '</dd>' : '') +
+    (n.fecha ? '<dt>Importado</dt><dd>' + esc(n.fecha) + '</dd>' : '') + (n.titulo_largo && n.titulo_largo !== n.libro && n.titulo_largo !== n.nombre ? '<dt>Nombre completo</dt><dd>' + esc(n.titulo_largo) + '</dd>' : '') + '</dl>' +
+    '<div class="acciones"><button class="btn primario" data-a="abrir" type="button">' + (n.pagina ? 'Abrir en la página ' + n.pagina : 'Abrir el documento') + '</button>' +
+    '<button class="btn" data-a="buscar" type="button" title="Busca en el texto de todo lo importado">Buscar «' + esc(n.nombre.length > 24 ? n.nombre.slice(0, 22) + '…' : n.nombre) + '»</button></div>';
+  d.innerHTML = h; d.scrollTop = 0;
+  d.onclick = function (ev) {
+    var b = ev.target.closest('button[data-a]'); if (!b) return;
+    if (b.dataset.a === 'abrir') { var a = window.pywebview && window.pywebview.api; if (a && a.abrir_fuente) a.abrir_fuente(n.ruta, n.pagina ? 'p. ' + n.pagina : ''); else aviso('Abrir los ficheros funciona en la app'); }
+    else { $('#q').value = n.nombre; buscar(); $('#q').focus(); }
+  };
+}
+var GENEROS_NOM = {historia: 'Historia', economia: 'Economía y finanzas', ensayo: 'Ensayo y filosofía', estadistica: 'Estadística y matemáticas', ciencia: 'Ciencia y divulgación', novela: 'Novela y ficción',
+                   biografia: 'Biografía y memorias', politica: 'Política y sociedad', tecnologia: 'Tecnología e informática', psicologia: 'Psicología y salud', arte: 'Arte, música y cultura', otro: 'Otros'};
 function detalleDemo(n, d) {
   var h = '<div class="det-cab b-' + n.rama + '"><i></i><span>' + esc(n.ramaNombre) + ' › ' + esc(n.modulo) + '</span></div>' +
     '<h2 class="sans">' + esc(n.nombre) + '</h2><p class="desc">' + esc(n.desc) + '</p><div class="dm"></div>' +
@@ -1041,12 +1099,14 @@ $('#pestImportar').onclick = function () { pestana('importar'); };
 var apMostrarOrig = apMostrar;
 apMostrar = function (on) { if (on && impAbierta()) impCerrar(); apMostrarOrig(on); pintarPestanas(); };
 
-/* ---------- el importador: agujero negro + panel de archivos con desplegables (el trabajo lo hace py/conocimiento/importar.py) ---------- */
+/* ---------- el importador: agujero negro + tarjetas de archivos con lo detectado, desplegables y progreso (el trabajo lo hace py/conocimiento/importar.py) ---------- */
 var imp = {archivos: [], opciones: null, ocupado: false, resultados: null};
 var agujero = crearAgujero({canvas: $('#agujero'), alClic: impClic});
 if (window.ResizeObserver) new ResizeObserver(function () { agujero.medir(); }).observe($('#agujero')); else window.addEventListener('resize', function () { agujero.medir(); });
 function impAviso(m) { $('#impMsg').textContent = m || ''; }
 function impApi() { var a = window.pywebview && window.pywebview.api; return a && a.elegir_archivos ? a : null; }
+function fmtTam(b) { return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
+function recorta(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1).replace(/\s+\S*$/, '') + '…' : s; }
 async function impOpciones() {
   var a = impApi(); if (!a || imp.opciones) return;
   var o = await a.opciones_importador(); if (!o.error) { imp.opciones = o; impRender(); }
@@ -1064,72 +1124,121 @@ async function impElegir() {
 async function impAnadir(rutas) {
   rutas = rutas.filter(function (r) { return !imp.archivos.some(function (a) { return a.ruta === r; }); });
   if (!rutas.length) return;
-  impAviso('Clasificando ' + rutas.length + ' archivo' + (rutas.length > 1 ? 's' : '') + '…'); agujero.ocupado(true);
-  var cl = await impApi().clasificar_archivos(rutas); agujero.ocupado(false);
-  if (cl.error) { impAviso(cl.error); return; }
-  imp.resultados = null; impAviso('');
-  cl.forEach(function (c) { imp.archivos.push({ruta: c.ruta, nombre: c.ruta.split(/[\\/]/).pop(), auto: c, galaxia: 'auto', subtema: '', tipo: 'auto', etiquetas: ''}); });
-  impRender();
+  agujero.ocupado(true); imp.resultados = null;
+  for (var i = 0; i < rutas.length; i++) {                    /* de uno en uno: así se ve el avance y un PDF enorme no bloquea a los demás */
+    impAviso('Analizando ' + (i + 1) + ' de ' + rutas.length + ': ' + recorta(rutas[i].split(/[\\/]/).pop(), 50) + '…');
+    var cl = await impApi().clasificar_archivos([rutas[i]]);
+    if (cl.error) { impAviso(cl.error); continue; }
+    var c = cl[0];
+    imp.archivos.push({ruta: c.ruta, nombre: c.ruta.split(/[\\/]/).pop(), auto: c, titulo: c.titulo, galaxia: 'auto', genero: 'auto', subtema: '', tipo: 'auto', etiquetas: '',
+      incluir: !c.duplicado, abierto: imp.archivos.length === 0, estado: '', res: null});
+    impRender();
+  }
+  agujero.ocupado(false); impAviso('');
 }
 function impOpt(lista, val, autoTxt) {
   return '<option value="auto"' + (val === 'auto' ? ' selected' : '') + '>' + esc(autoTxt) + '</option>' +
     lista.map(function (g) { return '<option value="' + esc(g.id) + '"' + (val === g.id ? ' selected' : '') + '>' + esc(g.nombre) + '</option>'; }).join('');
 }
+function impNom(lista, id) { return ((lista || []).filter(function (g) { return g.id === id; })[0] || {}).nombre || id; }
+function impBarras(items, nombreKey, valKey, sel, tipo) {
+  var max = Math.max.apply(null, items.map(function (x) { return x[valKey]; }).concat([1]));
+  return items.map(function (x) { var nom = x[nombreKey];
+    return '<div class="imp-bar' + (sel === nom || sel === x.id ? ' sel' : '') + '" data-fija="' + tipo + '" data-v="' + esc(x.id || nom) + '" title="Pulsa para fijarlo"><span>' + esc(nom) + '</span><span><i style="width:' + Math.round(100 * x[valKey] / max) + '%"></i></span><em>' + x[valKey] + '</em></div>'; }).join('');
+}
+function impTarjeta(a, i, o) {
+  var c = a.auto, G = o.galaxias, ga = a.galaxia === 'auto' ? c.galaxia : a.galaxia, ge = a.genero === 'auto' ? c.genero : a.genero, ti = a.tipo === 'auto' ? c.tipo : a.tipo, su = a.subtema || c.subtema;
+  var col = GAL[ga] ? 'rgb(' + GAL[ga].color.join(',') + ')' : '#9fb0cc';
+  var h = '<div class="imp-card' + (a.incluir ? '' : ' off') + (a.estado === 'listo' ? ' listo' : a.estado === 'error' ? ' error' : '') + '" data-i="' + i + '"><div class="imp-cab">' +
+    '<input type="checkbox" data-c="incluir"' + (a.incluir ? ' checked' : '') + ' title="Incluir en la importación">' +
+    '<input type="text" data-c="titulo" value="' + esc(a.titulo) + '" title="' + esc(c.titulo_largo || a.nombre) + '">' +
+    '<div class="imp-ins"><span class="gal" style="color:' + col + '">' + esc(impNom(G, ga)) + '</span><span>' + esc(impNom(o.generos, ge)) + '</span><span>' + esc(su) + '</span><span>' + esc(impNom(o.tipos, ti)) + '</span>' +
+    '<span>' + esc(c.extension.toUpperCase()) + ' · ' + fmtTam(c.tamano) + (c.paginas ? ' · ' + c.paginas + ' págs.' : '') + (c.idioma ? ' · ' + c.idioma : '') + '</span>' +
+    (c.duplicado ? '<span class="aviso">ya importado</span>' : '') + '</div>' +
+    '<span class="imp-est" style="color:' + (a.estado === 'error' ? '#ff8a73' : '#7be08a') + '">' + (a.estado === 'hecho' ? '' : '') + esc(a.estadoTxt || '') + '</span>' +
+    '<button class="btn ic" data-ab type="button" title="Ver qué se ha detectado y cambiarlo">' + (a.abierto ? '▴' : '▾') + '</button><button class="btn ic" data-q type="button" title="Quitar de la lista">✕</button></div>';
+  h += '<div class="imp-cuerpo"' + (a.abierto ? '' : ' hidden') + '><div class="imp-campos">' +
+    '<label>Galaxia<select data-c="galaxia">' + impOpt(G, a.galaxia, 'Automática (' + impNom(G, c.galaxia) + ')') + '</select></label>' +
+    '<label>Género<select data-c="genero">' + impOpt(o.generos, a.genero, 'Automático (' + impNom(o.generos, c.genero) + ')') + '</select></label>' +
+    '<label>Subtema<input type="text" data-c="subtema" list="impSub" placeholder="Automático (' + esc(c.subtema) + ')" value="' + esc(a.subtema) + '"></label>' +
+    '<label>Tipo<select data-c="tipo">' + impOpt(o.tipos, a.tipo, 'Automático (' + impNom(o.tipos, c.tipo) + ')') + '</select></label>' +
+    '<label style="grid-column:1/-1">Etiquetas (separadas por comas)<input type="text" data-c="etiquetas" placeholder="p. ej. regresión, tfm, repaso" value="' + esc(a.etiquetas) + '"></label></div>' +
+    '<div class="imp-det"><h4>Género más probable</h4>' + (c.generos.length ? impBarras(c.generos, 'nombre', 'puntos', a.genero === 'auto' ? c.genero : a.genero, 'genero') : '<p class="imp-nota">Sin pistas claras: «Otros».</p>') +
+    '<h4 style="margin-top:8px">Temas de estadística detectados</h4>' + (c.temas.length ? impBarras(c.temas, 'tema', 'puntos', su, 'subtema') : '<p class="imp-nota">Ninguno del catálogo.</p>') + '</div>' +
+    '<div class="imp-det"><h4>Capítulos detectados (' + c.n_capitulos + ')</h4>' + (c.capitulos.length ? '<ol class="imp-caps">' + c.capitulos.map(function (x) { return '<li>' + esc(recorta(x, 60)) + '</li>'; }).join('') + (c.n_capitulos > c.capitulos.length ? '<li>… y ' + (c.n_capitulos - c.capitulos.length) + ' más</li>' : '') + '</ol>' : '<p class="imp-nota">Sin índice: se importará como un solo bloque.</p>') +
+    (c.vista_previa ? '<h4 style="margin-top:8px">Vista previa</h4><p class="imp-prev">«' + esc(c.vista_previa) + '…»</p>' : '') +
+    '<p class="imp-nota">Motivo: ' + esc(c.motivo) + '.' + (c.titulo_largo && c.titulo_largo.length > c.titulo.length + 3 ? ' Nombre recortado (original: «' + esc(recorta(c.titulo_largo, 90)) + '»).' : '') + '</p>' +
+    (c.duplicado ? '<p class="imp-nota" style="color:#ffd27a">Ya está en tu biblioteca (' + esc(recorta(c.duplicado, 70)) + '). Por defecto no se vuelve a importar.</p>' : '') + '</div></div></div>';
+  return h;
+}
 function impRender() {
-  var p = $('#impPanel'), o = imp.opciones || {galaxias: GALAXIAS, tipos: [], subtemas: {}};
+  var p = $('#impPanel'), o = imp.opciones || {galaxias: GALAXIAS, tipos: [], generos: [], subtemas: {}};
   if (!imp.archivos.length && !imp.resultados) { p.hidden = true; p.innerHTML = ''; return; }
   p.hidden = false;
+  var foco = document.activeElement && document.activeElement.dataset ? [document.activeElement.dataset.c, document.activeElement.closest('.imp-card') ? document.activeElement.closest('.imp-card').dataset.i : null, document.activeElement.selectionStart] : null;
   var subs = {}; Object.keys(o.subtemas).forEach(function (g) { o.subtemas[g].forEach(function (s) { subs[s] = 1; }); });
   var h = '<datalist id="impSub">' + Object.keys(subs).map(function (s) { return '<option value="' + esc(s) + '">'; }).join('') + '</datalist>';
   if (imp.archivos.length) {
-    h += '<div class="imp-global"><div class="imp-nom"><b>Para todos</b><small>Déjalo en «Automático» para que lo decida el importador.</small></div>' +
-      '<select id="gGal">' + impOpt(o.galaxias, 'auto', 'Galaxia: automática') + '</select><input id="gSub" list="impSub" placeholder="Subtema: automático">' +
-      '<select id="gTipo">' + impOpt(o.tipos, 'auto', 'Tipo: automático') + '</select><input id="gEti" placeholder="Etiquetas"><span></span></div>';
-    imp.archivos.forEach(function (a, i) {
-      var c = a.auto, gn = (o.galaxias.filter(function (g) { return g.id === c.galaxia; })[0] || {}).nombre || c.galaxia, tn = (o.tipos.filter(function (g) { return g.id === c.tipo; })[0] || {}).nombre || c.tipo;
-      h += '<div class="imp-fila" data-i="' + i + '"><div class="imp-nom"><b>' + esc(a.nombre) + '</b><small>Automático: ' + esc(gn) + ' › ' + esc(c.subtema) + ' · ' + esc(tn) +
-        (c.paginas ? ' · ' + c.paginas + ' págs.' : '') + ' — ' + esc(c.motivo) + '</small></div>' +
-        '<select data-c="galaxia">' + impOpt(o.galaxias, a.galaxia, 'Automática (' + gn + ')') + '</select>' +
-        '<input data-c="subtema" list="impSub" placeholder="Automático (' + esc(c.subtema) + ')" value="' + esc(a.subtema) + '">' +
-        '<select data-c="tipo">' + impOpt(o.tipos, a.tipo, 'Automático (' + tn + ')') + '</select>' +
-        '<input data-c="etiquetas" placeholder="Etiquetas" value="' + esc(a.etiquetas) + '"><button class="btn ic" data-q type="button" title="Quitar de la lista">✕</button></div>';
-    });
-    h += '<div class="imp-acc"><button class="btn" id="impMas" type="button">+ Añadir más</button><button class="btn primario" id="impGo" type="button">Importar ' + imp.archivos.length + ' archivo' + (imp.archivos.length > 1 ? 's' : '') + '</button></div>';
+    var sel = imp.archivos.filter(function (a) { return a.incluir; }), tam = sel.reduce(function (s, a) { return s + a.auto.tamano; }, 0), pag = sel.reduce(function (s, a) { return s + (a.auto.paginas || 0); }, 0);
+    h += '<div class="imp-resumen"><span><b>' + sel.length + '</b> de ' + imp.archivos.length + ' archivos · ' + fmtTam(tam) + (pag ? ' · ' + pag + ' páginas' : '') + '</span><span class="sep"></span>' +
+      '<button class="btn" id="impTodo" type="button">' + (imp.archivos.every(function (a) { return a.abierto; }) ? 'Plegar todo' : 'Desplegar todo') + '</button><button class="btn" id="impMas" type="button">+ Añadir más</button>' +
+      '<button class="btn primario" id="impGo" type="button"' + (sel.length && !imp.ocupado ? '' : ' disabled') + '>Importar ' + sel.length + ' archivo' + (sel.length === 1 ? '' : 's') + '</button>' +
+      '<div class="imp-barra"><i id="impProg" style="width:0"></i></div></div>' +
+      '<div class="imp-global"><div class="imp-nom"><b>Para todos</b></div>' +
+      '<select id="gGal">' + impOpt(o.galaxias, 'auto', 'Galaxia: automática') + '</select><select id="gGen">' + impOpt(o.generos, 'auto', 'Género: automático') + '</select>' +
+      '<input id="gSub" list="impSub" placeholder="Subtema: automático"><select id="gTipo">' + impOpt(o.tipos, 'auto', 'Tipo: automático') + '</select><input id="gEti" placeholder="Etiquetas"></div>';
+    imp.archivos.forEach(function (a, i) { h += impTarjeta(a, i, o); });
   }
   if (imp.resultados) {
     h += imp.resultados.map(function (r) {
       var g = r.galaxia && GAL[r.galaxia] ? GAL[r.galaxia].nombre : '';
-      return '<div class="imp-res"><span class="' + (r.estado === 'ok' ? 'ok' : r.estado === 'duplicado' ? 'dup' : 'err') + '">' + (r.estado === 'ok' ? '✓' : r.estado === 'duplicado' ? '＝' : '✗') + '</span><b>' + esc(r.nombre) + '</b><span>' +
-        (r.estado === 'ok' ? '→ ' + esc(g) + ' › ' + esc(r.subtema) + ' (' + esc(r.tipo) + ')' : esc(r.mensaje)) + '</span></div>';
+      return '<div class="imp-res"><span class="' + (r.estado === 'ok' ? 'ok' : r.estado === 'duplicado' ? 'dup' : 'err') + '">' + (r.estado === 'ok' ? '✓' : r.estado === 'duplicado' ? '＝' : '✗') + '</span><b>' + esc(recorta(r.titulo || r.nombre, 60)) + '</b><span>' +
+        (r.estado === 'ok' ? '→ ' + esc(g) + ' › ' + esc(r.subtema) + (r.genero && GENEROS_NOM[r.genero] ? ' · ' + esc(GENEROS_NOM[r.genero]) : '') + ' (' + esc(r.tipo) + ')' : esc(r.mensaje)) + '</span></div>';
     }).join('');
   }
   p.innerHTML = h;
+  if (foco && foco[0] && foco[1] !== null) { var el = p.querySelector('.imp-card[data-i="' + foco[1] + '"] [data-c="' + foco[0] + '"]'); if (el) { el.focus(); try { el.setSelectionRange(foco[2], foco[2]); } catch (e) {} } }
 }
-$('#impPanel').addEventListener('input', function (ev) {
-  var f = ev.target.closest('.imp-fila'), c = ev.target.dataset.c; if (f && c) imp.archivos[+f.dataset.i][c] = ev.target.value;
+$('#impPanel').addEventListener('input', function (ev) {         /* texto: solo se guarda (no se repinta, para no perder el cursor) */
+  var f = ev.target.closest('.imp-card'), c = ev.target.dataset.c; if (f && c && ev.target.type === 'text') imp.archivos[+f.dataset.i][c] = ev.target.value;
+});
+$('#impPanel').addEventListener('change', function (ev) {
+  var f = ev.target.closest('.imp-card'), c = ev.target.dataset.c;
+  if (f && c) { var a = imp.archivos[+f.dataset.i]; a[c] = ev.target.type === 'checkbox' ? ev.target.checked : ev.target.value; impRender(); return; }
+  var m = {gGal: 'galaxia', gGen: 'genero', gSub: 'subtema', gTipo: 'tipo', gEti: 'etiquetas'}[ev.target.id]; if (!m) return;       /* «Para todos» */
+  imp.archivos.forEach(function (a) { a[m] = ev.target.value; }); var g = {gGal: $('#gGal').value, gGen: $('#gGen').value, gSub: $('#gSub').value, gTipo: $('#gTipo').value, gEti: $('#gEti').value}; impRender();
+  $('#gGal').value = g.gGal; $('#gGen').value = g.gGen; $('#gSub').value = g.gSub; $('#gTipo').value = g.gTipo; $('#gEti').value = g.gEti;
 });
 $('#impPanel').addEventListener('click', function (ev) {
-  var q = ev.target.closest('[data-q]'), f = ev.target.closest('.imp-fila');
-  if (q && f) { imp.archivos.splice(+f.dataset.i, 1); impRender(); }
+  var f = ev.target.closest('.imp-card'), a = f ? imp.archivos[+f.dataset.i] : null;
+  if (ev.target.closest('[data-q]') && a) { imp.archivos.splice(+f.dataset.i, 1); impRender(); }
+  else if (ev.target.closest('[data-ab]') && a) { a.abierto = !a.abierto; impRender(); }
+  else if (ev.target.closest('[data-fija]') && a) { var b = ev.target.closest('[data-fija]'); a[b.dataset.fija] = b.dataset.v; impRender(); }      /* pulsar una barra fija ese género o subtema */
   else if (ev.target.id === 'impMas') impElegir();
+  else if (ev.target.id === 'impTodo') { var abrir = !imp.archivos.every(function (x) { return x.abierto; }); imp.archivos.forEach(function (x) { x.abierto = abrir; }); impRender(); }
   else if (ev.target.id === 'impGo') impImportar();
 });
-$('#impPanel').addEventListener('change', function (ev) {      /* «Para todos»: lo que elijas aquí se aplica a todas las filas */
-  var m = {gGal: 'galaxia', gSub: 'subtema', gTipo: 'tipo', gEti: 'etiquetas'}[ev.target.id]; if (!m) return;
-  imp.archivos.forEach(function (a) { a[m] = ev.target.value; }); var g = {gGal: $('#gGal').value, gSub: $('#gSub').value, gTipo: $('#gTipo').value, gEti: $('#gEti').value}; impRender();
-  $('#gGal').value = g.gGal; $('#gSub').value = g.gSub; $('#gTipo').value = g.gTipo; $('#gEti').value = g.gEti;
-});
 async function impImportar() {
-  if (imp.ocupado || !imp.archivos.length) return;
-  imp.ocupado = true; agujero.ocupado(true); impAviso('Importando… los PDF largos tardan un poco (se copian, se leen y se indexan).'); $('#impGo').disabled = true;
-  var items = imp.archivos.map(function (a) { return {ruta: a.ruta, galaxia: a.galaxia === 'auto' ? null : a.galaxia, subtema: a.subtema || null, tipo: a.tipo === 'auto' ? null : a.tipo, etiquetas: a.etiquetas}; });
-  var r = await impApi().importar_archivos(items);
-  imp.ocupado = false; agujero.ocupado(false);
-  if (r.error) { impAviso(r.error); impRender(); return; }
-  var ok = r.filter(function (x) { return x.estado === 'ok'; });
-  ok.forEach(function (x) { if (GAL[x.galaxia]) agujero.tragar(GAL[x.galaxia].color); });
-  impAviso(ok.length + ' de ' + r.length + ' importado' + (ok.length === 1 ? '' : 's') + '. Ya se pueden buscar desde el universo.');
-  imp.resultados = r; imp.archivos = []; impRender(); actualizarColecciones();
+  var cola = imp.archivos.filter(function (a) { return a.incluir; }); if (imp.ocupado || !cola.length) return;
+  imp.ocupado = true; agujero.ocupado(true); var hechos = [], n = 0;
+  for (var k = 0; k < cola.length; k++) {                          /* de uno en uno: cada archivo se copia, se lee y se indexa, y el agujero lo «traga» */
+    var a = cola[k]; a.estado = 'trabajando'; a.estadoTxt = '⏳ importando…'; impRender(); $('#impProg').style.width = Math.round(100 * k / cola.length) + '%';
+    impAviso('Importando ' + (k + 1) + ' de ' + cola.length + ': ' + recorta(a.titulo, 50) + ' (los PDF largos tardan: se copian, se leen y se indexan)');
+    var r = await impApi().importar_archivos([{ruta: a.ruta, titulo: a.titulo, galaxia: a.galaxia === 'auto' ? null : a.galaxia, genero: a.genero === 'auto' ? null : a.genero,
+      subtema: a.subtema || null, tipo: a.tipo === 'auto' ? null : a.tipo, etiquetas: a.etiquetas}]);
+    var x = r.error ? {estado: 'error', nombre: a.nombre, mensaje: r.error} : r[0]; hechos.push(x);
+    if (x.estado === 'ok') { n++; a.estado = 'listo'; a.estadoTxt = '✓ listo'; if (GAL[x.galaxia]) agujero.tragar(GAL[x.galaxia].color); } else { a.estado = 'error'; a.estadoTxt = x.estado === 'duplicado' ? '＝ ya estaba' : '✗ error'; }
+    impRender();
+  }
+  imp.ocupado = false; agujero.ocupado(false); imp.resultados = hechos; imp.archivos = [];
+  if (n) {
+    impAviso('Actualizando el universo con lo nuevo…'); impRender();
+    var v = await impApi().actualizar_visor();                     /* regenera visor_arbol.html (Libros: género › libro › capítulo) y se recarga */
+    var msg = n + ' de ' + hechos.length + ' importado' + (n === 1 ? '' : 's') + '. El universo ya incluye lo nuevo y se puede buscar.';
+    if (!(v && v.error)) { try { sessionStorage.setItem('arbol-tras-importar', msg); } catch (e) {} setTimeout(function () { location.reload(); }, 1400); impAviso(msg); return; }
+    impAviso(msg + ' (no se pudo regenerar el visor: ' + v.error + ')');
+  } else impAviso('No se importó nada.');
+  impRender();
 }
 document.addEventListener('dragover', function (ev) { if (impAbierta()) ev.preventDefault(); });
 document.addEventListener('drop', function (ev) {                /* soltar archivos sobre la pestaña (la app da la ruta completa; un navegador no) */
@@ -1324,13 +1433,14 @@ var hash = decodeURIComponent((location.hash || '').slice(1));
 function irDestino(d, instante) {
   var g = /^galaxia:(\w+)$/.exec(d || '');
   if (d === 'cerebro') mostrarCerebro();
-  else if (g && GAL[g[1]] && GAL[g[1]].raiz) ir(GAL[g[1]].raiz, instante);
+  else if (g && GAL[g[1]] && !GAL[g[1]].solo) ir(GAL[g[1]].raiz, instante);
   else if (porNombre[d]) { if (instante) { seleccionar(porNombre[d], false); ir(porNombre[d].parent, true); } else if (porNombre[d] !== sel) seleccionar(porNombre[d], true); }
   else return false;
   return true;
 }
 window.irDestino = function (d) { return irDestino(d, false); };
 if (!irDestino(hash, true)) cerebro.mostrar();
+try { var tras = sessionStorage.getItem('arbol-tras-importar'); if (tras) { sessionStorage.removeItem('arbol-tras-importar'); pestana('importar'); impAviso(tras); } } catch (e) {}
 window.addEventListener('hashchange', function () {     /* enlaces #nombre y atrás/adelante del navegador */
   var h2 = decodeURIComponent((location.hash || '').slice(1));
   if (h2) irDestino(h2, false);

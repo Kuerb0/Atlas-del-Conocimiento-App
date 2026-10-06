@@ -96,6 +96,18 @@ class Api:
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}
 
+    def actualizar_visor(self):
+        """Regenera visor_arbol.html (con lo recién importado) para que el universo lo incluya; el visor se recarga después."""
+        try:
+            import contextlib
+            import io
+            import construir_visor
+            with contextlib.redirect_stdout(io.StringIO()):     # pythonw no tiene consola
+                construir_visor.main()
+            return True
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
     def resumen_biblioteca(self):
         try:
             from conocimiento import importar
