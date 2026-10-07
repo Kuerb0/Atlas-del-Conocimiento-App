@@ -17,5 +17,340 @@
   "fecha": "2026-10-06T18:58:37",
   "automatico": false,
   "portada": "portadas/0b77c4ecd1.jpg"
+ },
+ "libros/Historia/Roma_soy_yo.epub": {
+  "capitulos": [
+   {
+    "titulo": "Portada",
+    "pagina": null
+   },
+   {
+    "titulo": "Dramatis personae",
+    "pagina": null
+   },
+   {
+    "titulo": "Principium",
+    "pagina": null
+   },
+   {
+    "titulo": "Prooemium",
+    "pagina": null
+   },
+   {
+    "titulo": "El juicio I. Petitio",
+    "pagina": null
+   },
+   {
+    "titulo": "I. La decisión de César",
+    "pagina": null
+   },
+   {
+    "titulo": "Memoria prima. Aurelia",
+    "pagina": null
+   },
+   {
+    "titulo": "II. Senatus consultum ultimum",
+    "pagina": null
+   },
+   {
+    "titulo": "III. El tribuno del pueblo",
+    "pagina": null
+   },
+   {
+    "titulo": "IV. Una negociación imposible",
+    "pagina": null
+   },
+   {
+    "titulo": "V. Justicia pétrea",
+    "pagina": null
+   },
+   {
+    "titulo": "VI. La sangre de Eneas",
+    "pagina": null
+   },
+   {
+    "titulo": "El juicio II. Divinatio",
+    "pagina": null
+   },
+   {
+    "titulo": "VII. Un oponente inesperado",
+    "pagina": null
+   },
+   {
+    "titulo": "VIII. Una elección sorprendente",
+    "pagina": null
+   },
+   {
+    "titulo": "Memoria secunda. Cayo Mario",
+    "pagina": null
+   },
+   {
+    "titulo": "IX. El regreso de Mario",
+    "pagina": null
+   },
+   {
+    "titulo": "X. La única victoria que importa",
+    "pagina": null
+   },
+   {
+    "titulo": "XI. Memoria in memoria",
+    "pagina": null
+   },
+   {
+    "titulo": "XII. Memoria in memoria",
+    "pagina": null
+   },
+   {
+    "titulo": "XIII. Memoria in memoria",
+    "pagina": null
+   },
+   {
+    "titulo": "XIV. Un médico para el joven César",
+    "pagina": null
+   },
+   {
+    "titulo": "XV. Memoria in memoria",
+    "pagina": null
+   },
+   {
+    "titulo": "XVI. Memoria in memoria",
+    "pagina": null
+   },
+   {
+    "titulo": "XVII. Memoria in memoria",
+    "pagina": null
+   },
+   {
+    "titulo": "XVIII. Memoria in memoria",
+    "pagina": null
+   },
+   {
+    "titulo": "XIX. La reunión del Senado",
+    "pagina": null
+   },
+   {
+    "titulo": "XX. Memoria in memoria",
+    "pagina": null
+   },
+   {
+    "titulo": "XXI. Memoria in memoria",
+    "pagina": null
+   },
+   {
+    "titulo": "XXII. Memoria in memoria",
+    "pagina": null
+   },
+   {
+    "titulo": "XXIII. Una nueva guerra",
+    "pagina": null
+   },
+   {
+    "titulo": "El juicio III. Inquisitio",
+    "pagina": null
+   },
+   {
+    "titulo": "XXIV. Los testigos",
+    "pagina": null
+   },
+   {
+    "titulo": "XXV. La Vía Egnatia",
+    "pagina": null
+   },
+   {
+    "titulo": "XXVI. La mirada triste de Orestes",
+    "pagina": null
+   },
+   {
+    "titulo": "Memoria tertia. Cornelia",
+    "pagina": null
+   },
+   {
+    "titulo": "XXVII. Un pacto por el poder",
+    "pagina": null
+   },
+   {
+    "titulo": "XXVIII. El aprendizaje de César",
+    "pagina": null
+   },
+   {
+    "titulo": "XXIX. Roma es mía",
+    "pagina": null
+   },
+   {
+    "titulo": "XXX. El aprendizaje de Cornelia",
+    "pagina": null
+   },
+   {
+    "titulo": "XXXI. La religión de Sila",
+    "pagina": null
+   },
+   {
+    "titulo": "XXXII. Cinnamum Tempus",
+    "pagina": null
+   },
+   {
+    "titulo": "XXXIII. Los templos de Grecia",
+    "pagina": null
+   },
+   {
+    "titulo": "XXXIV. El reposo del águila",
+    "pagina": null
+   },
+   {
+    "titulo": "XXXV. La muerte de Julio César",
+    "pagina": null
+   },
+   {
+    "titulo": "XXXVI. Fimbria contra Sila",
+    "pagina": null
+   },
+   {
+    "titulo": "XXXVII. La boda de César",
+    "pagina": null
+   },
+   {
+    "titulo": "XXXVIII. Cinna frente a Sila",
+    "pagina": null
+   },
+   {
+    "titulo": "XXXIX. La decisión de Aurelia",
+    "pagina": null
+   },
+   {
+    "titulo": "XL. El avance de Sila",
+    "pagina": null
+   },
+   {
+    "titulo": "XLI. Las cenizas de Mario",
+    "pagina": null
+   },
+   {
+    "titulo": "XLII. La noche más larga",
+    "pagina": null
+   },
+   {
+    "titulo": "El juicio IV. Reiectio",
+    "pagina": null
+   },
+   {
+    "titulo": "XLIII. El consejo de Aurelia",
+    "pagina": null
+   },
+   {
+    "titulo": "XLIV. La presidencia del tribunal",
+    "pagina": null
+   },
+   {
+    "titulo": "XLV. Las sombras de la basílica",
+    "pagina": null
+   },
+   {
+    "titulo": "Reus Dolabela",
+    "pagina": null
+   },
+   {
+    "titulo": "XLVI. Primer crimen: violatio",
+    "pagina": null
+   },
+   {
+    "titulo": "XLVII. Segundo y tercer crimen: repetundis y peculatus",
+    "pagina": null
+   },
+   {
+    "titulo": "XLVIII. La maldición de Tesalónica",
+    "pagina": null
+   },
+   {
+    "titulo": "XLIX. Cuarto crimen: sacrilegium",
+    "pagina": null
+   },
+   {
+    "titulo": "El juicio V. Prima Actio",
+    "pagina": null
+   },
+   {
+    "titulo": "L. Primer testigo de César",
+    "pagina": null
+   },
+   {
+    "titulo": "LI. Segundo testigo de César",
+    "pagina": null
+   },
+   {
+    "titulo": "LII. Tercer testigo de César",
+    "pagina": null
+   },
+   {
+    "titulo": "LIII. La traición de quien más quieres",
+    "pagina": null
+   },
+   {
+    "titulo": "Memoria quarta. Sila",
+    "pagina": null
+   },
+   {
+    "titulo": "LIV. Encomendados a los dioses",
+    "pagina": null
+   },
+   {
+    "titulo": "LV. La dictadura de Sila",
+    "pagina": null
+   },
+   {
+    "titulo": "LVI. El divorcio de César",
+    "pagina": null
+   },
+   {
+    "titulo": "LVII. La propuesta de Sila",
+    "pagina": null
+   },
+   {
+    "titulo": "LVIII. Un pulso mortal",
+    "pagina": null
+   },
+   {
+    "titulo": "LIX. Fugitivo de Roma",
+    "pagina": null
+   },
+   {
+    "titulo": "LX. La primera victoria",
+    "pagina": null
+   },
+   {
+    "titulo": "El juicio VI. Secunda Actio",
+    "pagina": null
+   },
+   {
+    "titulo": "LXI. La declaración de Dolabela",
+    "pagina": null
+   },
+   {
+    "titulo": "LXII. Alegato final de la defensa",
+    "pagina": null
+   },
+   {
+    "titulo": "LXIII. El discurso final de César",
+    "pagina": null
+   },
+   {
+    "titulo": "Memoria quinta. Labieno",
+    "pagina": null
+   },
+   {
+    "titulo": "LXIV. La tierra de Safo",
+    "pagina": null
+   }
+  ],
+  "paginas": 0,
+  "titulo": "Roma soy yo",
+  "galaxia": "libros",
+  "subtema": "General",
+  "genero": "historia",
+  "tipo": "libro",
+  "etiquetas": "",
+  "hash": "4654745de8444fa28cf05398e3645a087f74bcae",
+  "fecha": "2026-10-07T17:42:40",
+  "automatico": true,
+  "portada": "portadas/4654745de8.jpg"
  }
 }

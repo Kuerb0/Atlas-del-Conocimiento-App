@@ -23,10 +23,10 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from . import CARPETA, DB, EXT, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, indexar
+from . import CARPETA, CODIGO_EXT, DATOS_EXT, DB, EXT_IMPORTABLE, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, indexar
 
 GALAXIAS = {"codigo": "Código", "conceptos": "Conceptos", "demos": "Demos y guías", "finanzas": "Finanzas", "libros": "Libros", "notas": "Notas y enlaces"}
-TIPOS = {"libro": "Libro", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "otro": "Otro"}
+TIPOS = {"libro": "Libro", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "codigo": "Código", "datos": "Datos", "otro": "Otro"}
 GENEROS = {"historia": "Historia", "economia": "Economía y finanzas", "ensayo": "Ensayo y filosofía", "estadistica": "Estadística y matemáticas", "ciencia": "Ciencia y divulgación",
            "novela": "Novela y ficción", "biografia": "Biografía y memorias", "politica": "Política y sociedad", "tecnologia": "Tecnología e informática",
            "psicologia": "Psicología y salud", "arte": "Arte, música y cultura", "otro": "Otros"}
@@ -128,8 +128,15 @@ def capitulos(ruta: str | Path) -> tuple[list[dict], int]:
                     if tt:
                         caps.append({"titulo": tt, "pagina": None})
             caps = caps[:80]
-        elif ext in (".md", ".txt"):
+        elif ext in (".md", ".txt", ".rmd", ".qmd", ".rst"):
             caps = [{"titulo": m.strip(), "pagina": None} for m in re.findall(r"(?m)^#{1,3}\s+(.+)$", f.read_text(encoding="utf-8", errors="replace"))][:80]
+        elif ext == ".ipynb":                                          # títulos de las celdas de texto
+            for c in json.loads(f.read_text(encoding="utf-8", errors="replace")).get("cells", []):
+                if c.get("cell_type") == "markdown":
+                    caps += [{"titulo": m.strip(), "pagina": None} for m in re.findall(r"(?m)^#{1,3}\s+(.+)$", "".join(c.get("source", [])))]
+            caps = caps[:80]
+        elif ext in CODIGO_EXT:                                        # funciones y clases de primer nivel
+            caps = [{"titulo": m, "pagina": None} for m in re.findall(r"(?m)^(?:async\s+)?(?:def|class|function)\s+(\w+)", f.read_text(encoding="utf-8", errors="replace"))][:80]
     except Exception:
         caps = []
     return (caps or [{"titulo": f.stem, "pagina": 1 if ext == ".pdf" else None}]), paginas
@@ -338,11 +345,15 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
     (tid, tnombre), p = max(puntos.items(), key=lambda kv: kv[1]) if puntos else ((None, "General"), 0)
     fin = len(FINANZAS.findall(t)) + 4 * len(FINANZAS.findall(nombre))
     ext = f.suffix.lower()
-    if ext == ".epub" or (ext == ".pdf" and paginas >= 60):
+    if ext in CODIGO_EXT:
+        tipo = "codigo"
+    elif ext in DATOS_EXT:
+        tipo = "datos"
+    elif ext == ".epub" or (ext == ".pdf" and paginas >= 60):
         tipo = "libro"
     elif ext == ".pdf":
         tipo = "articulo"
-    elif ext in (".docx", ".md"):
+    elif ext in (".docx", ".md", ".pptx", ".rst", ".tex", ".html", ".htm"):
         tipo = "apuntes"
     else:
         tipo = "nota"
@@ -351,8 +362,12 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
         gp["economia" if tid == "t_fin" else "estadistica"] += p        # lo que casa con los temas de estadística/finanzas también cuenta como ese género
     gp["economia"] += fin // 2
     genero = max(gp, key=gp.get) if max(gp.values()) >= 4 else "otro"
+    if tipo == "codigo":
+        genero = "tecnologia"
     subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
-    if tipo == "libro":                                                  # un libro va a Libros, sea de lo que sea; Finanzas y Notas son para documentos más cortos
+    if tipo == "codigo":
+        galaxia, motivo = "codigo", f"archivo de código ({ext})"
+    elif tipo == "libro":                                                # un libro va a Libros, sea de lo que sea; Finanzas y Notas son para documentos más cortos
         galaxia, motivo = "libros", f"{'EPUB' if ext == '.epub' else str(paginas) + ' páginas'}"
     elif fin >= 8 or (tid == "t_fin" and p >= 6):
         galaxia, motivo = "finanzas", f"vocabulario financiero ({fin} términos)"
@@ -366,7 +381,7 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
         motivo += f"; como «{corr['titulo'][:30]}», que corregiste"
     caps, _ = capitulos(f)
     metodo = "reglas"
-    if not corr and clasificador.ACTIVO:                                  # parecido con ejemplos (embeddings locales) mezclado con las reglas; sin modelo, solo reglas
+    if not corr and tipo != "codigo" and clasificador.ACTIVO:                                  # parecido con ejemplos (embeddings locales) mezclado con las reglas; sin modelo, solo reglas
         s = clasificador.sugerir(clasificador.texto_libro(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500])), carpeta)
         if s:
             nuevo, cambia = clasificador.decidir(gp, genero, s)
@@ -429,8 +444,8 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
         try:
             if not f.is_file():
                 raise ValueError("no existe el fichero")
-            if f.suffix.lower() not in EXT:
-                raise ValueError(f"formato no admitido ({f.suffix or 'sin extensión'}); sirven {', '.join(sorted(EXT))}")
+            if f.suffix.lower() not in EXT_IMPORTABLE:
+                raise ValueError(f"formato no admitido ({f.suffix or 'sin extensión'}); sirven {', '.join(sorted(EXT_IMPORTABLE))}")
             _prog(f"Analizando «{f.name[:40]}»", .02)
             h = _sha1(f)
             if h in hashes and not (base / hashes[h]).exists() and (base / hashes[h]).suffix.lower() == f.suffix.lower():     # la referencia llegó por GitHub y ahora tienes el libro: se restaura en su sitio

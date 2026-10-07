@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.5.1 - Instalador
+title Arbol de la estadistica 1.6.0 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
 set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=1.5.1"
+set "ARBOL_VERSION=1.6.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -494,7 +494,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.5.1
+1.6.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -575,7 +575,8 @@ class Api:
         """Abre el explorador de archivos de Windows (varios a la vez) y devuelve las rutas elegidas."""
         try:
             import webview
-            tipos = ("Documentos (*.pdf;*.epub;*.docx;*.md;*.txt)", "Todos los archivos (*.*)")
+            from conocimiento import EXT_IMPORTABLE
+            tipos = ("Documentos, código y datos (" + ";".join("*" + e for e in sorted(EXT_IMPORTABLE)) + ")", "Todos los archivos (*.*)")
             modo = webview.FileDialog.OPEN if hasattr(webview, "FileDialog") else webview.OPEN_DIALOG
             r = webview.windows[0].create_file_dialog(modo, allow_multiple=True, file_types=tipos)
             return [str(x) for x in (r or [])]
@@ -2778,7 +2779,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.5.1"
+version = "1.6.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3458,7 +3459,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.5.1"
+__version__ = "1.6.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -13844,7 +13845,7 @@ def simular_browniano(horizonte: float = 1.0, n_pasos: int = 250, n_trayectorias
 Índice SQLite FTS5 (BM25, sin acentos, prefijos) en `<árbol>/conocimiento/indice.db`; se actualiza solo con lo que cambió.
 Colecciones internas: `codigo` (docstrings de `arbol_estadistica`), `conceptos` (catalogo.json), `teoria` (teoria/*.md).
 Colecciones tuyas: `conocimiento/fuentes.json` -> {"libros": ["D:/Libros"], "finanzas": [...], "notas": [...]} (ver fuentes.ejemplo.json).
-Formatos: .md .txt .pdf (necesita `pip install pypdf`) .epub .docx.
+Formatos de las carpetas de fuentes: .md .txt .pdf (necesita `pip install pypdf`) .epub .docx. El importador admite además código (.py .ipynb .r .sas .sql .js …), datos (.csv .xlsx .json …) y apuntes (.pptx .tex .html …): ver EXT_IMPORTABLE.
 
 Uso: `python -m conocimiento indexar` · `python -m conocimiento buscar "odds ratio" [-c libros] [-n 10]` · `python -m conocimiento estado`.
 Los sinónimos del catálogo amplían la consulta (buscar «VIF» encuentra también su nombre largo). Si la consulta exacta no da nada, se relaja a «cualquiera de las palabras».
@@ -13864,7 +13865,11 @@ CODIGO = Path(__file__).resolve().parents[1]
 RAIZ = CODIGO.parent
 CARPETA = Path(os.environ.get("ARBOL_CONOCIMIENTO", RAIZ / "conocimiento"))   # datos del usuario: no se publican (.gitignore)
 DB = CARPETA / "indice.db"
-EXT = {".md", ".txt", ".pdf", ".epub", ".docx"}
+EXT = {".md", ".txt", ".pdf", ".epub", ".docx"}                          # lo que se busca en las carpetas de fuentes.json (documentos)
+CODIGO_EXT = {".py", ".ipynb", ".r", ".rmd", ".qmd", ".sas", ".sql", ".js", ".ts", ".sh", ".bat", ".ps1", ".c", ".cpp", ".h", ".java", ".jl", ".m"}
+DATOS_EXT = {".csv", ".tsv", ".xlsx", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".xml"}
+APUNTES_EXT = {".rst", ".tex", ".html", ".htm", ".pptx"}
+EXT_IMPORTABLE = EXT | CODIGO_EXT | DATOS_EXT | APUNTES_EXT                # lo que acepta el importador y se indexa dentro de biblioteca/
 
 
 SIN_VENTANA = getattr(__import__("subprocess"), "CREATE_NO_WINDOW", 0)      # creationflags de los subprocess: en la app (pythonw) evita que parpadee una ventana de consola
@@ -13916,6 +13921,54 @@ def _texto_plano(f: Path):
     for i in range(1, len(partes), 2):
         out += _trocear(partes[i + 1], f.stem, partes[i].lstrip("# ").strip())
     return out
+
+
+def _bloques(t: str, titulo: str, tam: int = 60):
+    """Trozos de unas `tam` líneas; el título lleva el primer def/class del bloque, la ubicación las líneas."""
+    ls = t.splitlines()
+    out = []
+    for a in range(0, len(ls), tam):
+        bloque = "\n".join(ls[a:a + tam])
+        if bloque.strip():
+            d = re.search(r"(?m)^\s*(?:async\s+)?(?:def|class|function)\s+(\w+)", bloque)
+            out.append((f"{titulo} · {d.group(1)}" if d else titulo, bloque, f"líneas {a + 1}–{min(a + tam, len(ls))}"))
+    return out
+
+
+def _codigo_texto(f: Path):
+    return _bloques(f.read_text(encoding="utf-8", errors="replace"), f.stem)
+
+
+def _ipynb(f: Path):
+    out = []
+    for i, c in enumerate(json.loads(f.read_text(encoding="utf-8", errors="replace")).get("cells", []), 1):
+        src = c.get("source", "")
+        src = "".join(src) if isinstance(src, list) else str(src)
+        if src.strip():
+            out += _trocear(src, f.stem, f"celda {i} ({'texto' if c.get('cell_type') == 'markdown' else 'código'})")
+    return out
+
+
+def _datos(f: Path):
+    """CSV/TSV/JSON/YAML/XML…: solo el principio (cabecera y primeras filas): lo demás son datos, no texto que buscar."""
+    return _trocear("\n".join(f.read_text(encoding="utf-8", errors="replace").splitlines()[:40]), f.stem, "cabecera y primeras filas")
+
+
+def _html(f: Path):
+    x = _sin_etiquetas(f.read_text(encoding="utf-8", errors="replace"))
+    return _trocear(re.sub(r"<[^>]+>", "", x), f.stem, "")
+
+
+def _pptx(f: Path):
+    with zipfile.ZipFile(f) as z:
+        lams = sorted((n for n in z.namelist() if re.match(r"ppt/slides/slide\d+\.xml$", n)), key=lambda n: int(re.findall(r"\d+", n)[0]))
+        return [x for n in lams for x in _trocear(" ".join(re.findall(r"<a:t>(.*?)</a:t>", z.read(n).decode("utf-8", "replace"))), f.stem, f"diapositiva {re.findall(r'[0-9]+', n)[0]}")]
+
+
+def _xlsx(f: Path):
+    with zipfile.ZipFile(f) as z:
+        txt = z.read("xl/sharedStrings.xml").decode("utf-8", "replace") if "xl/sharedStrings.xml" in z.namelist() else ""
+    return _trocear("\n".join(re.findall(r"<t[^>]*>(.*?)</t>", txt)[:400]), f.stem, "textos de la hoja")
 
 
 def _pdf(f: Path):
@@ -13982,11 +14035,15 @@ def _grupos(con: sqlite3.Connection, f: Path) -> None:
 
 
 def _extraer(col: str, f: Path):
-    if col == "codigo":
+    if col == "codigo" and f.suffix == ".py" and CODIGO in f.parents:           # el código del propio árbol; el código que importas se trata como cualquier archivo de texto
         return _codigo(f)
     if col == "conceptos":
         return _conceptos(f)
-    return {".pdf": _pdf, ".epub": _epub, ".docx": _docx}.get(f.suffix.lower(), _texto_plano)(f)
+    ext = f.suffix.lower()
+    if ext in CODIGO_EXT and ext != ".ipynb":
+        return _codigo_texto(f)
+    return {".pdf": _pdf, ".epub": _epub, ".docx": _docx, ".ipynb": _ipynb, ".csv": _datos, ".tsv": _datos, ".json": _datos, ".yaml": _datos, ".yml": _datos, ".toml": _datos,
+            ".ini": _datos, ".cfg": _datos, ".xml": _datos, ".html": _html, ".htm": _html, ".pptx": _pptx, ".xlsx": _xlsx}.get(ext, _texto_plano)(f)
 
 
 # ---------- índice ----------
@@ -14017,7 +14074,7 @@ def _unidades(fuentes: dict, carpeta: Path = CARPETA):
     if base.is_dir():
         meta = _metadatos(carpeta)
         for f in sorted(base.rglob("*")):
-            if f.is_file() and f.suffix.lower() in EXT and f.relative_to(base).parts[0] != f.name:
+            if f.is_file() and f.suffix.lower() in EXT_IMPORTABLE and f.relative_to(base).parts[0] != f.name:
                 rel = f.relative_to(base)
                 yield (meta.get(rel.as_posix(), {}).get("galaxia") or rel.parts[0]), f
     for col, carpetas in fuentes.items():
@@ -14446,10 +14503,10 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from . import CARPETA, DB, EXT, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, indexar
+from . import CARPETA, CODIGO_EXT, DATOS_EXT, DB, EXT_IMPORTABLE, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, indexar
 
 GALAXIAS = {"codigo": "Código", "conceptos": "Conceptos", "demos": "Demos y guías", "finanzas": "Finanzas", "libros": "Libros", "notas": "Notas y enlaces"}
-TIPOS = {"libro": "Libro", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "otro": "Otro"}
+TIPOS = {"libro": "Libro", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "codigo": "Código", "datos": "Datos", "otro": "Otro"}
 GENEROS = {"historia": "Historia", "economia": "Economía y finanzas", "ensayo": "Ensayo y filosofía", "estadistica": "Estadística y matemáticas", "ciencia": "Ciencia y divulgación",
            "novela": "Novela y ficción", "biografia": "Biografía y memorias", "politica": "Política y sociedad", "tecnologia": "Tecnología e informática",
            "psicologia": "Psicología y salud", "arte": "Arte, música y cultura", "otro": "Otros"}
@@ -14551,8 +14608,15 @@ def capitulos(ruta: str | Path) -> tuple[list[dict], int]:
                     if tt:
                         caps.append({"titulo": tt, "pagina": None})
             caps = caps[:80]
-        elif ext in (".md", ".txt"):
+        elif ext in (".md", ".txt", ".rmd", ".qmd", ".rst"):
             caps = [{"titulo": m.strip(), "pagina": None} for m in re.findall(r"(?m)^#{1,3}\s+(.+)$", f.read_text(encoding="utf-8", errors="replace"))][:80]
+        elif ext == ".ipynb":                                          # títulos de las celdas de texto
+            for c in json.loads(f.read_text(encoding="utf-8", errors="replace")).get("cells", []):
+                if c.get("cell_type") == "markdown":
+                    caps += [{"titulo": m.strip(), "pagina": None} for m in re.findall(r"(?m)^#{1,3}\s+(.+)$", "".join(c.get("source", [])))]
+            caps = caps[:80]
+        elif ext in CODIGO_EXT:                                        # funciones y clases de primer nivel
+            caps = [{"titulo": m, "pagina": None} for m in re.findall(r"(?m)^(?:async\s+)?(?:def|class|function)\s+(\w+)", f.read_text(encoding="utf-8", errors="replace"))][:80]
     except Exception:
         caps = []
     return (caps or [{"titulo": f.stem, "pagina": 1 if ext == ".pdf" else None}]), paginas
@@ -14761,11 +14825,15 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
     (tid, tnombre), p = max(puntos.items(), key=lambda kv: kv[1]) if puntos else ((None, "General"), 0)
     fin = len(FINANZAS.findall(t)) + 4 * len(FINANZAS.findall(nombre))
     ext = f.suffix.lower()
-    if ext == ".epub" or (ext == ".pdf" and paginas >= 60):
+    if ext in CODIGO_EXT:
+        tipo = "codigo"
+    elif ext in DATOS_EXT:
+        tipo = "datos"
+    elif ext == ".epub" or (ext == ".pdf" and paginas >= 60):
         tipo = "libro"
     elif ext == ".pdf":
         tipo = "articulo"
-    elif ext in (".docx", ".md"):
+    elif ext in (".docx", ".md", ".pptx", ".rst", ".tex", ".html", ".htm"):
         tipo = "apuntes"
     else:
         tipo = "nota"
@@ -14774,8 +14842,12 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
         gp["economia" if tid == "t_fin" else "estadistica"] += p        # lo que casa con los temas de estadística/finanzas también cuenta como ese género
     gp["economia"] += fin // 2
     genero = max(gp, key=gp.get) if max(gp.values()) >= 4 else "otro"
+    if tipo == "codigo":
+        genero = "tecnologia"
     subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
-    if tipo == "libro":                                                  # un libro va a Libros, sea de lo que sea; Finanzas y Notas son para documentos más cortos
+    if tipo == "codigo":
+        galaxia, motivo = "codigo", f"archivo de código ({ext})"
+    elif tipo == "libro":                                                # un libro va a Libros, sea de lo que sea; Finanzas y Notas son para documentos más cortos
         galaxia, motivo = "libros", f"{'EPUB' if ext == '.epub' else str(paginas) + ' páginas'}"
     elif fin >= 8 or (tid == "t_fin" and p >= 6):
         galaxia, motivo = "finanzas", f"vocabulario financiero ({fin} términos)"
@@ -14789,7 +14861,7 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
         motivo += f"; como «{corr['titulo'][:30]}», que corregiste"
     caps, _ = capitulos(f)
     metodo = "reglas"
-    if not corr and clasificador.ACTIVO:                                  # parecido con ejemplos (embeddings locales) mezclado con las reglas; sin modelo, solo reglas
+    if not corr and tipo != "codigo" and clasificador.ACTIVO:                                  # parecido con ejemplos (embeddings locales) mezclado con las reglas; sin modelo, solo reglas
         s = clasificador.sugerir(clasificador.texto_libro(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500])), carpeta)
         if s:
             nuevo, cambia = clasificador.decidir(gp, genero, s)
@@ -14852,8 +14924,8 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
         try:
             if not f.is_file():
                 raise ValueError("no existe el fichero")
-            if f.suffix.lower() not in EXT:
-                raise ValueError(f"formato no admitido ({f.suffix or 'sin extensión'}); sirven {', '.join(sorted(EXT))}")
+            if f.suffix.lower() not in EXT_IMPORTABLE:
+                raise ValueError(f"formato no admitido ({f.suffix or 'sin extensión'}); sirven {', '.join(sorted(EXT_IMPORTABLE))}")
             _prog(f"Analizando «{f.name[:40]}»", .02)
             h = _sha1(f)
             if h in hashes and not (base / hashes[h]).exists() and (base / hashes[h]).suffix.lower() == f.suffix.lower():     # la referencia llegó por GitHub y ahora tienes el libro: se restaura en su sitio
@@ -33132,6 +33204,58 @@ def test_la_pestana_se_llama_observatorio():
     html = cv.ensamblar(cv.construir())
     assert "🔭 Observatorio" in html and "<h2>Observatorio</h2>" in html and "📚 Biblioteca" not in html
 :::END
+:::BEGIN py/tests/test_importar_formatos.py|text
+"""El importador acepta código, cuadernos, datos y apuntes además de libros: se clasifican, se indexan y se encuentran."""
+import json
+import sys
+import zipfile
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import conocimiento as k
+from conocimiento import importar as im
+
+
+def _archivos(tmp_path):
+    d = tmp_path / "origen"; d.mkdir()
+    (d / "limpieza.py").write_text("import pandas as pd\n\n\ndef depurar_quimbaya(df):\n    return df.dropna()\n\n\nclass Tuxtla:\n    pass\n", encoding="utf-8")
+    (d / "analisis.ipynb").write_text(json.dumps({"cells": [
+        {"cell_type": "markdown", "source": ["# Regresión zorrotz\n", "Texto de la sección"]},
+        {"cell_type": "code", "source": ["import statsmodels.api as sm\n", "modelo_zorrotz = sm.OLS(y, X)"], "outputs": []}]}), encoding="utf-8")
+    (d / "notas.md").write_text("# Mis notas\n\nApuntes sobre la frontera eficiente de Markowitz.\n", encoding="utf-8")
+    (d / "ventas.csv").write_text("fecha,importe\n2026-01-01,10\n2026-01-02,12\n", encoding="utf-8")
+    with zipfile.ZipFile(d / "clase.pptx", "w") as z:
+        z.writestr("ppt/slides/slide1.xml", "<p:sld><a:t>Diapositiva sobre cópulas</a:t></p:sld>")
+    (d / "programa.exe").write_bytes(b"MZ\x00\x00")
+    return d
+
+
+def test_importa_codigo_cuadernos_datos_y_apuntes(tmp_path):
+    d = _archivos(tmp_path)
+    k_dir, db = tmp_path / "conocimiento", tmp_path / "i.db"
+    res = {Path(r["ruta"]).name: r for r in im.importar([d / n for n in ("limpieza.py", "analisis.ipynb", "notas.md", "ventas.csv", "clase.pptx", "programa.exe")], k_dir, db=db)}
+    assert res["programa.exe"]["estado"] == "error" and "no admitido" in res["programa.exe"]["mensaje"]
+    assert all(res[n]["estado"] == "ok" for n in ("limpieza.py", "analisis.ipynb", "notas.md", "ventas.csv", "clase.pptx"))
+    assert res["limpieza.py"]["galaxia"] == "codigo" and res["limpieza.py"]["tipo"] == "codigo" and res["limpieza.py"]["genero"] == "tecnologia"
+    assert res["analisis.ipynb"]["galaxia"] == "codigo" and res["ventas.csv"]["tipo"] == "datos" and res["notas.md"]["tipo"] == "apuntes"
+    assert [c["titulo"] for c in im.capitulos(Path(res["limpieza.py"]["destino"]))[0]] == ["depurar_quimbaya", "Tuxtla"]
+    assert [c["titulo"] for c in im.capitulos(Path(res["analisis.ipynb"]["destino"]))[0]] == ["Regresión zorrotz"]
+
+    # se encuentran por su contenido, con el formato como filtro
+    def buscar(q, **kw):
+        return k.buscar(q, db=db, **kw)
+    assert Path(buscar("depurar_quimbaya", formato="py")[0]["ruta"]).name == "limpieza.py"            # el código importado no se confunde con el del árbol
+    assert Path(buscar("modelo_zorrotz")[0]["ruta"]).name == "analisis.ipynb"                         # texto de una celda de código
+    assert buscar("zorrotz", formato="ipynb") and not buscar("zorrotz", formato="py")
+    assert Path(buscar("copulas", formato="pptx")[0]["ruta"]).name == "clase.pptx"
+    assert buscar("importe", formato="csv")                                                           # cabecera del CSV
+
+
+def test_las_carpetas_de_fuentes_siguen_siendo_solo_documentos():
+    assert ".py" not in k.EXT and ".md" in k.EXT and {".py", ".ipynb", ".csv", ".pptx"} <= k.EXT_IMPORTABLE
+:::END
 :::BEGIN py/tests/test_instaladores.py|text
 """Los instaladores autoextraibles empaquetan lo correcto y se extraen identicos."""
 import importlib.util
@@ -37190,8 +37314,8 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
     <div class="imp-panel" id="impPanel" hidden></div>
     <details class="imp-ayuda"><summary>¿Cómo funciona la importación?</summary><div>
       <ol>
-        <li><b>Añade archivos</b>: haz clic en el agujero negro (o suelta archivos encima). Se abre el explorador de Windows y puedes elegir varios a la vez. Sirven <b>PDF</b> (hace falta <code>pypdf</code>; el instalador lo trae), <b>EPUB</b>, <b>DOCX</b>, <b>MD</b> y <b>TXT</b>.</li>
-        <li><b>Se clasifica solo</b>: para cada archivo se lee el principio y se propone una <b>galaxia</b> (Finanzas si domina el vocabulario financiero; Libros si es un PDF largo o un EPUB; Notas si es corto o de apuntes), un <b>género</b> (historia, economía, ensayo, ciencia, novela…), un <b>subtema</b> (el tema del catálogo de conceptos que más aparece), un <b>tipo</b> y los <b>capítulos</b> (los marcadores del PDF, la tabla de contenidos del EPUB o los títulos).</li>
+        <li><b>Añade archivos</b>: haz clic en el agujero negro (o suelta archivos encima). Se abre el explorador de Windows y puedes elegir varios a la vez. Sirven <b>PDF</b> (hace falta <code>pypdf</code>; el instalador lo trae), <b>EPUB</b>, <b>DOCX</b>, <b>MD</b> y <b>TXT</b>; <b>código</b> (<b>PY</b>, <b>IPYNB</b>, R, SAS, SQL, JS…), <b>datos</b> (CSV, XLSX, JSON, YAML…) y <b>apuntes</b> (PPTX, TEX, HTML, RST).</li>
+        <li><b>Se clasifica solo</b>: para cada archivo se lee el principio y se propone una <b>galaxia</b> (Finanzas si domina el vocabulario financiero; Libros si es un PDF largo o un EPUB; Notas si es corto o de apuntes; Código si es un archivo de programa o un cuaderno), un <b>género</b> (historia, economía, ensayo, ciencia, novela…), un <b>subtema</b> (el tema del catálogo de conceptos que más aparece), un <b>tipo</b> y los <b>capítulos</b> (los marcadores del PDF, la tabla de contenidos del EPUB o los títulos).</li>
         <li><b>Tú mandas</b>: despliega cada tarjeta (▾) para ver qué se ha detectado (barras con las puntuaciones, capítulos, vista previa del texto). Pulsa una barra para fijar ese género o subtema, cambia los desplegables, edita el título o añade etiquetas. «Para todos» aplica una elección a toda la lista. Lo que dejes en <i>Automático</i> lo decide el importador.</li>
         <li><b>Nombres largos</b>: los nombres tipo «Título -- Autor -- 2016 -- Editorial -- ISBN…» se recortan al título (60 caracteres como mucho). Lo puedes editar; el nombre completo se conserva en la ficha.</li>
         <li><b>Al importar</b>: cada archivo se copia (el original no se toca) a <code>conocimiento/biblioteca/&lt;galaxia&gt;/&lt;subtema&gt;/</code>, se indexa su texto, y el universo se regenera: en <b>Libros</b> aparece una rama por género, un módulo por libro y un punto por capítulo. Lo que ya estaba importado se detecta y se salta.</li>
@@ -37525,8 +37649,9 @@ var resultados = [], listaVista = [], idxRes = -1;
 var ALIAS_AMBITO = {libros: {g: 'libros'}, libro: {g: 'libros'}, codigo: {g: 'codigo'}, 'código': {g: 'codigo'}, conceptos: {g: 'conceptos'}, concepto: {g: 'conceptos'}, demos: {g: 'demos'}, demo: {g: 'demos'},
   finanzas: {g: 'finanzas'}, notas: {g: 'notas'}, nota: {g: 'notas'}, historia: {ge: 'historia'}, economia: {ge: 'economia'}, 'economía': {ge: 'economia'}, ensayo: {ge: 'ensayo'}, filosofia: {ge: 'ensayo'}, 'filosofía': {ge: 'ensayo'},
   estadistica: {ge: 'estadistica'}, 'estadística': {ge: 'estadistica'}, ciencia: {ge: 'ciencia'}, novela: {ge: 'novela'}, biografia: {ge: 'biografia'}, 'biografía': {ge: 'biografia'}, politica: {ge: 'politica'}, 'política': {ge: 'politica'},
-  tecnologia: {ge: 'tecnologia'}, 'tecnología': {ge: 'tecnologia'}, psicologia: {ge: 'psicologia'}, 'psicología': {ge: 'psicologia'}, arte: {ge: 'arte'}, video: {video: true}, 'vídeo': {video: true}, pdf: {fmt: 'pdf'}, epub: {fmt: 'epub'}, docx: {fmt: 'docx'}, md: {fmt: 'md'}, txt: {fmt: 'txt'}};
-var ATAJOS = ['libros:', 'código:', 'conceptos:', 'demos:', 'notas:', 'finanzas:', 'vídeo:', 'pdf:', 'epub:', 'historia:', 'economía:', 'ensayo:', 'ciencia:', 'estadística:', 'novela:'];
+  tecnologia: {ge: 'tecnologia'}, 'tecnología': {ge: 'tecnologia'}, psicologia: {ge: 'psicologia'}, 'psicología': {ge: 'psicologia'}, arte: {ge: 'arte'}, video: {video: true}, 'vídeo': {video: true}, };
+['pdf', 'epub', 'docx', 'md', 'txt', 'py', 'ipynb', 'r', 'sas', 'sql', 'js', 'csv', 'xlsx', 'json', 'yaml', 'pptx', 'html', 'tex'].forEach(function (e) { ALIAS_AMBITO[e] = {fmt: e}; });
+var ATAJOS = ['libros:', 'código:', 'conceptos:', 'demos:', 'notas:', 'finanzas:', 'vídeo:', 'pdf:', 'epub:', 'py:', 'ipynb:', 'csv:', 'historia:', 'economía:', 'ensayo:', 'ciencia:', 'estadística:', 'novela:'];
 var ambito = {}, activa = false;
 function parseAmbito(q) {        /* «libros: historia: roma» -> ámbito {g: libros, ge: historia} y texto «roma» */
   var amb = {}, rest = q, m, re = /^\s*([a-záéíóúñ]+):\s*/i;
@@ -39505,6 +39630,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 5j. **Eclipses (almacenaje):** pestaña «🌘 Eclipses» (`py/visor/eclipses.js`, medición en `py/conocimiento/almacenaje.py`, API `Api.almacenaje`): el Sol es el límite de GitHub (1 GB recomendado, 5 GB tope, 100 MB por archivo) y cada galaxia o tipo de archivo es una luna de su color, ESTÁTICA (sin órbitas ni animación: decisión de Mario), cuya área es proporcional a lo que ocupa y que tapa el Sol. Dos escenarios: «En disco» (todo) y «En GitHub» (`git ls-files -co --exclude-standard`: respeta `.gitignore`), y dos vistas (por galaxia / por tipo). Avisa de archivos >100 MB. Test: `tests/test_almacenaje.py`.
 5m. **Referencias que viajan:** los PDF/EPUB no suben a GitHub, pero `conocimiento/biblioteca/referencias.json` (los metadatos sin rutas del equipo: título, galaxia, género, capítulos, hash) y `biblioteca/portadas/` sí (`.gitignore`; `importar._guardar` los escribe junto a `metadatos.json`, que sigue siendo local). `leer_metadatos` fusiona ambos, así que en otro equipo el mapa y el Observatorio muestran los libros como referencias vacías («sin el archivo en este equipo»); al importar un archivo con el mismo hash se restaura en su sitio.
 5k. **Telescopio:** pestaña «📡 Telescopio» (`py/conocimiento/telescopio.py`, API `Api.telescopio_buscar/traer`, consola `python -m conocimiento telescopio <consulta> [--traer N]`). Busca **solo fuentes legales**: Project Gutenberg (catálogo OPDS oficial, dominio público; Gutendex se descartó por lento), Google Books y Open Library (catálogo: ficha y enlace; descarga solo si es dominio público o lectura abierta; Google necesita clave en `GOOGLE_BOOKS_KEY` o `conocimiento/google_books.key` porque la cuota anónima diaria suele estar agotada), arXiv, OpenAlex (solo con PDF abierto) e Internet Archive (solo licencia CC/dominio público o publicado ≤ 1929). **No se añaden fuentes piratas (Anna's Archive, Z-Library, LibGen…) ni descargadores de ellas.** `traer` descarga (https, ≤ 200 MB, comprueba que es PDF/EPUB de verdad) y pasa por `importar.importar` con el género sacado de las materias de la obra (`genero_desde_materias`); `materias_de` consulta Open Library para clasificar un título que ya tienes. Tests sin red (`_get` se sustituye): `tests/test_telescopio.py`.
+5p. **Importar cualquier archivo:** además de libros, el importador acepta código (`CODIGO_EXT`: .py .ipynb .r .sas .sql .js …), datos (`DATOS_EXT`: .csv .xlsx .json .yaml …) y apuntes (`APUNTES_EXT`: .pptx .tex .html .rst) — todo en `EXT_IMPORTABLE` (`conocimiento/__init__.py`). El código va a la galaxia Código (tipo `codigo`, género tecnología); los datos al tipo `datos` (solo se indexa la cabecera); los cuadernos se indexan por celdas y su «índice» son los títulos markdown. Las carpetas de `fuentes.json` siguen leyendo solo `EXT` (documentos), para no indexar todo un disco. Otros formatos (imágenes, .zip, .exe) se rechazan con un mensaje claro. Se filtran en el buscador con prefijos como `py:`, `ipynb:`, `csv:`, `sql:`, `pptx:` (`conocimiento.buscar(formato=)`). Test: `tests/test_importar_formatos.py`.
 5n. **Búsqueda por tipo de archivo y por título/autor:** en el buscador principal los prefijos `pdf:`, `epub:`, `docx:`, `md:`, `txt:` filtran lo que sale de tu conocimiento por formato (`conocimiento.buscar(..., formato=)`; con un prefijo de formato no se listan nodos del mapa). En el Telescopio, «Qué buscamos» (Todo / Un libro / Un artículo) muestra casillas de **Título** y **Autor** (el autor se comprueba en cada resultado), el selector de tipo elige las fuentes (libro: Google Books, Open Library, Gutenberg, Internet Archive; artículo: arXiv, OpenAlex) y «Solo PDF / Solo EPUB» filtra por formato descargable. Consola: `python -m conocimiento telescopio -T título -a autor --tipo libro --formato pdf`.
 5o. **Clasificador por parecido (embeddings locales):** `py/conocimiento/clasificador.py`. El importador mezcla las reglas de palabras clave con el parecido del libro (título + capítulos + principio) a unas frases semilla por género y a lo que ya hay en tu biblioteca (lo que corregiste a mano pesa más); `decidir` suma parecido + cuota de las reglas × su seguridad, y si nada se parece (`MIN_PARECIDO`) respeta a las reglas. Corre en local con `fastembed` (ONNX, sin PyTorch; **opcional**: `pip install fastembed`; sin él o sin el modelo todo sigue con las reglas). Los modelos se guardan en `conocimiento/modelos/` (no se publican). Modelo por defecto `paraphrase-multilingual-MiniLM-L12-v2` (0,2 GB; sirve en un portátil de 8 GB); para otro, `conocimiento/ajustes.json` {"modelo_embeddings": "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"} o la variable ARBOL_MODELO. **Medido con `python herramientas/comparar_clasificadores.py`** (66 libros de prueba): reglas solas 42 %; con MiniLM 86 %, con mpnet 89 % (1 GB, algo más lento), con potion-multilingual-128M 82 %; ~0,1 s por libro una vez cargado el modelo. Al añadir géneros o frases semilla, vuelve a medir. El resultado de `clasificar` trae `metodo` (`reglas` | `parecido`) y el motivo lo explica. Tests: `tests/test_clasificador.py` (con un modelo falso; la suite desactiva el real).
 6. **Conceptos:** `conceptos/catalogo.json` lista los conceptos del temario del máster y de Very Normal con las funciones que los implementan. Organización: `temas` (ramas del mapa, con color) > `areas` (módulos, con `ambito`) > conceptos (`area`, `prioridad` opcional, `area_fija` para que la actualización no lo mueva). La migración de 0.6.0 está en `herramientas/reorganizar_catalogo.py`.

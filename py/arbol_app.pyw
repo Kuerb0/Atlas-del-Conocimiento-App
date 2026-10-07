@@ -76,7 +76,8 @@ class Api:
         """Abre el explorador de archivos de Windows (varios a la vez) y devuelve las rutas elegidas."""
         try:
             import webview
-            tipos = ("Documentos (*.pdf;*.epub;*.docx;*.md;*.txt)", "Todos los archivos (*.*)")
+            from conocimiento import EXT_IMPORTABLE
+            tipos = ("Documentos, código y datos (" + ";".join("*" + e for e in sorted(EXT_IMPORTABLE)) + ")", "Todos los archivos (*.*)")
             modo = webview.FileDialog.OPEN if hasattr(webview, "FileDialog") else webview.OPEN_DIALOG
             r = webview.windows[0].create_file_dialog(modo, allow_multiple=True, file_types=tipos)
             return [str(x) for x in (r or [])]

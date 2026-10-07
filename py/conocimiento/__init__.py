@@ -3,7 +3,7 @@
 Índice SQLite FTS5 (BM25, sin acentos, prefijos) en `<árbol>/conocimiento/indice.db`; se actualiza solo con lo que cambió.
 Colecciones internas: `codigo` (docstrings de `arbol_estadistica`), `conceptos` (catalogo.json), `teoria` (teoria/*.md).
 Colecciones tuyas: `conocimiento/fuentes.json` -> {"libros": ["D:/Libros"], "finanzas": [...], "notas": [...]} (ver fuentes.ejemplo.json).
-Formatos: .md .txt .pdf (necesita `pip install pypdf`) .epub .docx.
+Formatos de las carpetas de fuentes: .md .txt .pdf (necesita `pip install pypdf`) .epub .docx. El importador admite además código (.py .ipynb .r .sas .sql .js …), datos (.csv .xlsx .json …) y apuntes (.pptx .tex .html …): ver EXT_IMPORTABLE.
 
 Uso: `python -m conocimiento indexar` · `python -m conocimiento buscar "odds ratio" [-c libros] [-n 10]` · `python -m conocimiento estado`.
 Los sinónimos del catálogo amplían la consulta (buscar «VIF» encuentra también su nombre largo). Si la consulta exacta no da nada, se relaja a «cualquiera de las palabras».
@@ -23,7 +23,11 @@ CODIGO = Path(__file__).resolve().parents[1]
 RAIZ = CODIGO.parent
 CARPETA = Path(os.environ.get("ARBOL_CONOCIMIENTO", RAIZ / "conocimiento"))   # datos del usuario: no se publican (.gitignore)
 DB = CARPETA / "indice.db"
-EXT = {".md", ".txt", ".pdf", ".epub", ".docx"}
+EXT = {".md", ".txt", ".pdf", ".epub", ".docx"}                          # lo que se busca en las carpetas de fuentes.json (documentos)
+CODIGO_EXT = {".py", ".ipynb", ".r", ".rmd", ".qmd", ".sas", ".sql", ".js", ".ts", ".sh", ".bat", ".ps1", ".c", ".cpp", ".h", ".java", ".jl", ".m"}
+DATOS_EXT = {".csv", ".tsv", ".xlsx", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".xml"}
+APUNTES_EXT = {".rst", ".tex", ".html", ".htm", ".pptx"}
+EXT_IMPORTABLE = EXT | CODIGO_EXT | DATOS_EXT | APUNTES_EXT                # lo que acepta el importador y se indexa dentro de biblioteca/
 
 
 SIN_VENTANA = getattr(__import__("subprocess"), "CREATE_NO_WINDOW", 0)      # creationflags de los subprocess: en la app (pythonw) evita que parpadee una ventana de consola
@@ -75,6 +79,54 @@ def _texto_plano(f: Path):
     for i in range(1, len(partes), 2):
         out += _trocear(partes[i + 1], f.stem, partes[i].lstrip("# ").strip())
     return out
+
+
+def _bloques(t: str, titulo: str, tam: int = 60):
+    """Trozos de unas `tam` líneas; el título lleva el primer def/class del bloque, la ubicación las líneas."""
+    ls = t.splitlines()
+    out = []
+    for a in range(0, len(ls), tam):
+        bloque = "\n".join(ls[a:a + tam])
+        if bloque.strip():
+            d = re.search(r"(?m)^\s*(?:async\s+)?(?:def|class|function)\s+(\w+)", bloque)
+            out.append((f"{titulo} · {d.group(1)}" if d else titulo, bloque, f"líneas {a + 1}–{min(a + tam, len(ls))}"))
+    return out
+
+
+def _codigo_texto(f: Path):
+    return _bloques(f.read_text(encoding="utf-8", errors="replace"), f.stem)
+
+
+def _ipynb(f: Path):
+    out = []
+    for i, c in enumerate(json.loads(f.read_text(encoding="utf-8", errors="replace")).get("cells", []), 1):
+        src = c.get("source", "")
+        src = "".join(src) if isinstance(src, list) else str(src)
+        if src.strip():
+            out += _trocear(src, f.stem, f"celda {i} ({'texto' if c.get('cell_type') == 'markdown' else 'código'})")
+    return out
+
+
+def _datos(f: Path):
+    """CSV/TSV/JSON/YAML/XML…: solo el principio (cabecera y primeras filas): lo demás son datos, no texto que buscar."""
+    return _trocear("\n".join(f.read_text(encoding="utf-8", errors="replace").splitlines()[:40]), f.stem, "cabecera y primeras filas")
+
+
+def _html(f: Path):
+    x = _sin_etiquetas(f.read_text(encoding="utf-8", errors="replace"))
+    return _trocear(re.sub(r"<[^>]+>", "", x), f.stem, "")
+
+
+def _pptx(f: Path):
+    with zipfile.ZipFile(f) as z:
+        lams = sorted((n for n in z.namelist() if re.match(r"ppt/slides/slide\d+\.xml$", n)), key=lambda n: int(re.findall(r"\d+", n)[0]))
+        return [x for n in lams for x in _trocear(" ".join(re.findall(r"<a:t>(.*?)</a:t>", z.read(n).decode("utf-8", "replace"))), f.stem, f"diapositiva {re.findall(r'[0-9]+', n)[0]}")]
+
+
+def _xlsx(f: Path):
+    with zipfile.ZipFile(f) as z:
+        txt = z.read("xl/sharedStrings.xml").decode("utf-8", "replace") if "xl/sharedStrings.xml" in z.namelist() else ""
+    return _trocear("\n".join(re.findall(r"<t[^>]*>(.*?)</t>", txt)[:400]), f.stem, "textos de la hoja")
 
 
 def _pdf(f: Path):
@@ -141,11 +193,15 @@ def _grupos(con: sqlite3.Connection, f: Path) -> None:
 
 
 def _extraer(col: str, f: Path):
-    if col == "codigo":
+    if col == "codigo" and f.suffix == ".py" and CODIGO in f.parents:           # el código del propio árbol; el código que importas se trata como cualquier archivo de texto
         return _codigo(f)
     if col == "conceptos":
         return _conceptos(f)
-    return {".pdf": _pdf, ".epub": _epub, ".docx": _docx}.get(f.suffix.lower(), _texto_plano)(f)
+    ext = f.suffix.lower()
+    if ext in CODIGO_EXT and ext != ".ipynb":
+        return _codigo_texto(f)
+    return {".pdf": _pdf, ".epub": _epub, ".docx": _docx, ".ipynb": _ipynb, ".csv": _datos, ".tsv": _datos, ".json": _datos, ".yaml": _datos, ".yml": _datos, ".toml": _datos,
+            ".ini": _datos, ".cfg": _datos, ".xml": _datos, ".html": _html, ".htm": _html, ".pptx": _pptx, ".xlsx": _xlsx}.get(ext, _texto_plano)(f)
 
 
 # ---------- índice ----------
@@ -176,7 +232,7 @@ def _unidades(fuentes: dict, carpeta: Path = CARPETA):
     if base.is_dir():
         meta = _metadatos(carpeta)
         for f in sorted(base.rglob("*")):
-            if f.is_file() and f.suffix.lower() in EXT and f.relative_to(base).parts[0] != f.name:
+            if f.is_file() and f.suffix.lower() in EXT_IMPORTABLE and f.relative_to(base).parts[0] != f.name:
                 rel = f.relative_to(base)
                 yield (meta.get(rel.as_posix(), {}).get("galaxia") or rel.parts[0]), f
     for col, carpetas in fuentes.items():
