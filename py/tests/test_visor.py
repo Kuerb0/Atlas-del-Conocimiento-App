@@ -149,3 +149,21 @@ def test_el_javascript_del_mapa_3d_es_sintacticamente_valido():
         pytest.skip("node no está instalado: no se puede comprobar la sintaxis del JS")
     r = subprocess.run(["node", "--check", str(CODIGO / "visor" / "mapa3d.js")], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
+
+
+def test_boton_actualizar_recarga_codigo_y_visor():
+    """El botón «Actualizar» existe en el visor y la app expone recargar() (los módulos se recargan en orden: el paquete primero)."""
+    html = (CODIGO / "visor" / "plantilla.html").read_text(encoding="utf-8")
+    app = (CODIGO / "arbol_app.pyw").read_text(encoding="utf-8")
+    assert 'id="btnActualizar"' in html and "a.recargar()" in html and "arbol-tras-actualizar" in html
+    assert "def recargar(self)" in app and app.index('"conocimiento", "conocimiento.clasificador"') < app.index('"conocimiento.importar"') < app.index('"conocimiento.telescopio"')
+
+
+def test_recargar_modulos_en_orden_no_rompe_el_clasificador(tmp_path):
+    """Lo que hace Api.recargar(): recargar el paquete y sus módulos en ese orden, y que clasificar siga funcionando."""
+    for nombre in ("conocimiento", "conocimiento.clasificador", "conocimiento.llm", "conocimiento.importar", "conocimiento.almacenaje", "conocimiento.telescopio"):
+        importlib.reload(sys.modules[nombre]) if nombre in sys.modules else importlib.import_module(nombre)
+    from conocimiento import importar
+    f = tmp_path / "apuntes.md"; f.write_text("# Notas\n\nregresion lineal y contrastes de hipotesis " * 20, encoding="utf-8")
+    assert importar.clasificar(f, tmp_path)["galaxia"] in ("notas", "finanzas")
+

@@ -136,6 +136,20 @@ class Api:
     def biblioteca_borrar(self, rel):
         return self._bib("borrar", str(rel))
 
+    def recargar(self):
+        """Botón «Actualizar»: vuelve a cargar el código de conocimiento/ (reglas nuevas, ajustes…) y regenera el visor, sin cerrar la app."""
+        if self._job.get("fase") == "trabajando":
+            return {"error": "hay una importación en curso: espera a que termine"}
+        try:
+            import importlib
+            import sys
+            for nombre in ("conocimiento", "conocimiento.clasificador", "conocimiento.llm", "conocimiento.importar", "conocimiento.almacenaje", "conocimiento.telescopio", "construir_visor"):
+                if nombre in sys.modules:
+                    importlib.reload(sys.modules[nombre])          # en este orden: el paquete primero y después lo que depende de él
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+        return self.actualizar_visor()
+
     def actualizar_visor(self):
         """Regenera visor_arbol.html (con lo recién importado) para que el universo lo incluya; el visor se recarga después."""
         try:

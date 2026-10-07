@@ -352,5 +352,173 @@
   "fecha": "2026-10-07T17:42:40",
   "automatico": true,
   "portada": "portadas/4654745de8.jpg"
+ },
+ "libros/Politica_y_sociedad/The_Reluctant_Spy.epub": {
+  "capitulos": [
+   {
+    "titulo": "Cover",
+    "pagina": null
+   },
+   {
+    "titulo": "Title Page",
+    "pagina": null
+   },
+   {
+    "titulo": "Dedication",
+    "pagina": null
+   },
+   {
+    "titulo": "Foreword",
+    "pagina": null
+   },
+   {
+    "titulo": "Author’s Note",
+    "pagina": null
+   },
+   {
+    "titulo": "Prologue",
+    "pagina": null
+   },
+   {
+    "titulo": "Chapter 1",
+    "pagina": null
+   },
+   {
+    "titulo": "Chapter 2",
+    "pagina": null
+   },
+   {
+    "titulo": "Chapter 3",
+    "pagina": null
+   },
+   {
+    "titulo": "Chapter 4",
+    "pagina": null
+   },
+   {
+    "titulo": "Chapter 5",
+    "pagina": null
+   },
+   {
+    "titulo": "Chapter 6",
+    "pagina": null
+   },
+   {
+    "titulo": "Chapter 7",
+    "pagina": null
+   },
+   {
+    "titulo": "Chapter 8",
+    "pagina": null
+   },
+   {
+    "titulo": "Chapter 9",
+    "pagina": null
+   },
+   {
+    "titulo": "Chapter 10",
+    "pagina": null
+   },
+   {
+    "titulo": "Chapter 11",
+    "pagina": null
+   },
+   {
+    "titulo": "Chapter 12",
+    "pagina": null
+   },
+   {
+    "titulo": "Chapter 13",
+    "pagina": null
+   },
+   {
+    "titulo": "Chapter 14",
+    "pagina": null
+   },
+   {
+    "titulo": "Chapter 15",
+    "pagina": null
+   },
+   {
+    "titulo": "Chapter 16",
+    "pagina": null
+   },
+   {
+    "titulo": "Chapter 17",
+    "pagina": null
+   },
+   {
+    "titulo": "Epilogue",
+    "pagina": null
+   },
+   {
+    "titulo": "Acknowledgments",
+    "pagina": null
+   },
+   {
+    "titulo": "About the Author",
+    "pagina": null
+   },
+   {
+    "titulo": "Copyright",
+    "pagina": null
+   }
+  ],
+  "paginas": 0,
+  "titulo": "The Reluctant Spy",
+  "galaxia": "libros",
+  "subtema": "General",
+  "genero": "politica",
+  "tipo": "libro",
+  "etiquetas": "",
+  "hash": "5023ba6e0e7f3efe2f6ba089ac17229c9901f76d",
+  "fecha": "2026-10-07T19:15:07",
+  "automatico": true,
+  "metodo": "reglas",
+  "motivo": "EPUB",
+  "materias_web": [
+   "Nonfiction",
+   "Politics",
+   "War on Terrorism, 2001-2009",
+   "United States. Central Intelligence Agency",
+   "Spies",
+   "United States",
+   "Personal narratives",
+   "Biography"
+  ],
+  "propuesta": {
+   "galaxia": "libros",
+   "subtema": "General",
+   "genero": "politica",
+   "tipo": "libro"
+  },
+  "portada": "portadas/5023ba6e0e.jpg"
+ },
+ "notas/General/Las_48_Leyes_Del_Poder.pdf": {
+  "capitulos": [
+   {
+    "titulo": "Páginas 1–24",
+    "pagina": 1
+   }
+  ],
+  "paginas": 24,
+  "titulo": "Las 48 Leyes Del Poder",
+  "galaxia": "notas",
+  "subtema": "General",
+  "genero": "ensayo",
+  "tipo": "articulo",
+  "etiquetas": "",
+  "hash": "9928e82e3690160917d3b32e862df59930a709d4",
+  "fecha": "2026-10-07T19:15:08",
+  "automatico": true,
+  "metodo": "parecido",
+  "motivo": "documento corto o de apuntes; género «Ensayo y filosofía» por parecido con ejemplos (margen 0.02)",
+  "materias_web": [],
+  "propuesta": {
+   "galaxia": "notas",
+   "subtema": "General",
+   "genero": "ensayo",
+   "tipo": "articulo"
+  }
  }
 }

@@ -42,6 +42,18 @@ def test_voto_de_las_materias_web(tmp_path, monkeypatch):
     assert im.clasificar(f, tmp_path)["metodo"] == "reglas"                         # sin red (o desactivado) se clasifica como siempre
 
 
+def test_la_forma_de_la_obra_manda_sobre_el_tema(tmp_path, monkeypatch):
+    monkeypatch.setattr(c, "WEB", True)
+    f = tmp_path / "The Reluctant Spy.epub"; _epub(f, "la CIA el gobierno el Estado politica democracia " * 300)
+    monkeypatch.setattr(im, "_materias_web", lambda t: ["Nonfiction", "Politics", "Spies", "Personal narratives", "Biography"])
+    r = im.clasificar(f, tmp_path)
+    assert r["genero"] == "biografia" and r["metodo"] == "web" and "Biography" in r["motivo"]       # habla de política pero es una memoria
+    monkeypatch.setattr(im, "_materias_web", lambda t: ["Fiction", "History", "Kings and rulers"])
+    g = tmp_path / "Roma soy yo.epub"; _epub(g, "el imperio romano las guerras y los reyes historia " * 300)
+    assert im.clasificar(g, tmp_path)["genero"] == "novela"                                         # habla de historia pero es una novela
+    assert im._forma_materias(["Economics", "Finance"]) is None
+
+
 def test_decidir_con_voto_web_desempata():
     p = {"puntos": {"historia": .40, "ciencia": .38}}
     assert c.decidir({}, "otro", p)[0] == "historia" and c.decidir({}, "otro", p, web="ciencia")[0] == "ciencia"

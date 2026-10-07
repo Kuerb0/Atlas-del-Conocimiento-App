@@ -380,6 +380,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
       <button class="pest" id="pestBiblioteca" role="tab" type="button" aria-selected="false" title="El observatorio: lo que has importado; edita, reclasifica o borra">🔭 Observatorio</button>
       <button class="pest" id="pestEclipses" role="tab" type="button" aria-selected="false" title="Almacenaje: lo que ocupa cada galaxia frente al límite de GitHub">🌘 Eclipses</button>
       <button class="pest" id="pestTelescopio" role="tab" type="button" aria-selected="false" title="Telescopio: busca obras de acceso abierto y las trae a tu biblioteca, ya clasificadas">📡 Telescopio</button>
+      <button class="pest" id="btnActualizar" type="button" title="Recarga el programa (reglas y ajustes nuevos) y el universo con lo importado, sin cerrar la app">⟳ Actualizar</button>
     </nav>
     <div class="search">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
@@ -1223,6 +1224,16 @@ $('#pestImportar').onclick = function () { pestana('importar'); };
 $('#pestBiblioteca').onclick = function () { pestana('biblioteca'); };
 $('#pestEclipses').onclick = function () { pestana('eclipses'); };
 $('#pestTelescopio').onclick = function () { pestana('telescopio'); };
+$('#btnActualizar').onclick = async function () {              /* recarga el código de Python y regenera el universo; vuelve a la misma pestaña */
+  var a = window.pywebview && window.pywebview.api, b = this;
+  if (!a || !a.recargar) { location.reload(); return; }
+  var pest = impAbierta() ? 'importar' : bibAbierta() ? 'biblioteca' : eclAbierta() ? 'eclipses' : telAbierta() ? 'telescopio' : 'universo';
+  b.disabled = true; b.textContent = '⟳ Actualizando…';
+  var v = await a.recargar();
+  if (v && v.error) { b.disabled = false; b.textContent = '⟳ Actualizar'; b.title = 'No se pudo actualizar: ' + v.error; alert('No se pudo actualizar: ' + v.error); return; }
+  try { sessionStorage.setItem('arbol-tras-actualizar', pest); } catch (e) {}
+  location.reload();
+};
 var apMostrarOrig = apMostrar;
 apMostrar = function (on) { if (on && (impAbierta() || bibAbierta() || eclAbierta() || telAbierta())) impCerrar(); apMostrarOrig(on); pintarPestanas(); };
 
@@ -1703,6 +1714,7 @@ function irDestino(d, instante) {
 }
 window.irDestino = function (d) { return irDestino(d, false); };
 if (!irDestino(hash, true)) cerebro.mostrar();
+try { var trasA = sessionStorage.getItem('arbol-tras-actualizar'); if (trasA) { sessionStorage.removeItem('arbol-tras-actualizar'); if (trasA !== 'universo') pestana(trasA); } } catch (e) {}
 try { var tras = sessionStorage.getItem('arbol-tras-importar'); if (tras) { sessionStorage.removeItem('arbol-tras-importar'); pestana('importar'); impAviso(tras); } } catch (e) {}
 window.addEventListener('hashchange', function () {     /* enlaces #nombre y atrás/adelante del navegador */
   var h2 = decodeURIComponent((location.hash || '').slice(1));

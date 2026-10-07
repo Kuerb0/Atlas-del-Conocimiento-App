@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.8.1 - Actualizar
+title Arbol de la estadistica 1.8.2 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=actualizar"
-set "ARBOL_VERSION=1.8.1"
+set "ARBOL_MODO=instalar"
+set "ARBOL_VERSION=1.8.2"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -494,7 +494,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.8.1
+1.8.2
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -634,6 +634,20 @@ class Api:
 
     def biblioteca_borrar(self, rel):
         return self._bib("borrar", str(rel))
+
+    def recargar(self):
+        """Botón «Actualizar»: vuelve a cargar el código de conocimiento/ (reglas nuevas, ajustes…) y regenera el visor, sin cerrar la app."""
+        if self._job.get("fase") == "trabajando":
+            return {"error": "hay una importación en curso: espera a que termine"}
+        try:
+            import importlib
+            import sys
+            for nombre in ("conocimiento", "conocimiento.clasificador", "conocimiento.llm", "conocimiento.importar", "conocimiento.almacenaje", "conocimiento.telescopio", "construir_visor"):
+                if nombre in sys.modules:
+                    importlib.reload(sys.modules[nombre])          # en este orden: el paquete primero y después lo que depende de él
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+        return self.actualizar_visor()
 
     def actualizar_visor(self):
         """Regenera visor_arbol.html (con lo recién importado) para que el universo lo incluya; el visor se recarga después."""
@@ -2779,7 +2793,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.8.1"
+version = "1.8.2"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -2827,6 +2841,9 @@ patsy
 matplotlib>=3.7
 pytest
 pypdf
+:::END
+:::BEGIN py/{r['galaxia']|text
+
 :::END
 :::BEGIN py/aprender/01_fundamentos.json|text
 {
@@ -3459,7 +3476,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.8.1"
+__version__ = "1.8.2"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -14880,6 +14897,20 @@ def _genero_materias(materias: list[str]) -> str | None:
     return g if p[g] >= 2 else None
 
 
+_FORMA = {"biografia": {"biography", "biographies", "personal narratives", "memoirs", "memoir", "autobiography", "autobiographies", "biografia", "biografias", "autobiografia", "memorias"},
+          "novela": {"fiction", "novel", "novels", "historical fiction", "novela", "novelas", "fiction general", "romans", "roman"}}
+
+
+def _forma_materias(materias: list[str]) -> str | None:
+    """Género que fija la FORMA de la obra según Open Library (Biography, Personal narratives → biografía; Fiction → novela). Es una señal mucho más fiable que el tema:
+    una memoria de un agente de la CIA habla de política, pero es una biografía; una novela sobre Roma habla de historia, pero es una novela."""
+    s = {_norm(m).strip(" .") for m in materias}
+    for g, formas in _FORMA.items():
+        if s & formas:
+            return g
+    return None
+
+
 def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
     """Propone galaxia, subtema, tipo y título de un fichero, con el motivo. {'galaxia','subtema','tipo','titulo','motivo','paginas'}"""
     f = Path(ruta)
@@ -14943,7 +14974,12 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
             genero, metodo = web, "web"
     elif web and genero == "otro" and not corr:
         genero, metodo = web, "web"
-    if not corr and tipo != "codigo" and llm.ACTIVO and clasificador.dudoso(gp, s, web) and llm.disponible(carpeta):      # caso dudoso: se pregunta al LLM local (Ollama)
+    forma = _forma_materias(materias) if materias and not corr else None
+    if forma and forma != genero:                                         # la forma de la obra manda sobre el tema
+        genero, metodo = forma, "web"
+        subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
+        motivo += f"; Open Library la clasifica como {', '.join(m for m in materias if _norm(m).strip(' .') in _FORMA[forma])}"
+    if not corr and tipo != "codigo" and llm.ACTIVO and not forma and clasificador.dudoso(gp, s, web) and llm.disponible(carpeta):      # caso dudoso: se pregunta al LLM local (Ollama)
         r = llm.clasificar(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500]), materias, {k: v for k, v in GENEROS.items()}, carpeta)
         if r:
             genero, metodo = r["genero"], "llm"
@@ -34366,6 +34402,18 @@ def test_voto_de_las_materias_web(tmp_path, monkeypatch):
     assert im.clasificar(f, tmp_path)["metodo"] == "reglas"                         # sin red (o desactivado) se clasifica como siempre
 
 
+def test_la_forma_de_la_obra_manda_sobre_el_tema(tmp_path, monkeypatch):
+    monkeypatch.setattr(c, "WEB", True)
+    f = tmp_path / "The Reluctant Spy.epub"; _epub(f, "la CIA el gobierno el Estado politica democracia " * 300)
+    monkeypatch.setattr(im, "_materias_web", lambda t: ["Nonfiction", "Politics", "Spies", "Personal narratives", "Biography"])
+    r = im.clasificar(f, tmp_path)
+    assert r["genero"] == "biografia" and r["metodo"] == "web" and "Biography" in r["motivo"]       # habla de política pero es una memoria
+    monkeypatch.setattr(im, "_materias_web", lambda t: ["Fiction", "History", "Kings and rulers"])
+    g = tmp_path / "Roma soy yo.epub"; _epub(g, "el imperio romano las guerras y los reyes historia " * 300)
+    assert im.clasificar(g, tmp_path)["genero"] == "novela"                                         # habla de historia pero es una novela
+    assert im._forma_materias(["Economics", "Finance"]) is None
+
+
 def test_decidir_con_voto_web_desempata():
     p = {"puntos": {"historia": .40, "ciencia": .38}}
     assert c.decidir({}, "otro", p)[0] == "historia" and c.decidir({}, "otro", p, web="ciencia")[0] == "ciencia"
@@ -35076,6 +35124,23 @@ def test_el_javascript_del_mapa_3d_es_sintacticamente_valido():
         pytest.skip("node no está instalado: no se puede comprobar la sintaxis del JS")
     r = subprocess.run(["node", "--check", str(CODIGO / "visor" / "mapa3d.js")], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
+
+
+def test_boton_actualizar_recarga_codigo_y_visor():
+    """El botón «Actualizar» existe en el visor y la app expone recargar() (los módulos se recargan en orden: el paquete primero)."""
+    html = (CODIGO / "visor" / "plantilla.html").read_text(encoding="utf-8")
+    app = (CODIGO / "arbol_app.pyw").read_text(encoding="utf-8")
+    assert 'id="btnActualizar"' in html and "a.recargar()" in html and "arbol-tras-actualizar" in html
+    assert "def recargar(self)" in app and app.index('"conocimiento", "conocimiento.clasificador"') < app.index('"conocimiento.importar"') < app.index('"conocimiento.telescopio"')
+
+
+def test_recargar_modulos_en_orden_no_rompe_el_clasificador(tmp_path):
+    """Lo que hace Api.recargar(): recargar el paquete y sus módulos en ese orden, y que clasificar siga funcionando."""
+    for nombre in ("conocimiento", "conocimiento.clasificador", "conocimiento.llm", "conocimiento.importar", "conocimiento.almacenaje", "conocimiento.telescopio"):
+        importlib.reload(sys.modules[nombre]) if nombre in sys.modules else importlib.import_module(nombre)
+    from conocimiento import importar
+    f = tmp_path / "apuntes.md"; f.write_text("# Notas\n\nregresion lineal y contrastes de hipotesis " * 20, encoding="utf-8")
+    assert importar.clasificar(f, tmp_path)["galaxia"] in ("notas", "finanzas")
 :::END
 :::BEGIN py/visor/agujero.js|text
 /* agujero.js — el agujero negro de la pestaña «Importar»: disco de acreción en órbita, anillo de luz y halo curvado por la gravedad (como en Interstellar).
@@ -37601,6 +37666,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
       <button class="pest" id="pestBiblioteca" role="tab" type="button" aria-selected="false" title="El observatorio: lo que has importado; edita, reclasifica o borra">🔭 Observatorio</button>
       <button class="pest" id="pestEclipses" role="tab" type="button" aria-selected="false" title="Almacenaje: lo que ocupa cada galaxia frente al límite de GitHub">🌘 Eclipses</button>
       <button class="pest" id="pestTelescopio" role="tab" type="button" aria-selected="false" title="Telescopio: busca obras de acceso abierto y las trae a tu biblioteca, ya clasificadas">📡 Telescopio</button>
+      <button class="pest" id="btnActualizar" type="button" title="Recarga el programa (reglas y ajustes nuevos) y el universo con lo importado, sin cerrar la app">⟳ Actualizar</button>
     </nav>
     <div class="search">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
@@ -38444,6 +38510,16 @@ $('#pestImportar').onclick = function () { pestana('importar'); };
 $('#pestBiblioteca').onclick = function () { pestana('biblioteca'); };
 $('#pestEclipses').onclick = function () { pestana('eclipses'); };
 $('#pestTelescopio').onclick = function () { pestana('telescopio'); };
+$('#btnActualizar').onclick = async function () {              /* recarga el código de Python y regenera el universo; vuelve a la misma pestaña */
+  var a = window.pywebview && window.pywebview.api, b = this;
+  if (!a || !a.recargar) { location.reload(); return; }
+  var pest = impAbierta() ? 'importar' : bibAbierta() ? 'biblioteca' : eclAbierta() ? 'eclipses' : telAbierta() ? 'telescopio' : 'universo';
+  b.disabled = true; b.textContent = '⟳ Actualizando…';
+  var v = await a.recargar();
+  if (v && v.error) { b.disabled = false; b.textContent = '⟳ Actualizar'; b.title = 'No se pudo actualizar: ' + v.error; alert('No se pudo actualizar: ' + v.error); return; }
+  try { sessionStorage.setItem('arbol-tras-actualizar', pest); } catch (e) {}
+  location.reload();
+};
 var apMostrarOrig = apMostrar;
 apMostrar = function (on) { if (on && (impAbierta() || bibAbierta() || eclAbierta() || telAbierta())) impCerrar(); apMostrarOrig(on); pintarPestanas(); };
 
@@ -38924,6 +39000,7 @@ function irDestino(d, instante) {
 }
 window.irDestino = function (d) { return irDestino(d, false); };
 if (!irDestino(hash, true)) cerebro.mostrar();
+try { var trasA = sessionStorage.getItem('arbol-tras-actualizar'); if (trasA) { sessionStorage.removeItem('arbol-tras-actualizar'); if (trasA !== 'universo') pestana(trasA); } } catch (e) {}
 try { var tras = sessionStorage.getItem('arbol-tras-importar'); if (tras) { sessionStorage.removeItem('arbol-tras-importar'); pestana('importar'); impAviso(tras); } } catch (e) {}
 window.addEventListener('hashchange', function () {     /* enlaces #nombre y atrás/adelante del navegador */
   var h2 = decodeURIComponent((location.hash || '').slice(1));

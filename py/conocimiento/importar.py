@@ -365,6 +365,20 @@ def _genero_materias(materias: list[str]) -> str | None:
     return g if p[g] >= 2 else None
 
 
+_FORMA = {"biografia": {"biography", "biographies", "personal narratives", "memoirs", "memoir", "autobiography", "autobiographies", "biografia", "biografias", "autobiografia", "memorias"},
+          "novela": {"fiction", "novel", "novels", "historical fiction", "novela", "novelas", "fiction general", "romans", "roman"}}
+
+
+def _forma_materias(materias: list[str]) -> str | None:
+    """Género que fija la FORMA de la obra según Open Library (Biography, Personal narratives → biografía; Fiction → novela). Es una señal mucho más fiable que el tema:
+    una memoria de un agente de la CIA habla de política, pero es una biografía; una novela sobre Roma habla de historia, pero es una novela."""
+    s = {_norm(m).strip(" .") for m in materias}
+    for g, formas in _FORMA.items():
+        if s & formas:
+            return g
+    return None
+
+
 def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
     """Propone galaxia, subtema, tipo y título de un fichero, con el motivo. {'galaxia','subtema','tipo','titulo','motivo','paginas'}"""
     f = Path(ruta)
@@ -428,7 +442,12 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
             genero, metodo = web, "web"
     elif web and genero == "otro" and not corr:
         genero, metodo = web, "web"
-    if not corr and tipo != "codigo" and llm.ACTIVO and clasificador.dudoso(gp, s, web) and llm.disponible(carpeta):      # caso dudoso: se pregunta al LLM local (Ollama)
+    forma = _forma_materias(materias) if materias and not corr else None
+    if forma and forma != genero:                                         # la forma de la obra manda sobre el tema
+        genero, metodo = forma, "web"
+        subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
+        motivo += f"; Open Library la clasifica como {', '.join(m for m in materias if _norm(m).strip(' .') in _FORMA[forma])}"
+    if not corr and tipo != "codigo" and llm.ACTIVO and not forma and clasificador.dudoso(gp, s, web) and llm.disponible(carpeta):      # caso dudoso: se pregunta al LLM local (Ollama)
         r = llm.clasificar(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500]), materias, {k: v for k, v in GENEROS.items()}, carpeta)
         if r:
             genero, metodo = r["genero"], "llm"
