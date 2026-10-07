@@ -16,13 +16,15 @@ LIMITE_DURO = 5 << 30       # a partir de aquí GitHub puede bloquear el repo
 LIMITE_ARCHIVO = 100 << 20  # GitHub rechaza archivos de más de 100 MB
 
 GRUPOS = {"codigo": "Código", "conceptos": "Conceptos", "demos": "Demos y guías", "finanzas": "Finanzas", "libros": "Libros",
-          "notas": "Notas y enlaces", "visor": "Visor generado", "instaladores": "Instaladores", "copias": "Copias anteriores", "otros": "Otros"}
+          "notas": "Notas y enlaces", "modelos": "Modelos de IA", "visor": "Visor generado", "instaladores": "Instaladores", "copias": "Copias anteriores", "otros": "Otros"}
 _SALTAR = {".git", "__pycache__", ".pytest_cache"}
 
 
 def grupo(rel: str) -> str:
     """Galaxia (o cubo) al que pertenece un archivo según su ruta relativa."""
     p = rel.replace("\\", "/").split("/")
+    if p[:2] == ["conocimiento", "modelos"]:
+        return "modelos"                                              # modelos de embeddings descargados: pesan cientos de MB y no se suben a GitHub
     if p[0] == "conocimiento" and len(p) > 2 and p[1] == "biblioteca":
         return p[2] if p[2] in GRUPOS else "otros"
     if p[0] in ("conceptos", "teoria"):

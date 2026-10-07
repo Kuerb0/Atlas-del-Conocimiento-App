@@ -10,6 +10,7 @@ from conocimiento import almacenaje as a
 def test_grupo_por_ruta():
     assert a.grupo("conocimiento/biblioteca/libros/historia/x.pdf") == "libros"
     assert a.grupo("conocimiento/biblioteca/raro/x.pdf") == "otros"
+    assert a.grupo("conocimiento/modelos/models--x/blobs/a") == "modelos"
     assert a.grupo("py/arbol_estadistica/modelos/glm.py") == "codigo"
     assert a.grupo("py/visor/demos.js") == "demos" and a.grupo("teoria/glm.md") == "conceptos"
     assert a.grupo("visor_arbol.html") == "visor" and a.grupo("LEEME.txt") == "otros"

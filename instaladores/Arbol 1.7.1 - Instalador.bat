@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.7.0 - Actualizar
+title Arbol de la estadistica 1.7.1 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=actualizar"
-set "ARBOL_VERSION=1.7.0"
+set "ARBOL_MODO=instalar"
+set "ARBOL_VERSION=1.7.1"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -494,7 +494,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.7.0
+1.7.1
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -2779,7 +2779,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.7.0"
+version = "1.7.1"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3459,7 +3459,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.7.0"
+__version__ = "1.7.1"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -14289,13 +14289,15 @@ LIMITE_DURO = 5 << 30       # a partir de aquí GitHub puede bloquear el repo
 LIMITE_ARCHIVO = 100 << 20  # GitHub rechaza archivos de más de 100 MB
 
 GRUPOS = {"codigo": "Código", "conceptos": "Conceptos", "demos": "Demos y guías", "finanzas": "Finanzas", "libros": "Libros",
-          "notas": "Notas y enlaces", "visor": "Visor generado", "instaladores": "Instaladores", "copias": "Copias anteriores", "otros": "Otros"}
+          "notas": "Notas y enlaces", "modelos": "Modelos de IA", "visor": "Visor generado", "instaladores": "Instaladores", "copias": "Copias anteriores", "otros": "Otros"}
 _SALTAR = {".git", "__pycache__", ".pytest_cache"}
 
 
 def grupo(rel: str) -> str:
     """Galaxia (o cubo) al que pertenece un archivo según su ruta relativa."""
     p = rel.replace("\\", "/").split("/")
+    if p[:2] == ["conocimiento", "modelos"]:
+        return "modelos"                                              # modelos de embeddings descargados: pesan cientos de MB y no se suben a GitHub
     if p[0] == "conocimiento" and len(p) > 2 and p[1] == "biblioteca":
         return p[2] if p[2] in GRUPOS else "otros"
     if p[0] in ("conceptos", "teoria"):
@@ -31438,6 +31440,7 @@ from conocimiento import almacenaje as a
 def test_grupo_por_ruta():
     assert a.grupo("conocimiento/biblioteca/libros/historia/x.pdf") == "libros"
     assert a.grupo("conocimiento/biblioteca/raro/x.pdf") == "otros"
+    assert a.grupo("conocimiento/modelos/models--x/blobs/a") == "modelos"
     assert a.grupo("py/arbol_estadistica/modelos/glm.py") == "codigo"
     assert a.grupo("py/visor/demos.js") == "demos" and a.grupo("teoria/glm.md") == "conceptos"
     assert a.grupo("visor_arbol.html") == "visor" and a.grupo("LEEME.txt") == "otros"
