@@ -307,6 +307,11 @@ def _temas_con_frases() -> list[tuple[str, str, list[str]]]:
     return [(t["id"], t["nombre"], sorted(frases.get(t["id"], []))) for t in cat["temas"]]
 
 
+def filtros_dialogo() -> tuple[str, str]:
+    """Filtros del explorador de archivos de pywebview. Su formato es estricto: el texto solo admite letras, números y espacios (sin comas ni signos)."""
+    return ("Documentos codigo y datos (" + ";".join("*" + e for e in sorted(EXT_IMPORTABLE)) + ")", "Todos los archivos (*.*)")
+
+
 def opciones() -> dict:
     """Lo que ofrecen los desplegables: galaxias, tipos y subtemas (los temas del catálogo, las ramas de código y 'General')."""
     ramas = sorted(p.name for p in (RAIZ / "py" / "arbol_estadistica").iterdir() if p.is_dir() and not p.name.startswith("_")) if (RAIZ / "py" / "arbol_estadistica").is_dir() else []

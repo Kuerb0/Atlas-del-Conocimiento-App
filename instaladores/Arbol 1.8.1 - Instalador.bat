@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.8.0 - Actualizar
+title Arbol de la estadistica 1.8.1 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=actualizar"
-set "ARBOL_VERSION=1.8.0"
+set "ARBOL_MODO=instalar"
+set "ARBOL_VERSION=1.8.1"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -494,7 +494,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.8.0
+1.8.1
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -575,8 +575,8 @@ class Api:
         """Abre el explorador de archivos de Windows (varios a la vez) y devuelve las rutas elegidas."""
         try:
             import webview
-            from conocimiento import EXT_IMPORTABLE
-            tipos = ("Documentos, código y datos (" + ";".join("*" + e for e in sorted(EXT_IMPORTABLE)) + ")", "Todos los archivos (*.*)")
+            from conocimiento.importar import filtros_dialogo
+            tipos = filtros_dialogo()
             modo = webview.FileDialog.OPEN if hasattr(webview, "FileDialog") else webview.OPEN_DIALOG
             r = webview.windows[0].create_file_dialog(modo, allow_multiple=True, file_types=tipos)
             return [str(x) for x in (r or [])]
@@ -2779,7 +2779,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.8.0"
+version = "1.8.1"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3459,7 +3459,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.8.0"
+__version__ = "1.8.1"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -14820,6 +14820,11 @@ def _temas_con_frases() -> list[tuple[str, str, list[str]]]:
         if tema:
             frases.setdefault(tema, set()).update(f for f in (_norm(x) for x in [c["nombre"], *c.get("sinonimos", [])]) if len(f) >= 5)
     return [(t["id"], t["nombre"], sorted(frases.get(t["id"], []))) for t in cat["temas"]]
+
+
+def filtros_dialogo() -> tuple[str, str]:
+    """Filtros del explorador de archivos de pywebview. Su formato es estricto: el texto solo admite letras, números y espacios (sin comas ni signos)."""
+    return ("Documentos codigo y datos (" + ";".join("*" + e for e in sorted(EXT_IMPORTABLE)) + ")", "Todos los archivos (*.*)")
 
 
 def opciones() -> dict:
@@ -33441,6 +33446,14 @@ def test_importa_codigo_cuadernos_datos_y_apuntes(tmp_path):
 
 def test_las_carpetas_de_fuentes_siguen_siendo_solo_documentos():
     assert ".py" not in k.EXT and ".md" in k.EXT and {".py", ".ipynb", ".csv", ".pptx"} <= k.EXT_IMPORTABLE
+
+
+def test_filtros_del_explorador_los_acepta_pywebview():
+    """El explorador de archivos de la app falló una vez por una coma en el texto del filtro: se valida con el propio validador de pywebview."""
+    util = pytest.importorskip("webview.util")
+    filtros = im.filtros_dialogo()
+    assert len(filtros) == 2 and all(util.parse_file_type(f) for f in filtros)
+    assert ".py" in util.parse_file_type(filtros[0])[1] and ".ipynb" in util.parse_file_type(filtros[0])[1]
 :::END
 :::BEGIN py/tests/test_instaladores.py|text
 """Los instaladores autoextraibles empaquetan lo correcto y se extraen identicos."""

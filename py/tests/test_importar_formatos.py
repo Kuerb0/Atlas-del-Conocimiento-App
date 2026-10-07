@@ -48,3 +48,11 @@ def test_importa_codigo_cuadernos_datos_y_apuntes(tmp_path):
 
 def test_las_carpetas_de_fuentes_siguen_siendo_solo_documentos():
     assert ".py" not in k.EXT and ".md" in k.EXT and {".py", ".ipynb", ".csv", ".pptx"} <= k.EXT_IMPORTABLE
+
+
+def test_filtros_del_explorador_los_acepta_pywebview():
+    """El explorador de archivos de la app falló una vez por una coma en el texto del filtro: se valida con el propio validador de pywebview."""
+    util = pytest.importorskip("webview.util")
+    filtros = im.filtros_dialogo()
+    assert len(filtros) == 2 and all(util.parse_file_type(f) for f in filtros)
+    assert ".py" in util.parse_file_type(filtros[0])[1] and ".ipynb" in util.parse_file_type(filtros[0])[1]
