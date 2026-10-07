@@ -38,3 +38,10 @@ def datos_multi():
     u = rng.random(n)[:, None]
     df["clase"] = np.array(["base", "media", "alta"])[(u > p.cumsum(axis=1)).sum(axis=1).clip(0, 2)]
     return df
+
+
+@pytest.fixture(autouse=True)
+def _sin_modelo_de_embeddings(monkeypatch):
+    """Los tests no descargan ni usan el modelo real del clasificador por parecido (test_clasificador.py lo prueba con uno falso)."""
+    from conocimiento import clasificador
+    monkeypatch.setattr(clasificador, "ACTIVO", False)

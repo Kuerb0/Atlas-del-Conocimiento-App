@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.4.0 - Actualizar
+title Arbol de la estadistica 1.5.0 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=actualizar"
-set "ARBOL_VERSION=1.4.0"
+set "ARBOL_MODO=instalar"
+set "ARBOL_VERSION=1.5.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -494,7 +494,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.4.0
+1.5.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -2778,7 +2778,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.4.0"
+version = "1.5.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3458,7 +3458,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.4.0"
+__version__ = "1.5.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -14283,6 +14283,136 @@ def medir(raiz: Path | str = RAIZ) -> dict:
     return {"limite": LIMITE, "limite_duro": LIMITE_DURO, "limite_archivo": LIMITE_ARCHIVO,
             "disco": _escenario(_lista_disco(raiz), raiz), "github": _escenario(gh, raiz) if gh is not None else None}
 :::END
+:::BEGIN py/conocimiento/clasificador.py|text
+"""Clasificador por parecido (embeddings): sugiere el género de un libro comparándolo con ejemplos, sin palabras clave.
+
+Los ejemplos son (1) unas frases semilla por género y (2) lo que ya hay en tu biblioteca, contando más lo que corregiste a mano.
+El modelo corre en local con `fastembed` (ONNX, sin PyTorch) y se descarga una vez a `conocimiento/modelos/`.
+Si falta fastembed o el modelo, `sugerir` devuelve None y el importador sigue con las reglas de siempre.
+Modelo: variable ARBOL_MODELO o `conocimiento/ajustes.json` {"modelo_embeddings": "..."}; ver `herramientas/comparar_clasificadores.py`.
+"""
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+import numpy as np
+
+from . import CARPETA
+
+MODELO = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+ACTIVO = True            # False: solo reglas (los tests y el script de comparación lo usan)
+PESO_REGLAS = 1.0        # cuánto pesa lo que opinan las reglas (parte de los puntos que se llevaría cada género) frente al parecido
+SATURA = 20              # con tantos puntos las reglas ya se consideran seguras
+MIN_PARECIDO = 0.25      # por debajo, el libro no se parece a ningún género: se queda como lo dejaron las reglas (p. ej. «otro»)
+_cache: dict = {}        # nombre del modelo -> función(textos) -> matriz normalizada; también guarda los vectores de las semillas
+
+SEMILLAS = {
+    "historia": ["Historia de imperios, guerras, reyes y civilizaciones antiguas y medievales", "History of empires, wars, revolutions and kingdoms through the centuries",
+                 "Crónica de un periodo histórico, sus batallas, dinastías y consecuencias políticas"],
+    "economia": ["Economía: mercados, oferta y demanda, inflación, crecimiento y política monetaria", "Finance and investing: stocks, bonds, portfolios, banks and business valuation",
+                 "Riqueza, pobreza, comercio y desigualdad en la economía de los países"],
+    "ensayo": ["Ensayo filosófico sobre la ética, la libertad, la verdad y el sentido de la vida", "Philosophy essay on reason, virtue, morality, metaphysics and human knowledge",
+               "Reflexiones personales y pensamiento crítico sobre la condición humana"],
+    "estadistica": ["Estadística y probabilidad: estimación, contrastes de hipótesis, regresión y modelos", "Mathematics: linear algebra, calculus, theorems, matrices and proofs",
+                    "Statistical learning, Bayesian inference, random variables and data analysis"],
+    "ciencia": ["Divulgación científica: física, química, biología, evolución y el universo", "Popular science on cosmology, genes, ecology, quantum physics and nature",
+                "Ciencias naturales y experimentos: átomos, células, planetas y clima"],
+    "novela": ["Novela de ficción con personajes, una trama, misterio, aventura o romance", "A novel: fiction story with characters, a detective, a quest or a family saga",
+               "Cuento y narrativa literaria: protagonistas, crimen, amor y destino"],
+    "biografia": ["Biografía de una persona: su infancia, su vida, su carrera y su muerte", "Memoir and autobiography: the life story of a famous person told in his own words",
+                  "Memorias de un personaje histórico, su familia, sus años y su legado"],
+    "politica": ["Política y sociedad: el Estado, el poder, la democracia, las elecciones y los gobiernos", "Political theory, nationalism, international relations, ideology and public policy",
+                 "Análisis del poder, los partidos, las instituciones y los conflictos internacionales"],
+    "tecnologia": ["Programación y software: código, algoritmos, lenguajes, bases de datos y desarrollo", "Computer science and technology: networks, operating systems, internet and artificial intelligence",
+                   "Manual técnico de informática, ingeniería de software y sistemas"],
+    "psicologia": ["Psicología y salud mental: emociones, conducta, terapia, trastornos y cerebro", "Psychology of thinking, habits, therapy, anxiety, behavior and wellbeing",
+                   "Cómo piensan y sienten las personas: sesgos cognitivos, personalidad y bienestar"],
+    "arte": ["Arte, música, pintura, cine, arquitectura, poesía y literatura", "Art history and culture: painters, composers, film, theatre, poems and design",
+             "Historia del arte y la música: movimientos, estilos, artistas y obras"],
+}
+
+
+def modelo(carpeta: Path | str = CARPETA) -> str:
+    if os.environ.get("ARBOL_MODELO"):
+        return os.environ["ARBOL_MODELO"]
+    f = Path(carpeta) / "ajustes.json"
+    try:
+        return json.loads(f.read_text(encoding="utf-8")).get("modelo_embeddings") or MODELO
+    except (OSError, ValueError):
+        return MODELO
+
+
+def _embedder(nombre: str, carpeta: Path | str = None):  # los modelos son de todos los proyectos: siempre en CARPETA/modelos
+    if nombre not in _cache:
+        from fastembed import TextEmbedding
+        m = TextEmbedding(model_name=nombre, cache_dir=str(Path(CARPETA) / "modelos"))
+
+        memo: dict = {}                                          # texto -> vector: los ejemplos de la biblioteca no se vuelven a calcular en cada archivo
+
+        def emb(textos):
+            nuevos = [t for t in dict.fromkeys(textos) if t not in memo]
+            if nuevos:
+                v = np.array(list(m.embed(nuevos)), dtype=float)
+                memo.update(zip(nuevos, v / np.linalg.norm(v, axis=1, keepdims=True)))
+            return np.array([memo[t] for t in textos])
+        _cache[nombre] = emb
+    return _cache[nombre]
+
+
+def texto_libro(titulo: str, capitulos: list, vista: str = "") -> str:
+    """Lo que se compara de un libro: título, los primeros capítulos y el principio del texto."""
+    caps = "; ".join((c["titulo"] if isinstance(c, dict) else str(c)) for c in capitulos[:8])
+    return f"{titulo}. {caps}. {vista[:700]}".strip()
+
+
+def _ejemplos(carpeta: Path | str) -> list[tuple[str, str, float]]:
+    """(texto, género, peso): las semillas (peso 1) y lo importado (1,5; 2,5 si lo corregiste a mano)."""
+    ej = [(t, g, 1.0) for g, ts in SEMILLAS.items() for t in ts]
+    try:
+        from .importar import GENEROS, leer_metadatos
+        for m in leer_metadatos(Path(carpeta)).values():
+            if m.get("genero") in GENEROS and m.get("genero") != "otro":
+                ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), m.get("etiquetas", "")), m["genero"], 1.5 if m.get("automatico") else 2.5))
+    except Exception:
+        pass
+    return ej
+
+
+def sugerir(texto: str, carpeta: Path | str | None = None) -> dict | None:
+    """{'genero', 'confianza' (margen sobre el segundo), 'puntos': {género: parecido}} o None si no hay modelo."""
+    if not ACTIVO or _cache.get("fallo"):
+        return None
+    carpeta = Path(carpeta or CARPETA)
+    try:
+        emb = _embedder(modelo(carpeta), carpeta)
+        ej = _ejemplos(carpeta)
+        X = emb([e[0] for e in ej])
+        q = emb([texto])[0]
+    except Exception:
+        _cache["fallo"] = True                                   # sin fastembed o sin modelo (p. ej. sin internet la primera vez): no se reintenta en cada archivo
+        return None
+    sims = X @ q
+    puntos = {}
+    for g in {e[1] for e in ej}:
+        v = sorted((s + .04 * (e[2] - 1) for s, e in zip(sims, ej) if e[1] == g), reverse=True)[:2]
+        puntos[g] = float(np.mean(v))
+    orden = sorted(puntos, key=puntos.get, reverse=True)
+    return {"genero": orden[0], "confianza": puntos[orden[0]] - puntos[orden[1]], "puntos": {g: round(puntos[g], 3) for g in orden}}
+
+
+def decidir(reglas: dict, genero_reglas: str, parecido: dict) -> tuple[str, bool]:
+    """Mezcla lo que opinan las reglas ({género: puntos}) con el parecido: gana el género con más (parecido + peso · cuota de las reglas · su seguridad).
+    Devuelve (género, ¿cambia lo que decían las reglas?). Si nada se parece (MIN_PARECIDO) se respeta a las reglas."""
+    p = parecido["puntos"]
+    if max(p.values()) < MIN_PARECIDO:
+        return genero_reglas, False
+    tot, fuerza = sum(reglas.values()) or 1, max(reglas.values(), default=0)
+    sc = {g: p[g] + PESO_REGLAS * reglas.get(g, 0) / tot * min(1, fuerza / SATURA) for g in p}
+    g = max(sc, key=sc.get)
+    return g, g != genero_reglas
+:::END
 :::BEGIN py/conocimiento/fuentes.ejemplo.json|text
 {
   "libros": ["D:/Libros/Estadistica"],
@@ -14316,7 +14446,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from . import CARPETA, DB, EXT, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, indexar
+from . import CARPETA, DB, EXT, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, indexar
 
 GALAXIAS = {"codigo": "Código", "conceptos": "Conceptos", "demos": "Demos y guías", "finanzas": "Finanzas", "libros": "Libros", "notas": "Notas y enlaces"}
 TIPOS = {"libro": "Libro", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "otro": "Otro"}
@@ -14658,11 +14788,20 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
         genero, subtema = corr["genero"] or genero, corr["subtema"] or subtema
         motivo += f"; como «{corr['titulo'][:30]}», que corregiste"
     caps, _ = capitulos(f)
+    metodo = "reglas"
+    if not corr and clasificador.ACTIVO:                                  # parecido con ejemplos (embeddings locales) mezclado con las reglas; sin modelo, solo reglas
+        s = clasificador.sugerir(clasificador.texto_libro(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500])), carpeta)
+        if s:
+            nuevo, cambia = clasificador.decidir(gp, genero, s)
+            if cambia:
+                genero, metodo = nuevo, "parecido"
+                subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
+                motivo += f"; género «{GENEROS[genero]}» por parecido con ejemplos (margen {s['confianza']:.2f})"
     palabras = re.findall(r"[a-z]+", t[:20000])
     es, en = sum(w in _ES for w in palabras), sum(w in _EN for w in palabras)
     h = _sha1(f)
     dup = next((rel for rel, m in leer_metadatos(carpeta).items() if m.get("hash") == h), "")
-    return {"galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "titulo": titulo_corto(f.stem), "titulo_largo": f.stem, "motivo": motivo, "paginas": paginas,
+    return {"galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "titulo": titulo_corto(f.stem), "titulo_largo": f.stem, "motivo": motivo, "metodo": metodo, "paginas": paginas,
             "tamano": f.stat().st_size, "extension": ext.lstrip("."), "idioma": "es" if es > en else "en" if en else "", "duplicado": dup,
             "vista_previa": re.sub(r"\s+", " ", texto[:1500]).strip()[:380],
             "temas": [{"tema": nombre_t, "puntos": pt} for (_, nombre_t), pt in sorted(puntos.items(), key=lambda kv: -kv[1])[:4] if pt >= 3] if genero in GENEROS_CON_TEMA else [],
@@ -30924,6 +31063,13 @@ def datos_multi():
     u = rng.random(n)[:, None]
     df["clase"] = np.array(["base", "media", "alta"])[(u > p.cumsum(axis=1)).sum(axis=1).clip(0, 2)]
     return df
+
+
+@pytest.fixture(autouse=True)
+def _sin_modelo_de_embeddings(monkeypatch):
+    """Los tests no descargan ni usan el modelo real del clasificador por parecido (test_clasificador.py lo prueba con uno falso)."""
+    from conocimiento import clasificador
+    monkeypatch.setattr(clasificador, "ACTIVO", False)
 :::END
 :::BEGIN py/tests/demos_stub.js|text
 // Prueba sin navegador de las demos del visor: carga visor/demos.js con un DOM mínimo, ejecuta cada demo,
@@ -31195,6 +31341,74 @@ def test_los_enlaces_de_las_rutas_existen():
             assert set(p.get("funciones", [])) <= nombres_fn, f"{p['id']}: funciones inexistentes"
             assert set(p.get("conceptos", [])) <= conceptos, f"{p['id']}: conceptos inexistentes"
     assert [len(r["pasos"]) for r in datos["rutas"]] == [len(r["pasos"]) for r in RUTAS]
+:::END
+:::BEGIN py/tests/test_clasificador.py|text
+"""Clasificador por parecido, con un modelo falso (bolsa de palabras) para no descargar nada: se prueba la mecánica, no la calidad del modelo real
+(esa se mide con herramientas/comparar_clasificadores.py)."""
+import json
+import re
+import sys
+import zlib
+from pathlib import Path
+
+import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conocimiento import clasificador as c
+from conocimiento import importar as im
+
+
+def _falso(textos):
+    v = np.zeros((len(textos), 256))
+    for i, t in enumerate(textos):
+        for w in re.findall(r"[a-záéíóúñ]{4,}", t.lower()):
+            v[i, zlib.crc32(w.encode()) % 256] += 1
+    return v / np.maximum(np.linalg.norm(v, axis=1, keepdims=True), 1e-9)
+
+
+def _con_modelo_falso(monkeypatch):
+    monkeypatch.setenv("ARBOL_MODELO", "falso")
+    monkeypatch.setitem(c._cache, "falso", _falso)
+    monkeypatch.setattr(c, "ACTIVO", True)
+    c._cache.pop("fallo", None)
+
+
+def test_sugiere_por_semillas_y_por_tu_biblioteca(monkeypatch, tmp_path):
+    _con_modelo_falso(monkeypatch)
+    s = c.sugerir("Historia de imperios, guerras, reyes y civilizaciones antiguas", tmp_path)
+    assert s["genero"] == "historia" and s["confianza"] > 0 and set(s["puntos"]) == set(c.SEMILLAS)
+    # un libro tuyo con una palabra rara arrastra a los parecidos hacia el género que fijaste
+    b = tmp_path / "biblioteca"; b.mkdir()
+    (b / "metadatos.json").write_text(json.dumps({"libros/x/a.pdf": {"titulo": "Zorrotz quimbaya tuxtla", "genero": "arte", "automatico": False}}), encoding="utf-8")
+    assert c.sugerir("zorrotz quimbaya tuxtla", tmp_path)["genero"] == "arte"
+
+
+def test_sin_modelo_devuelve_none_y_no_reintenta(monkeypatch, tmp_path):
+    monkeypatch.setenv("ARBOL_MODELO", "no-existe/modelo")
+    monkeypatch.setattr(c, "_embedder", lambda *a, **k: (_ for _ in ()).throw(OSError("sin red")))
+    c._cache.pop("fallo", None)
+    assert c.sugerir("lo que sea", tmp_path) is None and c._cache["fallo"] is True
+    assert c.sugerir("otra vez", tmp_path) is None
+    c._cache.pop("fallo", None)
+
+
+def test_decidir_mezcla_reglas_y_parecido():
+    parecido = {"puntos": {"historia": .40, "ciencia": .38, "novela": .10}}
+    assert c.decidir({"historia": 6}, "historia", parecido) == ("historia", False)              # reglas flojas coinciden
+    assert c.decidir({"ciencia": 30, "historia": 2}, "ciencia", parecido) == ("ciencia", False)  # reglas seguras deciden el empate
+    assert c.decidir({}, "otro", parecido) == ("historia", True)                                 # reglas sin opinión: manda el parecido
+    assert c.decidir({}, "otro", {"puntos": {"historia": .1}}) == ("otro", False)                # nada se parece: se respeta a las reglas
+
+
+def test_clasificar_usa_el_parecido_cuando_las_reglas_no_saben(monkeypatch, tmp_path):
+    _con_modelo_falso(monkeypatch)
+    f = tmp_path / "xyzzy.txt"
+    f.write_text("Historia de imperios, guerras, reyes y civilizaciones antiguas y medievales " * 3, encoding="utf-8")
+    monkeypatch.setattr(c, "ACTIVO", False)
+    solo_reglas = im.clasificar(f, tmp_path)
+    monkeypatch.setattr(c, "ACTIVO", True)
+    r = im.clasificar(f, tmp_path)
+    assert r["genero"] == "historia" and r["metodo"] in ("reglas", "parecido") and solo_reglas["metodo"] == "reglas"
 :::END
 :::BEGIN py/tests/test_clustering_contrastes.py|text
 import numpy as np
@@ -39282,6 +39496,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 5m. **Referencias que viajan:** los PDF/EPUB no suben a GitHub, pero `conocimiento/biblioteca/referencias.json` (los metadatos sin rutas del equipo: título, galaxia, género, capítulos, hash) y `biblioteca/portadas/` sí (`.gitignore`; `importar._guardar` los escribe junto a `metadatos.json`, que sigue siendo local). `leer_metadatos` fusiona ambos, así que en otro equipo el mapa y el Observatorio muestran los libros como referencias vacías («sin el archivo en este equipo»); al importar un archivo con el mismo hash se restaura en su sitio.
 5k. **Telescopio:** pestaña «📡 Telescopio» (`py/conocimiento/telescopio.py`, API `Api.telescopio_buscar/traer`, consola `python -m conocimiento telescopio <consulta> [--traer N]`). Busca **solo fuentes legales**: Project Gutenberg (catálogo OPDS oficial, dominio público; Gutendex se descartó por lento), Google Books y Open Library (catálogo: ficha y enlace; descarga solo si es dominio público o lectura abierta; Google necesita clave en `GOOGLE_BOOKS_KEY` o `conocimiento/google_books.key` porque la cuota anónima diaria suele estar agotada), arXiv, OpenAlex (solo con PDF abierto) e Internet Archive (solo licencia CC/dominio público o publicado ≤ 1929). **No se añaden fuentes piratas (Anna's Archive, Z-Library, LibGen…) ni descargadores de ellas.** `traer` descarga (https, ≤ 200 MB, comprueba que es PDF/EPUB de verdad) y pasa por `importar.importar` con el género sacado de las materias de la obra (`genero_desde_materias`); `materias_de` consulta Open Library para clasificar un título que ya tienes. Tests sin red (`_get` se sustituye): `tests/test_telescopio.py`.
 5n. **Búsqueda por tipo de archivo y por título/autor:** en el buscador principal los prefijos `pdf:`, `epub:`, `docx:`, `md:`, `txt:` filtran lo que sale de tu conocimiento por formato (`conocimiento.buscar(..., formato=)`; con un prefijo de formato no se listan nodos del mapa). En el Telescopio, «Qué buscamos» (Todo / Un libro / Un artículo) muestra casillas de **Título** y **Autor** (el autor se comprueba en cada resultado), el selector de tipo elige las fuentes (libro: Google Books, Open Library, Gutenberg, Internet Archive; artículo: arXiv, OpenAlex) y «Solo PDF / Solo EPUB» filtra por formato descargable. Consola: `python -m conocimiento telescopio -T título -a autor --tipo libro --formato pdf`.
+5o. **Clasificador por parecido (embeddings locales):** `py/conocimiento/clasificador.py`. El importador mezcla las reglas de palabras clave con el parecido del libro (título + capítulos + principio) a unas frases semilla por género y a lo que ya hay en tu biblioteca (lo que corregiste a mano pesa más); `decidir` suma parecido + cuota de las reglas × su seguridad, y si nada se parece (`MIN_PARECIDO`) respeta a las reglas. Corre en local con `fastembed` (ONNX, sin PyTorch; **opcional**: `pip install fastembed`; sin él o sin el modelo todo sigue con las reglas). Los modelos se guardan en `conocimiento/modelos/` (no se publican). Modelo por defecto `paraphrase-multilingual-MiniLM-L12-v2` (0,2 GB; sirve en un portátil de 8 GB); para otro, `conocimiento/ajustes.json` {"modelo_embeddings": "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"} o la variable ARBOL_MODELO. **Medido con `python herramientas/comparar_clasificadores.py`** (66 libros de prueba): reglas solas 42 %; con MiniLM 86 %, con mpnet 89 % (1 GB, algo más lento), con potion-multilingual-128M 82 %; ~0,1 s por libro una vez cargado el modelo. Al añadir géneros o frases semilla, vuelve a medir. El resultado de `clasificar` trae `metodo` (`reglas` | `parecido`) y el motivo lo explica. Tests: `tests/test_clasificador.py` (con un modelo falso; la suite desactiva el real).
 6. **Conceptos:** `conceptos/catalogo.json` lista los conceptos del temario del máster y de Very Normal con las funciones que los implementan. Organización: `temas` (ramas del mapa, con color) > `areas` (módulos, con `ambito`) > conceptos (`area`, `prioridad` opcional, `area_fija` para que la actualización no lo mueva). La migración de 0.6.0 está en `herramientas/reorganizar_catalogo.py`.
    Si un concepto no tiene función (*hueco*), es que el árbol aún no lo cubre: impleméntalo (módulo + test), enlázalo en el catálogo (`funciones`) y regenera el visor.
    Al añadir una función nueva, enlázala al menos a un concepto (hay un test que lo exige).

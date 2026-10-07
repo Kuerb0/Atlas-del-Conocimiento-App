@@ -23,7 +23,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from . import CARPETA, DB, EXT, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, indexar
+from . import CARPETA, DB, EXT, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, indexar
 
 GALAXIAS = {"codigo": "Código", "conceptos": "Conceptos", "demos": "Demos y guías", "finanzas": "Finanzas", "libros": "Libros", "notas": "Notas y enlaces"}
 TIPOS = {"libro": "Libro", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "otro": "Otro"}
@@ -365,11 +365,20 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
         genero, subtema = corr["genero"] or genero, corr["subtema"] or subtema
         motivo += f"; como «{corr['titulo'][:30]}», que corregiste"
     caps, _ = capitulos(f)
+    metodo = "reglas"
+    if not corr and clasificador.ACTIVO:                                  # parecido con ejemplos (embeddings locales) mezclado con las reglas; sin modelo, solo reglas
+        s = clasificador.sugerir(clasificador.texto_libro(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500])), carpeta)
+        if s:
+            nuevo, cambia = clasificador.decidir(gp, genero, s)
+            if cambia:
+                genero, metodo = nuevo, "parecido"
+                subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
+                motivo += f"; género «{GENEROS[genero]}» por parecido con ejemplos (margen {s['confianza']:.2f})"
     palabras = re.findall(r"[a-z]+", t[:20000])
     es, en = sum(w in _ES for w in palabras), sum(w in _EN for w in palabras)
     h = _sha1(f)
     dup = next((rel for rel, m in leer_metadatos(carpeta).items() if m.get("hash") == h), "")
-    return {"galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "titulo": titulo_corto(f.stem), "titulo_largo": f.stem, "motivo": motivo, "paginas": paginas,
+    return {"galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "titulo": titulo_corto(f.stem), "titulo_largo": f.stem, "motivo": motivo, "metodo": metodo, "paginas": paginas,
             "tamano": f.stat().st_size, "extension": ext.lstrip("."), "idioma": "es" if es > en else "en" if en else "", "duplicado": dup,
             "vista_previa": re.sub(r"\s+", " ", texto[:1500]).strip()[:380],
             "temas": [{"tema": nombre_t, "puntos": pt} for (_, nombre_t), pt in sorted(puntos.items(), key=lambda kv: -kv[1])[:4] if pt >= 3] if genero in GENEROS_CON_TEMA else [],
