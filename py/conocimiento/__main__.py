@@ -22,6 +22,10 @@ t.add_argument("-a", "--autor", default="")
 t.add_argument("--tipo", choices=["todo", "libro", "articulo"], default="todo", help="libro: Google Books, Open Library, Gutenberg, Internet Archive; articulo: arXiv, OpenAlex")
 t.add_argument("--formato", choices=["", "pdf", "epub"], default="", help="solo lo descargable en ese formato")
 t.add_argument("--traer", type=int, metavar="N", help="trae a la biblioteca el resultado número N")
+r = sub.add_parser("revisar", help="lista lo importado por fecha con cómo se clasificó (para revisar y mejorar la clasificación)")
+r.add_argument("--desde", default="", help="AAAA-MM-DD")
+r.add_argument("--hasta", default="", help="AAAA-MM-DD")
+r.add_argument("--json", action="store_true", help="salida en JSON (para que Claude la revise)")
 b = sub.add_parser("buscar", help="busca en todas las colecciones")
 b.add_argument("consulta", nargs="+")
 b.add_argument("-c", "--coleccion", help="codigo | conceptos | teoria | libros | finanzas | notas …")
@@ -41,6 +45,16 @@ elif a.orden == "importar":
     from .importar import importar
     for r in importar([{"ruta": f, "galaxia": a.galaxia, "subtema": a.subtema, "tipo": a.tipo, "genero": a.genero} for f in a.ficheros]):
         print(f"{r['estado']:10} {r['nombre']}  ->  {r.get('galaxia', '')} › {r.get('subtema', '')} ({r.get('tipo', '')})  {r['mensaje']}")
+elif a.orden == "revisar":
+    from .importar import revisar
+    filas = revisar(a.desde, a.hasta)
+    if a.json:
+        import json
+        print(json.dumps(filas, ensure_ascii=False, indent=1))
+    else:
+        for x in filas:
+            print(f"{x['fecha'][:16]}  {x['titulo'][:40]:40}  {x['galaxia']} › {x['genero']} › {x['subtema']} ({x['tipo']})  [{x['metodo'] or '—'}]{'  ✎ corregido' if x['corregido'] else ''}")
+        print(f"{len(filas)} documentos")
 elif a.orden == "telescopio":
     from . import telescopio
     r = telescopio.buscar(" ".join(a.consulta), titulo=a.titulo, autor=a.autor, tipo=a.tipo, formato=a.formato)

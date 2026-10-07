@@ -330,6 +330,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 .importar[hidden]{display:none}
 .app.modo-importar .cuerpo{display:none}
 .imp-cabeza{text-align:center;max-width:720px} .imp-cabeza h2{margin:6px 0 2px;font-size:18px} .imp-cabeza p{margin:0;color:#9fb0cc;font-size:13px}
+.imp-auto{display:flex;gap:8px;align-items:center;color:#cfe0ff;font-size:13px;margin:4px 0}
 .imp-agujero{width:100%;max-width:980px;height:min(46vh,430px);min-height:240px;flex:none}
 #agujero{width:100%;height:100%;display:block;outline:none;border-radius:12px} #agujero:focus-visible{outline:2px solid var(--accent)}
 .imp-msg{margin:0;min-height:1.2em;color:#9fb0cc;font-size:13px;text-align:center}
@@ -411,6 +412,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
   <section class="aprender" id="aprender" hidden aria-label="Guía de aprendizaje"></section>
   <section class="importar" id="importar" hidden aria-label="Importador">
     <div class="imp-cabeza"><h2>Importar</h2><p>Haz clic en el agujero negro (o suelta archivos encima): se abre el explorador de archivos. El importador los clasifica solo (galaxia, subtema y tipo) y puedes corregirlo antes de importar.</p></div>
+    <label class="imp-auto" title="Los archivos que sueltes se clasifican y se importan sin pasar por las tarjetas; luego los revisas por fecha en el Observatorio"><input type="checkbox" id="impAuto"> Importar sin revisar (clasifica solo)</label>
     <div class="imp-agujero"><canvas id="agujero" tabindex="0" role="button" aria-label="Agujero negro: haz clic para añadir archivos"></canvas></div>
     <p class="imp-msg" id="impMsg" aria-live="polite"></p>
     <div class="imp-panel" id="impPanel" hidden></div>
@@ -427,7 +429,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
   </section>
   <section class="biblioteca" id="biblioteca" hidden aria-label="Observatorio">
     <div class="imp-cabeza"><h2>Observatorio</h2><p>Todo lo que has importado. Cambia título, galaxia, género, subtema, tipo o etiquetas: se guarda al momento y el universo se actualiza al volver a él. Al borrar solo se quita la copia del observatorio; el original no se toca.</p></div>
-    <div class="bib-barra"><input id="bibQ" type="search" placeholder="Filtrar por título, género, subtema, etiqueta…" aria-label="Filtrar el observatorio"><select id="bibGal" aria-label="Galaxia"></select>
+    <div class="bib-barra"><input id="bibQ" type="search" placeholder="Filtrar por título, género, subtema, etiqueta…" aria-label="Filtrar el observatorio"><select id="bibGal" aria-label="Galaxia"></select><select id="bibOrden" aria-label="Orden"><option value="fecha">Más recientes primero</option><option value="gal">Por galaxia y título</option></select><label class="bib-n" for="bibDesde">Importados desde</label><input id="bibDesde" type="date" aria-label="Importados desde esta fecha">
       <span id="bibN" class="bib-n"></span><button class="btn primario" id="bibAplicar" type="button" hidden>Actualizar el universo ahora</button></div>
     <div class="bib-lista" id="bibLista"></div>
   </section>
@@ -1226,6 +1228,8 @@ apMostrar = function (on) { if (on && (impAbierta() || bibAbierta() || eclAbiert
 
 /* ---------- el importador: agujero negro + tarjetas de archivos con lo detectado, desplegables y progreso (el trabajo lo hace py/conocimiento/importar.py) ---------- */
 var imp = {archivos: [], opciones: null, ocupado: false, resultados: null, modo: 'copiar'};
+try { $('#impAuto').checked = localStorage.getItem('impAuto') === '1'; } catch (e) {}
+$('#impAuto').addEventListener('change', function () { try { localStorage.setItem('impAuto', this.checked ? '1' : '0'); } catch (e) {} });
 var agujero = crearAgujero({canvas: $('#agujero'), alClic: impClic});
 if (window.ResizeObserver) new ResizeObserver(function () { agujero.medir(); }).observe($('#agujero')); else window.addEventListener('resize', function () { agujero.medir(); });
 function impAviso(m) { $('#impMsg').textContent = m || ''; }
@@ -1260,6 +1264,7 @@ async function impAnadir(rutas) {
     impRender();
   }
   agujero.ocupado(false); impAviso('');
+  if ($('#impAuto').checked && imp.archivos.some(function (a) { return a.incluir; })) impImportar();
 }
 function impOpt(lista, val, autoTxt) {
   return '<option value="auto"' + (val === 'auto' ? ' selected' : '') + '>' + esc(autoTxt) + '</option>' +
@@ -1439,8 +1444,8 @@ async function bibCargar() {
 function bibVista() {
   var f = norm(bib.filtro);
   return (bib.lista || []).filter(function (x) {
-    return (!bib.gal || x.galaxia === bib.gal) && (!f || norm([x.titulo, x.titulo_largo, x.genero, GENEROS_NOM[x.genero], x.subtema, x.etiquetas, x.tipo, x.galaxia].join(' ')).indexOf(f) >= 0);
-  });
+    return (!bib.gal || x.galaxia === bib.gal) && (!bib.desde || (x.fecha_hora || '').slice(0, 10) >= bib.desde) && (!f || norm([x.titulo, x.titulo_largo, x.genero, GENEROS_NOM[x.genero], x.subtema, x.etiquetas, x.tipo, x.galaxia].join(' ')).indexOf(f) >= 0);
+  }).sort(function (a, b) { return bib.orden === 'gal' ? 0 : String(b.fecha_hora || '').localeCompare(String(a.fecha_hora || '')); });
 }
 function bibTarjeta(x) {
   var o = imp.opciones || {galaxias: GALAXIAS, generos: [], tipos: []}, nuevo = x.automatico ? '' : ' · ajustado por ti';
@@ -1454,7 +1459,7 @@ function bibTarjeta(x) {
     '<div class="bib-acc"><button class="btn primario" data-a="abrir" type="button"' + (x.existe ? '' : ' disabled') + '>Abrir</button>' +
     '<button class="btn" data-a="recl" type="button" title="Vuelve a decidir galaxia, género y subtema según el contenido y tus correcciones anteriores">Reclasificar</button>' +
     '<button class="btn" data-a="borrar" type="button" style="' + (bib.borrando === x.rel ? 'background:#8a3a2c;color:#fff' : '') + '">' + (bib.borrando === x.rel ? '¿Seguro? Pulsa otra vez' : 'Borrar') + '</button><span class="bib-ok"></span></div>' +
-    '<div class="bib-info">' + esc((x.extension || '').toUpperCase()) + ' · ' + (x.existe ? fmtTam(x.tamano) : 'sin el archivo en este equipo (solo la referencia)') + (x.paginas ? ' · ' + x.paginas + ' págs.' : '') + (x.capitulos ? ' · ' + x.capitulos + ' capítulos' : '') + (x.fecha ? ' · importado ' + esc(x.fecha) : '') + esc(nuevo) + (x.existe ? '' : ' · ⚠ el fichero ya no está') + '</div></div>';
+    '<div class="bib-info">' + esc((x.extension || '').toUpperCase()) + ' · ' + (x.existe ? fmtTam(x.tamano) : 'sin el archivo en este equipo (solo la referencia)') + (x.paginas ? ' · ' + x.paginas + ' págs.' : '') + (x.capitulos ? ' · ' + x.capitulos + ' capítulos' : '') + (x.fecha_hora ? ' · importado ' + esc(x.fecha_hora.replace('T', ' ').slice(0, 16)) : '') + (x.metodo ? ' · clasificado por ' + esc(x.metodo) : '') + esc(nuevo) + (x.existe ? '' : ' · ⚠ el fichero ya no está') + '</div></div>';
 }
 function bibRender() {
   var v = bibVista(), cont = $('#bibLista');
@@ -1469,6 +1474,8 @@ function bibFicha(rel) { return (bib.lista || []).filter(function (x) { return x
 function bibMarca(card, txt) { var s = card && card.querySelector('.bib-ok'); if (s) { s.textContent = txt; setTimeout(function () { if (s) s.textContent = ''; }, 2200); } }
 $('#bibQ').addEventListener('input', function () { bib.filtro = this.value; bibRender(); });
 $('#bibGal').addEventListener('change', function () { bib.gal = this.value; bibRender(); });
+$('#bibOrden').addEventListener('change', function () { bib.orden = this.value; bibRender(); });
+$('#bibDesde').addEventListener('change', function () { bib.desde = this.value; bibRender(); });
 $('#biblioteca').addEventListener('change', async function (ev) {
   var card = ev.target.closest('.bib-card'), c = ev.target.dataset.c; if (!card || !c) return;
   var r = await impApi().biblioteca_editar(card.dataset.rel, (function () { var o = {}; o[c] = ev.target.value; return o; })());

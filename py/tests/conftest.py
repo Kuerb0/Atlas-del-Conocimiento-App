@@ -45,3 +45,4 @@ def _sin_modelo_de_embeddings(monkeypatch):
     """Los tests no descargan ni usan el modelo real del clasificador por parecido (test_clasificador.py lo prueba con uno falso)."""
     from conocimiento import clasificador
     monkeypatch.setattr(clasificador, "ACTIVO", False)
+    monkeypatch.setattr(clasificador, "WEB", False)

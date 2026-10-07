@@ -17,6 +17,8 @@ from . import CARPETA
 
 MODELO = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 ACTIVO = True            # False: solo reglas (los tests y el script de comparación lo usan)
+WEB = True               # consultar Open Library por el título para sacar las materias de la obra (False: sin red)
+PESO_WEB = 0.15          # lo que suma al género que dicen las materias web
 PESO_REGLAS = 1.0        # cuánto pesa lo que opinan las reglas (parte de los puntos que se llevaría cada género) frente al parecido
 SATURA = 20              # con tantos puntos las reglas ya se consideran seguras
 MIN_PARECIDO = 0.25      # por debajo, el libro no se parece a ningún género: se queda como lo dejaron las reglas (p. ej. «otro»)
@@ -116,13 +118,13 @@ def sugerir(texto: str, carpeta: Path | str | None = None) -> dict | None:
     return {"genero": orden[0], "confianza": puntos[orden[0]] - puntos[orden[1]], "puntos": {g: round(puntos[g], 3) for g in orden}}
 
 
-def decidir(reglas: dict, genero_reglas: str, parecido: dict) -> tuple[str, bool]:
+def decidir(reglas: dict, genero_reglas: str, parecido: dict, web: str | None = None) -> tuple[str, bool]:
     """Mezcla lo que opinan las reglas ({género: puntos}) con el parecido: gana el género con más (parecido + peso · cuota de las reglas · su seguridad).
-    Devuelve (género, ¿cambia lo que decían las reglas?). Si nada se parece (MIN_PARECIDO) se respeta a las reglas."""
+    `web` es el género que sugieren las materias de Open Library (voto pequeño). Devuelve (género, ¿cambia lo que decían las reglas?). Si nada se parece (MIN_PARECIDO) se respeta a las reglas."""
     p = parecido["puntos"]
     if max(p.values()) < MIN_PARECIDO:
         return genero_reglas, False
     tot, fuerza = sum(reglas.values()) or 1, max(reglas.values(), default=0)
-    sc = {g: p[g] + PESO_REGLAS * reglas.get(g, 0) / tot * min(1, fuerza / SATURA) for g in p}
+    sc = {g: p[g] + PESO_REGLAS * reglas.get(g, 0) / tot * min(1, fuerza / SATURA) + (PESO_WEB if g == web else 0) for g in p}
     g = max(sc, key=sc.get)
     return g, g != genero_reglas

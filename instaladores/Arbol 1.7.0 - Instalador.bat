@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.6.0 - Instalador
+title Arbol de la estadistica 1.7.0 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
 set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=1.6.0"
+set "ARBOL_VERSION=1.7.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -494,7 +494,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.6.0
+1.7.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -2779,7 +2779,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.6.0"
+version = "1.7.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3459,7 +3459,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.6.0"
+__version__ = "1.7.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -14224,6 +14224,10 @@ t.add_argument("-a", "--autor", default="")
 t.add_argument("--tipo", choices=["todo", "libro", "articulo"], default="todo", help="libro: Google Books, Open Library, Gutenberg, Internet Archive; articulo: arXiv, OpenAlex")
 t.add_argument("--formato", choices=["", "pdf", "epub"], default="", help="solo lo descargable en ese formato")
 t.add_argument("--traer", type=int, metavar="N", help="trae a la biblioteca el resultado número N")
+r = sub.add_parser("revisar", help="lista lo importado por fecha con cómo se clasificó (para revisar y mejorar la clasificación)")
+r.add_argument("--desde", default="", help="AAAA-MM-DD")
+r.add_argument("--hasta", default="", help="AAAA-MM-DD")
+r.add_argument("--json", action="store_true", help="salida en JSON (para que Claude la revise)")
 b = sub.add_parser("buscar", help="busca en todas las colecciones")
 b.add_argument("consulta", nargs="+")
 b.add_argument("-c", "--coleccion", help="codigo | conceptos | teoria | libros | finanzas | notas …")
@@ -14243,6 +14247,16 @@ elif a.orden == "importar":
     from .importar import importar
     for r in importar([{"ruta": f, "galaxia": a.galaxia, "subtema": a.subtema, "tipo": a.tipo, "genero": a.genero} for f in a.ficheros]):
         print(f"{r['estado']:10} {r['nombre']}  ->  {r.get('galaxia', '')} › {r.get('subtema', '')} ({r.get('tipo', '')})  {r['mensaje']}")
+elif a.orden == "revisar":
+    from .importar import revisar
+    filas = revisar(a.desde, a.hasta)
+    if a.json:
+        import json
+        print(json.dumps(filas, ensure_ascii=False, indent=1))
+    else:
+        for x in filas:
+            print(f"{x['fecha'][:16]}  {x['titulo'][:40]:40}  {x['galaxia']} › {x['genero']} › {x['subtema']} ({x['tipo']})  [{x['metodo'] or '—'}]{'  ✎ corregido' if x['corregido'] else ''}")
+        print(f"{len(filas)} documentos")
 elif a.orden == "telescopio":
     from . import telescopio
     r = telescopio.buscar(" ".join(a.consulta), titulo=a.titulo, autor=a.autor, tipo=a.tipo, formato=a.formato)
@@ -14360,6 +14374,8 @@ from . import CARPETA
 
 MODELO = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 ACTIVO = True            # False: solo reglas (los tests y el script de comparación lo usan)
+WEB = True               # consultar Open Library por el título para sacar las materias de la obra (False: sin red)
+PESO_WEB = 0.15          # lo que suma al género que dicen las materias web
 PESO_REGLAS = 1.0        # cuánto pesa lo que opinan las reglas (parte de los puntos que se llevaría cada género) frente al parecido
 SATURA = 20              # con tantos puntos las reglas ya se consideran seguras
 MIN_PARECIDO = 0.25      # por debajo, el libro no se parece a ningún género: se queda como lo dejaron las reglas (p. ej. «otro»)
@@ -14459,14 +14475,14 @@ def sugerir(texto: str, carpeta: Path | str | None = None) -> dict | None:
     return {"genero": orden[0], "confianza": puntos[orden[0]] - puntos[orden[1]], "puntos": {g: round(puntos[g], 3) for g in orden}}
 
 
-def decidir(reglas: dict, genero_reglas: str, parecido: dict) -> tuple[str, bool]:
+def decidir(reglas: dict, genero_reglas: str, parecido: dict, web: str | None = None) -> tuple[str, bool]:
     """Mezcla lo que opinan las reglas ({género: puntos}) con el parecido: gana el género con más (parecido + peso · cuota de las reglas · su seguridad).
-    Devuelve (género, ¿cambia lo que decían las reglas?). Si nada se parece (MIN_PARECIDO) se respeta a las reglas."""
+    `web` es el género que sugieren las materias de Open Library (voto pequeño). Devuelve (género, ¿cambia lo que decían las reglas?). Si nada se parece (MIN_PARECIDO) se respeta a las reglas."""
     p = parecido["puntos"]
     if max(p.values()) < MIN_PARECIDO:
         return genero_reglas, False
     tot, fuerza = sum(reglas.values()) or 1, max(reglas.values(), default=0)
-    sc = {g: p[g] + PESO_REGLAS * reglas.get(g, 0) / tot * min(1, fuerza / SATURA) for g in p}
+    sc = {g: p[g] + PESO_REGLAS * reglas.get(g, 0) / tot * min(1, fuerza / SATURA) + (PESO_WEB if g == web else 0) for g in p}
     g = max(sc, key=sc.get)
     return g, g != genero_reglas
 :::END
@@ -14814,6 +14830,32 @@ def _muestra(f: Path, max_pag: int = 12) -> tuple[str, int]:
     return "\n".join(x for _, x, _ in trozos[:30])[:30000], 0
 
 
+_WEB = {"fallo": False, "memo": {}}
+
+
+def _materias_web(titulo: str) -> list[str]:
+    """Materias de un título según Open Library (apoyo para clasificar). Si falla la red, no se vuelve a intentar en esta sesión."""
+    if _WEB["fallo"]:
+        return []
+    if titulo not in _WEB["memo"]:
+        try:
+            from . import telescopio
+            _WEB["memo"][titulo] = telescopio.materias_de(titulo)
+        except Exception:
+            _WEB["fallo"] = True
+            return []
+    return _WEB["memo"][titulo]
+
+
+def _genero_materias(materias: list[str]) -> str | None:
+    if not materias:
+        return None
+    t = " " + _norm(" ; ".join(materias)) + " "
+    p = {g: len(r.findall(t)) for g, r in _GEN_RE.items()}
+    g = max(p, key=p.get)
+    return g if p[g] >= 2 else None
+
+
 def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
     """Propone galaxia, subtema, tipo y título de un fichero, con el motivo. {'galaxia','subtema','tipo','titulo','motivo','paginas'}"""
     f = Path(ruta)
@@ -14860,20 +14902,30 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
         genero, subtema = corr["genero"] or genero, corr["subtema"] or subtema
         motivo += f"; como «{corr['titulo'][:30]}», que corregiste"
     caps, _ = capitulos(f)
-    metodo = "reglas"
+    metodo, materias = "reglas", []
+    web = None
+    if not corr and tipo in ("libro", "articulo") and clasificador.WEB and len(f.stem.split()) >= 2:    # materias reales de la obra según Open Library (si hay red)
+        materias = _materias_web(titulo_corto(f.stem))
+        web = _genero_materias(materias)
     if not corr and tipo != "codigo" and clasificador.ACTIVO:                                  # parecido con ejemplos (embeddings locales) mezclado con las reglas; sin modelo, solo reglas
         s = clasificador.sugerir(clasificador.texto_libro(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500])), carpeta)
         if s:
-            nuevo, cambia = clasificador.decidir(gp, genero, s)
+            nuevo, cambia = clasificador.decidir(gp, genero, s, web)
             if cambia:
                 genero, metodo = nuevo, "parecido"
                 subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
                 motivo += f"; género «{GENEROS[genero]}» por parecido con ejemplos (margen {s['confianza']:.2f})"
+        elif web and genero == "otro":
+            genero, metodo = web, "web"
+    elif web and genero == "otro" and not corr:
+        genero, metodo = web, "web"
+    if materias and metodo != "reglas":
+        motivo += f"; materias web: {', '.join(materias[:4])}"
     palabras = re.findall(r"[a-z]+", t[:20000])
     es, en = sum(w in _ES for w in palabras), sum(w in _EN for w in palabras)
     h = _sha1(f)
     dup = next((rel for rel, m in leer_metadatos(carpeta).items() if m.get("hash") == h), "")
-    return {"galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "titulo": titulo_corto(f.stem), "titulo_largo": f.stem, "motivo": motivo, "metodo": metodo, "paginas": paginas,
+    return {"galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "titulo": titulo_corto(f.stem), "titulo_largo": f.stem, "motivo": motivo, "metodo": metodo, "materias_web": materias[:8], "paginas": paginas,
             "tamano": f.stat().st_size, "extension": ext.lstrip("."), "idioma": "es" if es > en else "en" if en else "", "duplicado": dup,
             "vista_previa": re.sub(r"\s+", " ", texto[:1500]).strip()[:380],
             "temas": [{"tema": nombre_t, "puntos": pt} for (_, nombre_t), pt in sorted(puntos.items(), key=lambda kv: -kv[1])[:4] if pt >= 3] if genero in GENEROS_CON_TEMA else [],
@@ -14954,7 +15006,9 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
             rel = fin.relative_to(base).as_posix()
             caps, pags = capitulos(fin)
             meta[rel] = {"capitulos": caps, "paginas": pags, "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "etiquetas": (d.get("etiquetas") or "").strip(), "origen": str(f), "hash": h,
-                         "fecha": datetime.now().isoformat(timespec="seconds"), "automatico": not (d.get("galaxia") or d.get("subtema") or d.get("tipo") or d.get("genero")) and (d.get("titulo") or auto["titulo"]).strip() == auto["titulo"]}
+                         "fecha": datetime.now().isoformat(timespec="seconds"), "automatico": not (d.get("galaxia") or d.get("subtema") or d.get("tipo") or d.get("genero")) and (d.get("titulo") or auto["titulo"]).strip() == auto["titulo"],
+                         "metodo": auto["metodo"], "motivo": auto["motivo"], "materias_web": auto.get("materias_web", []),
+                         "propuesta": {"galaxia": auto["galaxia"], "subtema": auto["subtema"], "genero": auto["genero"], "tipo": auto["tipo"]}}
             hashes[h] = rel
             if tipo == "libro":
                 nom = "portadas/" + h[:10] + ".jpg"
@@ -15039,7 +15093,7 @@ def _ficha(carpeta: Path, rel: str, m: dict, con_portada: bool = True) -> dict:
     f = Path(carpeta) / "biblioteca" / rel
     return {"rel": rel, "existe": f.is_file(), "titulo": m.get("titulo", ""), "titulo_largo": Path(m.get("origen", "")).stem or m.get("titulo", ""), "galaxia": m.get("galaxia", ""),
             "genero": m.get("genero", "otro"), "subtema": m.get("subtema", ""), "tipo": m.get("tipo", ""), "etiquetas": m.get("etiquetas", ""), "paginas": m.get("paginas", 0),
-            "capitulos": len(m.get("capitulos", [])), "fecha": m.get("fecha", "")[:10], "automatico": bool(m.get("automatico")), "extension": f.suffix.lstrip(".").lower(),
+            "capitulos": len(m.get("capitulos", [])), "fecha": m.get("fecha", "")[:10], "automatico": bool(m.get("automatico")), "fecha_hora": m.get("fecha", ""), "metodo": m.get("metodo", ""), "motivo": m.get("motivo", ""), "extension": f.suffix.lstrip(".").lower(),
             "tamano": f.stat().st_size if f.is_file() else 0, "ruta": str(f), "portada": portada_datauri(carpeta, m.get("portada", "")) if con_portada else ""}
 
 
@@ -15079,6 +15133,21 @@ def editar(rel: str, cambios: dict, carpeta: Path | None = None, db: Path | None
     if {"genero", "subtema"} & set(cambios):
         recordar_correccion(m, carpeta)
     return _ficha(carpeta, rel, m)
+
+
+def revisar(desde: str = "", hasta: str = "", carpeta: Path | None = None) -> list[dict]:
+    """Lo importado entre dos fechas (AAAA-MM-DD, ambas opcionales), de más reciente a más antiguo, para revisar cómo se clasificó.
+    Cada fila: fecha, título, galaxia, género, subtema, tipo, método (reglas|parecido|web), motivo, materias_web, propuesta y `corregido` (distinto de lo que propuso el sistema)."""
+    carpeta = Path(carpeta or carpeta_datos()); filas = []
+    for rel, m in leer_metadatos(carpeta).items():
+        f = (m.get("fecha") or "")[:10]
+        if (desde and f < desde) or (hasta and f > hasta):
+            continue
+        prop = m.get("propuesta") or {}
+        filas.append({"rel": rel, "fecha": m.get("fecha", ""), "titulo": m.get("titulo", ""), "galaxia": m.get("galaxia"), "genero": m.get("genero"), "subtema": m.get("subtema"), "tipo": m.get("tipo"),
+                      "metodo": m.get("metodo", ""), "motivo": m.get("motivo", ""), "materias_web": m.get("materias_web", []), "propuesta": prop,
+                      "corregido": bool(prop) and any(prop.get(k) != m.get(k) for k in ("galaxia", "genero", "subtema", "tipo"))})
+    return sorted(filas, key=lambda x: x["fecha"], reverse=True)
 
 
 def reclasificar_uno(rel: str, carpeta: Path | None = None, db: Path | None = None) -> dict:
@@ -15147,13 +15216,13 @@ ARTICULOS = ("arxiv", "openalex")
 Consulta = namedtuple("Consulta", "texto titulo autor")             # lo que se busca: palabras sueltas, título y autor (cualquiera puede ir vacío)
 
 
-def _get(url: str, binario: bool = False, limite: int = MAX_BYTES):
+def _get(url: str, binario: bool = False, limite: int = MAX_BYTES, espera: int = 20):
     """GET por https con tope de tamaño. Es el único punto de red (los tests lo sustituyen)."""
     if not url.startswith("https://"):
         raise ValueError(f"solo https: {url[:60]}")
     for intento in (1, 2):
         try:
-            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": AGENTE}), timeout=20) as r:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": AGENTE}), timeout=espera) as r:
                 datos = r.read(limite + 1)
             break
         except urllib.error.HTTPError as e:
@@ -15287,7 +15356,7 @@ def buscar(consulta: str = "", n: int = 6, fuentes=None, titulo: str = "", autor
 
 def materias_de(titulo: str, autor: str = "") -> list[str]:
     """Materias de un título según Open Library (para clasificar algo que ya tienes). [] si no lo encuentra."""
-    r = json.loads(_get("https://openlibrary.org/search.json?" + _q(title=titulo, author=autor, limit=3, fields="title,subject")))
+    r = json.loads(_get("https://openlibrary.org/search.json?" + _q(**{k: v for k, v in (("title", titulo), ("author", autor)) if v}, limit=3, fields="title,subject"), espera=6))
     return [s for d in r.get("docs", [])[:3] for s in d.get("subject", [])[:15]]
 
 
@@ -31151,6 +31220,7 @@ def _sin_modelo_de_embeddings(monkeypatch):
     """Los tests no descargan ni usan el modelo real del clasificador por parecido (test_clasificador.py lo prueba con uno falso)."""
     from conocimiento import clasificador
     monkeypatch.setattr(clasificador, "ACTIVO", False)
+    monkeypatch.setattr(clasificador, "WEB", False)
 :::END
 :::BEGIN py/tests/demos_stub.js|text
 // Prueba sin navegador de las demos del visor: carga visor/demos.js con un DOM mínimo, ejecuta cada demo,
@@ -34046,6 +34116,55 @@ def test_referencia_sin_archivo_y_restauracion(tmp_path):
     r2 = im.importar([orig], k, db=tmp_path / "i.db")[0]
     assert r2["estado"] == "ok" and "restaurado" in r2["mensaje"] and Path(r2["destino"]).is_file()
     assert len(im.leer_metadatos(k)) == 1 and im.listar(k)[0]["existe"] is True
+:::END
+:::BEGIN py/tests/test_revisar.py|text
+"""Revisión de lo importado por fecha: se guarda cómo se clasificó cada archivo y el voto de las materias web."""
+import json
+import sys
+import zipfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conocimiento import clasificador as c
+from conocimiento import importar as im
+
+
+def _epub(ruta, texto="texto generico sin pistas " * 300):
+    with zipfile.ZipFile(ruta, "w") as z:
+        z.writestr("mimetype", "application/epub+zip")
+        z.writestr("c.xhtml", f"<p>{texto}</p>")
+
+
+def test_revisar_guarda_metodo_propuesta_y_marca_lo_corregido(tmp_path):
+    o = tmp_path / "o"; o.mkdir()
+    (o / "a.py").write_text("def f():\n    return 1\n", encoding="utf-8")
+    (o / "b.md").write_text("# Notas\n\nApuntes de clase.\n", encoding="utf-8")
+    k, db = tmp_path / "k", tmp_path / "i.db"
+    im.importar([o / "a.py", o / "b.md"], k, db=db)
+    filas = {x["titulo"]: x for x in im.revisar(carpeta=k)}
+    assert set(filas) == {"a", "b"} and all(x["metodo"] == "reglas" and x["motivo"] and not x["corregido"] for x in filas.values())
+    assert filas["a"]["propuesta"]["galaxia"] == "codigo"
+    im.editar(filas["b"]["rel"], {"genero": "arte"}, k, db=db)                      # cambias lo que propuso el sistema…
+    nuevas = {x["titulo"]: x for x in im.revisar(carpeta=k)}
+    assert nuevas["b"]["corregido"] and not nuevas["a"]["corregido"]                # …y queda marcado como corrección
+    fecha = nuevas["a"]["fecha"][:10]
+    assert len(im.revisar(desde=fecha, hasta=fecha, carpeta=k)) == 2 and im.revisar(desde="2999-01-01", carpeta=k) == []
+    assert im.listar(k)[0]["fecha_hora"] and "metodo" in im.listar(k)[0]
+
+
+def test_voto_de_las_materias_web(tmp_path, monkeypatch):
+    monkeypatch.setattr(c, "WEB", True)
+    monkeypatch.setattr(im, "_materias_web", lambda t: ["Statistics", "Regression analysis"])
+    f = tmp_path / "Zorrotz Quimbaya.epub"; _epub(f)
+    r = im.clasificar(f, tmp_path)
+    assert r["genero"] == "estadistica" and r["metodo"] == "web" and "materias web" in r["motivo"]
+    monkeypatch.setattr(c, "WEB", False)
+    assert im.clasificar(f, tmp_path)["metodo"] == "reglas"                         # sin red (o desactivado) se clasifica como siempre
+
+
+def test_decidir_con_voto_web_desempata():
+    p = {"puntos": {"historia": .40, "ciencia": .38}}
+    assert c.decidir({}, "otro", p)[0] == "historia" and c.decidir({}, "otro", p, web="ciencia")[0] == "ciencia"
 :::END
 :::BEGIN py/tests/test_seleccion.py|text
 import numpy as np
@@ -37228,6 +37347,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 .importar[hidden]{display:none}
 .app.modo-importar .cuerpo{display:none}
 .imp-cabeza{text-align:center;max-width:720px} .imp-cabeza h2{margin:6px 0 2px;font-size:18px} .imp-cabeza p{margin:0;color:#9fb0cc;font-size:13px}
+.imp-auto{display:flex;gap:8px;align-items:center;color:#cfe0ff;font-size:13px;margin:4px 0}
 .imp-agujero{width:100%;max-width:980px;height:min(46vh,430px);min-height:240px;flex:none}
 #agujero{width:100%;height:100%;display:block;outline:none;border-radius:12px} #agujero:focus-visible{outline:2px solid var(--accent)}
 .imp-msg{margin:0;min-height:1.2em;color:#9fb0cc;font-size:13px;text-align:center}
@@ -37309,6 +37429,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
   <section class="aprender" id="aprender" hidden aria-label="Guía de aprendizaje"></section>
   <section class="importar" id="importar" hidden aria-label="Importador">
     <div class="imp-cabeza"><h2>Importar</h2><p>Haz clic en el agujero negro (o suelta archivos encima): se abre el explorador de archivos. El importador los clasifica solo (galaxia, subtema y tipo) y puedes corregirlo antes de importar.</p></div>
+    <label class="imp-auto" title="Los archivos que sueltes se clasifican y se importan sin pasar por las tarjetas; luego los revisas por fecha en el Observatorio"><input type="checkbox" id="impAuto"> Importar sin revisar (clasifica solo)</label>
     <div class="imp-agujero"><canvas id="agujero" tabindex="0" role="button" aria-label="Agujero negro: haz clic para añadir archivos"></canvas></div>
     <p class="imp-msg" id="impMsg" aria-live="polite"></p>
     <div class="imp-panel" id="impPanel" hidden></div>
@@ -37325,7 +37446,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
   </section>
   <section class="biblioteca" id="biblioteca" hidden aria-label="Observatorio">
     <div class="imp-cabeza"><h2>Observatorio</h2><p>Todo lo que has importado. Cambia título, galaxia, género, subtema, tipo o etiquetas: se guarda al momento y el universo se actualiza al volver a él. Al borrar solo se quita la copia del observatorio; el original no se toca.</p></div>
-    <div class="bib-barra"><input id="bibQ" type="search" placeholder="Filtrar por título, género, subtema, etiqueta…" aria-label="Filtrar el observatorio"><select id="bibGal" aria-label="Galaxia"></select>
+    <div class="bib-barra"><input id="bibQ" type="search" placeholder="Filtrar por título, género, subtema, etiqueta…" aria-label="Filtrar el observatorio"><select id="bibGal" aria-label="Galaxia"></select><select id="bibOrden" aria-label="Orden"><option value="fecha">Más recientes primero</option><option value="gal">Por galaxia y título</option></select><label class="bib-n" for="bibDesde">Importados desde</label><input id="bibDesde" type="date" aria-label="Importados desde esta fecha">
       <span id="bibN" class="bib-n"></span><button class="btn primario" id="bibAplicar" type="button" hidden>Actualizar el universo ahora</button></div>
     <div class="bib-lista" id="bibLista"></div>
   </section>
@@ -38124,6 +38245,8 @@ apMostrar = function (on) { if (on && (impAbierta() || bibAbierta() || eclAbiert
 
 /* ---------- el importador: agujero negro + tarjetas de archivos con lo detectado, desplegables y progreso (el trabajo lo hace py/conocimiento/importar.py) ---------- */
 var imp = {archivos: [], opciones: null, ocupado: false, resultados: null, modo: 'copiar'};
+try { $('#impAuto').checked = localStorage.getItem('impAuto') === '1'; } catch (e) {}
+$('#impAuto').addEventListener('change', function () { try { localStorage.setItem('impAuto', this.checked ? '1' : '0'); } catch (e) {} });
 var agujero = crearAgujero({canvas: $('#agujero'), alClic: impClic});
 if (window.ResizeObserver) new ResizeObserver(function () { agujero.medir(); }).observe($('#agujero')); else window.addEventListener('resize', function () { agujero.medir(); });
 function impAviso(m) { $('#impMsg').textContent = m || ''; }
@@ -38158,6 +38281,7 @@ async function impAnadir(rutas) {
     impRender();
   }
   agujero.ocupado(false); impAviso('');
+  if ($('#impAuto').checked && imp.archivos.some(function (a) { return a.incluir; })) impImportar();
 }
 function impOpt(lista, val, autoTxt) {
   return '<option value="auto"' + (val === 'auto' ? ' selected' : '') + '>' + esc(autoTxt) + '</option>' +
@@ -38337,8 +38461,8 @@ async function bibCargar() {
 function bibVista() {
   var f = norm(bib.filtro);
   return (bib.lista || []).filter(function (x) {
-    return (!bib.gal || x.galaxia === bib.gal) && (!f || norm([x.titulo, x.titulo_largo, x.genero, GENEROS_NOM[x.genero], x.subtema, x.etiquetas, x.tipo, x.galaxia].join(' ')).indexOf(f) >= 0);
-  });
+    return (!bib.gal || x.galaxia === bib.gal) && (!bib.desde || (x.fecha_hora || '').slice(0, 10) >= bib.desde) && (!f || norm([x.titulo, x.titulo_largo, x.genero, GENEROS_NOM[x.genero], x.subtema, x.etiquetas, x.tipo, x.galaxia].join(' ')).indexOf(f) >= 0);
+  }).sort(function (a, b) { return bib.orden === 'gal' ? 0 : String(b.fecha_hora || '').localeCompare(String(a.fecha_hora || '')); });
 }
 function bibTarjeta(x) {
   var o = imp.opciones || {galaxias: GALAXIAS, generos: [], tipos: []}, nuevo = x.automatico ? '' : ' · ajustado por ti';
@@ -38352,7 +38476,7 @@ function bibTarjeta(x) {
     '<div class="bib-acc"><button class="btn primario" data-a="abrir" type="button"' + (x.existe ? '' : ' disabled') + '>Abrir</button>' +
     '<button class="btn" data-a="recl" type="button" title="Vuelve a decidir galaxia, género y subtema según el contenido y tus correcciones anteriores">Reclasificar</button>' +
     '<button class="btn" data-a="borrar" type="button" style="' + (bib.borrando === x.rel ? 'background:#8a3a2c;color:#fff' : '') + '">' + (bib.borrando === x.rel ? '¿Seguro? Pulsa otra vez' : 'Borrar') + '</button><span class="bib-ok"></span></div>' +
-    '<div class="bib-info">' + esc((x.extension || '').toUpperCase()) + ' · ' + (x.existe ? fmtTam(x.tamano) : 'sin el archivo en este equipo (solo la referencia)') + (x.paginas ? ' · ' + x.paginas + ' págs.' : '') + (x.capitulos ? ' · ' + x.capitulos + ' capítulos' : '') + (x.fecha ? ' · importado ' + esc(x.fecha) : '') + esc(nuevo) + (x.existe ? '' : ' · ⚠ el fichero ya no está') + '</div></div>';
+    '<div class="bib-info">' + esc((x.extension || '').toUpperCase()) + ' · ' + (x.existe ? fmtTam(x.tamano) : 'sin el archivo en este equipo (solo la referencia)') + (x.paginas ? ' · ' + x.paginas + ' págs.' : '') + (x.capitulos ? ' · ' + x.capitulos + ' capítulos' : '') + (x.fecha_hora ? ' · importado ' + esc(x.fecha_hora.replace('T', ' ').slice(0, 16)) : '') + (x.metodo ? ' · clasificado por ' + esc(x.metodo) : '') + esc(nuevo) + (x.existe ? '' : ' · ⚠ el fichero ya no está') + '</div></div>';
 }
 function bibRender() {
   var v = bibVista(), cont = $('#bibLista');
@@ -38367,6 +38491,8 @@ function bibFicha(rel) { return (bib.lista || []).filter(function (x) { return x
 function bibMarca(card, txt) { var s = card && card.querySelector('.bib-ok'); if (s) { s.textContent = txt; setTimeout(function () { if (s) s.textContent = ''; }, 2200); } }
 $('#bibQ').addEventListener('input', function () { bib.filtro = this.value; bibRender(); });
 $('#bibGal').addEventListener('change', function () { bib.gal = this.value; bibRender(); });
+$('#bibOrden').addEventListener('change', function () { bib.orden = this.value; bibRender(); });
+$('#bibDesde').addEventListener('change', function () { bib.desde = this.value; bibRender(); });
 $('#biblioteca').addEventListener('change', async function (ev) {
   var card = ev.target.closest('.bib-card'), c = ev.target.dataset.c; if (!card || !c) return;
   var r = await impApi().biblioteca_editar(card.dataset.rel, (function () { var o = {}; o[c] = ev.target.value; return o; })());
@@ -39631,6 +39757,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 5m. **Referencias que viajan:** los PDF/EPUB no suben a GitHub, pero `conocimiento/biblioteca/referencias.json` (los metadatos sin rutas del equipo: título, galaxia, género, capítulos, hash) y `biblioteca/portadas/` sí (`.gitignore`; `importar._guardar` los escribe junto a `metadatos.json`, que sigue siendo local). `leer_metadatos` fusiona ambos, así que en otro equipo el mapa y el Observatorio muestran los libros como referencias vacías («sin el archivo en este equipo»); al importar un archivo con el mismo hash se restaura en su sitio.
 5k. **Telescopio:** pestaña «📡 Telescopio» (`py/conocimiento/telescopio.py`, API `Api.telescopio_buscar/traer`, consola `python -m conocimiento telescopio <consulta> [--traer N]`). Busca **solo fuentes legales**: Project Gutenberg (catálogo OPDS oficial, dominio público; Gutendex se descartó por lento), Google Books y Open Library (catálogo: ficha y enlace; descarga solo si es dominio público o lectura abierta; Google necesita clave en `GOOGLE_BOOKS_KEY` o `conocimiento/google_books.key` porque la cuota anónima diaria suele estar agotada), arXiv, OpenAlex (solo con PDF abierto) e Internet Archive (solo licencia CC/dominio público o publicado ≤ 1929). **No se añaden fuentes piratas (Anna's Archive, Z-Library, LibGen…) ni descargadores de ellas.** `traer` descarga (https, ≤ 200 MB, comprueba que es PDF/EPUB de verdad) y pasa por `importar.importar` con el género sacado de las materias de la obra (`genero_desde_materias`); `materias_de` consulta Open Library para clasificar un título que ya tienes. Tests sin red (`_get` se sustituye): `tests/test_telescopio.py`.
 5p. **Importar cualquier archivo:** además de libros, el importador acepta código (`CODIGO_EXT`: .py .ipynb .r .sas .sql .js …), datos (`DATOS_EXT`: .csv .xlsx .json .yaml …) y apuntes (`APUNTES_EXT`: .pptx .tex .html .rst) — todo en `EXT_IMPORTABLE` (`conocimiento/__init__.py`). El código va a la galaxia Código (tipo `codigo`, género tecnología); los datos al tipo `datos` (solo se indexa la cabecera); los cuadernos se indexan por celdas y su «índice» son los títulos markdown. Las carpetas de `fuentes.json` siguen leyendo solo `EXT` (documentos), para no indexar todo un disco. Otros formatos (imágenes, .zip, .exe) se rechazan con un mensaje claro. Se filtran en el buscador con prefijos como `py:`, `ipynb:`, `csv:`, `sql:`, `pptx:` (`conocimiento.buscar(formato=)`). Test: `tests/test_importar_formatos.py`.
+5q. **Importar en masa y revisar por fecha:** la casilla «Importar sin revisar (clasifica solo)» de la pestaña Importar clasifica e importa todo lo que sueltes sin pasar por las tarjetas (se recuerda en el navegador). Cada archivo guarda en `metadatos.json` cuándo se importó (`fecha`, con hora), cómo se clasificó (`metodo`: `reglas` | `parecido` | `web`, `motivo`, `materias_web`) y la `propuesta` automática original; así se ve qué corregiste a mano. **Para revisar con Claude:** `python -m conocimiento revisar [--desde AAAA-MM-DD] [--hasta …] [--json]` lista lo importado de más reciente a más antiguo con `corregido` (distinto de la propuesta); el Observatorio ordena por fecha y filtra «importados desde». Claude lee ese JSON, propone la clasificación que él habría hecho y se comparan los desacuerdos para mejorar reglas, frases semilla (`clasificador.SEMILLAS`) o pesos. **Materias web:** para libros y artículos, `importar._materias_web` consulta Open Library por el título (timeout de 6 s; si falla una vez, no se reintenta en la sesión) y el género de esas materias suma `PESO_WEB` en `clasificador.decidir` (o decide si todo lo demás da «otro»). No se hace scraping de páginas: solo APIs de metadatos. Las pruebas desactivan la red con `clasificador.WEB = False`. Tests: `tests/test_revisar.py`.
 5n. **Búsqueda por tipo de archivo y por título/autor:** en el buscador principal los prefijos `pdf:`, `epub:`, `docx:`, `md:`, `txt:` filtran lo que sale de tu conocimiento por formato (`conocimiento.buscar(..., formato=)`; con un prefijo de formato no se listan nodos del mapa). En el Telescopio, «Qué buscamos» (Todo / Un libro / Un artículo) muestra casillas de **Título** y **Autor** (el autor se comprueba en cada resultado), el selector de tipo elige las fuentes (libro: Google Books, Open Library, Gutenberg, Internet Archive; artículo: arXiv, OpenAlex) y «Solo PDF / Solo EPUB» filtra por formato descargable. Consola: `python -m conocimiento telescopio -T título -a autor --tipo libro --formato pdf`.
 5o. **Clasificador por parecido (embeddings locales):** `py/conocimiento/clasificador.py`. El importador mezcla las reglas de palabras clave con el parecido del libro (título + capítulos + principio) a unas frases semilla por género y a lo que ya hay en tu biblioteca (lo que corregiste a mano pesa más); `decidir` suma parecido + cuota de las reglas × su seguridad, y si nada se parece (`MIN_PARECIDO`) respeta a las reglas. Corre en local con `fastembed` (ONNX, sin PyTorch; **opcional**: `pip install fastembed`; sin él o sin el modelo todo sigue con las reglas). Los modelos se guardan en `conocimiento/modelos/` (no se publican). Modelo por defecto `paraphrase-multilingual-MiniLM-L12-v2` (0,2 GB; sirve en un portátil de 8 GB); para otro, `conocimiento/ajustes.json` {"modelo_embeddings": "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"} o la variable ARBOL_MODELO. **Medido con `python herramientas/comparar_clasificadores.py`** (66 libros de prueba): reglas solas 42 %; con MiniLM 86 %, con mpnet 89 % (1 GB, algo más lento), con potion-multilingual-128M 82 %; ~0,1 s por libro una vez cargado el modelo. Al añadir géneros o frases semilla, vuelve a medir. El resultado de `clasificar` trae `metodo` (`reglas` | `parecido`) y el motivo lo explica. Tests: `tests/test_clasificador.py` (con un modelo falso; la suite desactiva el real).
 6. **Conceptos:** `conceptos/catalogo.json` lista los conceptos del temario del máster y de Very Normal con las funciones que los implementan. Organización: `temas` (ramas del mapa, con color) > `areas` (módulos, con `ambito`) > conceptos (`area`, `prioridad` opcional, `area_fija` para que la actualización no lo mueva). La migración de 0.6.0 está en `herramientas/reorganizar_catalogo.py`.

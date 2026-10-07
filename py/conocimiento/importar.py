@@ -334,6 +334,32 @@ def _muestra(f: Path, max_pag: int = 12) -> tuple[str, int]:
     return "\n".join(x for _, x, _ in trozos[:30])[:30000], 0
 
 
+_WEB = {"fallo": False, "memo": {}}
+
+
+def _materias_web(titulo: str) -> list[str]:
+    """Materias de un título según Open Library (apoyo para clasificar). Si falla la red, no se vuelve a intentar en esta sesión."""
+    if _WEB["fallo"]:
+        return []
+    if titulo not in _WEB["memo"]:
+        try:
+            from . import telescopio
+            _WEB["memo"][titulo] = telescopio.materias_de(titulo)
+        except Exception:
+            _WEB["fallo"] = True
+            return []
+    return _WEB["memo"][titulo]
+
+
+def _genero_materias(materias: list[str]) -> str | None:
+    if not materias:
+        return None
+    t = " " + _norm(" ; ".join(materias)) + " "
+    p = {g: len(r.findall(t)) for g, r in _GEN_RE.items()}
+    g = max(p, key=p.get)
+    return g if p[g] >= 2 else None
+
+
 def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
     """Propone galaxia, subtema, tipo y título de un fichero, con el motivo. {'galaxia','subtema','tipo','titulo','motivo','paginas'}"""
     f = Path(ruta)
@@ -380,20 +406,30 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
         genero, subtema = corr["genero"] or genero, corr["subtema"] or subtema
         motivo += f"; como «{corr['titulo'][:30]}», que corregiste"
     caps, _ = capitulos(f)
-    metodo = "reglas"
+    metodo, materias = "reglas", []
+    web = None
+    if not corr and tipo in ("libro", "articulo") and clasificador.WEB and len(f.stem.split()) >= 2:    # materias reales de la obra según Open Library (si hay red)
+        materias = _materias_web(titulo_corto(f.stem))
+        web = _genero_materias(materias)
     if not corr and tipo != "codigo" and clasificador.ACTIVO:                                  # parecido con ejemplos (embeddings locales) mezclado con las reglas; sin modelo, solo reglas
         s = clasificador.sugerir(clasificador.texto_libro(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500])), carpeta)
         if s:
-            nuevo, cambia = clasificador.decidir(gp, genero, s)
+            nuevo, cambia = clasificador.decidir(gp, genero, s, web)
             if cambia:
                 genero, metodo = nuevo, "parecido"
                 subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
                 motivo += f"; género «{GENEROS[genero]}» por parecido con ejemplos (margen {s['confianza']:.2f})"
+        elif web and genero == "otro":
+            genero, metodo = web, "web"
+    elif web and genero == "otro" and not corr:
+        genero, metodo = web, "web"
+    if materias and metodo != "reglas":
+        motivo += f"; materias web: {', '.join(materias[:4])}"
     palabras = re.findall(r"[a-z]+", t[:20000])
     es, en = sum(w in _ES for w in palabras), sum(w in _EN for w in palabras)
     h = _sha1(f)
     dup = next((rel for rel, m in leer_metadatos(carpeta).items() if m.get("hash") == h), "")
-    return {"galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "titulo": titulo_corto(f.stem), "titulo_largo": f.stem, "motivo": motivo, "metodo": metodo, "paginas": paginas,
+    return {"galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "titulo": titulo_corto(f.stem), "titulo_largo": f.stem, "motivo": motivo, "metodo": metodo, "materias_web": materias[:8], "paginas": paginas,
             "tamano": f.stat().st_size, "extension": ext.lstrip("."), "idioma": "es" if es > en else "en" if en else "", "duplicado": dup,
             "vista_previa": re.sub(r"\s+", " ", texto[:1500]).strip()[:380],
             "temas": [{"tema": nombre_t, "puntos": pt} for (_, nombre_t), pt in sorted(puntos.items(), key=lambda kv: -kv[1])[:4] if pt >= 3] if genero in GENEROS_CON_TEMA else [],
@@ -474,7 +510,9 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
             rel = fin.relative_to(base).as_posix()
             caps, pags = capitulos(fin)
             meta[rel] = {"capitulos": caps, "paginas": pags, "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "etiquetas": (d.get("etiquetas") or "").strip(), "origen": str(f), "hash": h,
-                         "fecha": datetime.now().isoformat(timespec="seconds"), "automatico": not (d.get("galaxia") or d.get("subtema") or d.get("tipo") or d.get("genero")) and (d.get("titulo") or auto["titulo"]).strip() == auto["titulo"]}
+                         "fecha": datetime.now().isoformat(timespec="seconds"), "automatico": not (d.get("galaxia") or d.get("subtema") or d.get("tipo") or d.get("genero")) and (d.get("titulo") or auto["titulo"]).strip() == auto["titulo"],
+                         "metodo": auto["metodo"], "motivo": auto["motivo"], "materias_web": auto.get("materias_web", []),
+                         "propuesta": {"galaxia": auto["galaxia"], "subtema": auto["subtema"], "genero": auto["genero"], "tipo": auto["tipo"]}}
             hashes[h] = rel
             if tipo == "libro":
                 nom = "portadas/" + h[:10] + ".jpg"
@@ -559,7 +597,7 @@ def _ficha(carpeta: Path, rel: str, m: dict, con_portada: bool = True) -> dict:
     f = Path(carpeta) / "biblioteca" / rel
     return {"rel": rel, "existe": f.is_file(), "titulo": m.get("titulo", ""), "titulo_largo": Path(m.get("origen", "")).stem or m.get("titulo", ""), "galaxia": m.get("galaxia", ""),
             "genero": m.get("genero", "otro"), "subtema": m.get("subtema", ""), "tipo": m.get("tipo", ""), "etiquetas": m.get("etiquetas", ""), "paginas": m.get("paginas", 0),
-            "capitulos": len(m.get("capitulos", [])), "fecha": m.get("fecha", "")[:10], "automatico": bool(m.get("automatico")), "extension": f.suffix.lstrip(".").lower(),
+            "capitulos": len(m.get("capitulos", [])), "fecha": m.get("fecha", "")[:10], "automatico": bool(m.get("automatico")), "fecha_hora": m.get("fecha", ""), "metodo": m.get("metodo", ""), "motivo": m.get("motivo", ""), "extension": f.suffix.lstrip(".").lower(),
             "tamano": f.stat().st_size if f.is_file() else 0, "ruta": str(f), "portada": portada_datauri(carpeta, m.get("portada", "")) if con_portada else ""}
 
 
@@ -599,6 +637,21 @@ def editar(rel: str, cambios: dict, carpeta: Path | None = None, db: Path | None
     if {"genero", "subtema"} & set(cambios):
         recordar_correccion(m, carpeta)
     return _ficha(carpeta, rel, m)
+
+
+def revisar(desde: str = "", hasta: str = "", carpeta: Path | None = None) -> list[dict]:
+    """Lo importado entre dos fechas (AAAA-MM-DD, ambas opcionales), de más reciente a más antiguo, para revisar cómo se clasificó.
+    Cada fila: fecha, título, galaxia, género, subtema, tipo, método (reglas|parecido|web), motivo, materias_web, propuesta y `corregido` (distinto de lo que propuso el sistema)."""
+    carpeta = Path(carpeta or carpeta_datos()); filas = []
+    for rel, m in leer_metadatos(carpeta).items():
+        f = (m.get("fecha") or "")[:10]
+        if (desde and f < desde) or (hasta and f > hasta):
+            continue
+        prop = m.get("propuesta") or {}
+        filas.append({"rel": rel, "fecha": m.get("fecha", ""), "titulo": m.get("titulo", ""), "galaxia": m.get("galaxia"), "genero": m.get("genero"), "subtema": m.get("subtema"), "tipo": m.get("tipo"),
+                      "metodo": m.get("metodo", ""), "motivo": m.get("motivo", ""), "materias_web": m.get("materias_web", []), "propuesta": prop,
+                      "corregido": bool(prop) and any(prop.get(k) != m.get(k) for k in ("galaxia", "genero", "subtema", "tipo"))})
+    return sorted(filas, key=lambda x: x["fecha"], reverse=True)
 
 
 def reclasificar_uno(rel: str, carpeta: Path | None = None, db: Path | None = None) -> dict:

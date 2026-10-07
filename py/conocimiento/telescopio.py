@@ -29,13 +29,13 @@ ARTICULOS = ("arxiv", "openalex")
 Consulta = namedtuple("Consulta", "texto titulo autor")             # lo que se busca: palabras sueltas, título y autor (cualquiera puede ir vacío)
 
 
-def _get(url: str, binario: bool = False, limite: int = MAX_BYTES):
+def _get(url: str, binario: bool = False, limite: int = MAX_BYTES, espera: int = 20):
     """GET por https con tope de tamaño. Es el único punto de red (los tests lo sustituyen)."""
     if not url.startswith("https://"):
         raise ValueError(f"solo https: {url[:60]}")
     for intento in (1, 2):
         try:
-            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": AGENTE}), timeout=20) as r:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": AGENTE}), timeout=espera) as r:
                 datos = r.read(limite + 1)
             break
         except urllib.error.HTTPError as e:
@@ -169,7 +169,7 @@ def buscar(consulta: str = "", n: int = 6, fuentes=None, titulo: str = "", autor
 
 def materias_de(titulo: str, autor: str = "") -> list[str]:
     """Materias de un título según Open Library (para clasificar algo que ya tienes). [] si no lo encuentra."""
-    r = json.loads(_get("https://openlibrary.org/search.json?" + _q(title=titulo, author=autor, limit=3, fields="title,subject")))
+    r = json.loads(_get("https://openlibrary.org/search.json?" + _q(**{k: v for k, v in (("title", titulo), ("author", autor)) if v}, limit=3, fields="title,subject"), espera=6))
     return [s for d in r.get("docs", [])[:3] for s in d.get("subject", [])[:15]]
 
 
