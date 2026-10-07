@@ -60,7 +60,7 @@ def test_titulo_autor_tipo_y_formato(monkeypatch):
     assert {x["fuente"] for x in r["resultados"]} <= set(t.LIBROS) and not any("arxiv" in u or "openalex" in u for u in vistas)
     assert [x["id"] for x in r["resultados"] if x["fuente"] == "gutenberg"] == ["7"]            # el autor coincide («Laplace»)
     assert t.buscar(titulo="Essai", autor="Newton", tipo="libro", fuentes=("gutenberg",))["resultados"] == []   # otro autor: fuera
-    assert any("intitle" in u and "inauthor" in u for u in vistas) and any("title=Essai" in u and "author=laplace" in u for u in vistas)
+    assert any("googleapis" in u and "Essai+laplace" in u for u in vistas) and any("title=Essai" in u and "author=laplace" in u for u in vistas)
     assert {x["formato"] for x in t.buscar("probability", formato="epub")["resultados"]} == {"epub"}
     assert t.buscar("probability", tipo="articulo")["resultados"] and {x["fuente"] for x in t.buscar("probability", tipo="articulo")["resultados"]} <= set(t.ARTICULOS)
     assert t.buscar() == {"resultados": [], "errores": {}}                                          # sin nada que buscar no se llama a la red

@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -31,8 +33,15 @@ def _get(url: str, binario: bool = False, limite: int = MAX_BYTES):
     """GET por https con tope de tamaño. Es el único punto de red (los tests lo sustituyen)."""
     if not url.startswith("https://"):
         raise ValueError(f"solo https: {url[:60]}")
-    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": AGENTE}), timeout=20) as r:
-        datos = r.read(limite + 1)
+    for intento in (1, 2):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": AGENTE}), timeout=20) as r:
+                datos = r.read(limite + 1)
+            break
+        except urllib.error.HTTPError as e:
+            if intento == 2 or e.code not in (500, 502, 503, 504):          # un fallo del servidor suele ser pasajero: se reintenta una vez
+                raise
+            time.sleep(1.5)
     if len(datos) > limite:
         raise ValueError(f"más de {limite >> 20} MB: no se descarga")
     return datos if binario else datos.decode("utf-8", "replace")
@@ -122,7 +131,7 @@ def _openlibrary(c, n):
 
 def _googlebooks(c, n):
     """Catálogo de Google Books: ficha, categorías y enlace para verlo. Solo es descargable si Google lo marca como dominio público y da enlace de PDF/EPUB."""
-    r = json.loads(_get("https://www.googleapis.com/books/v1/volumes?" + _q(q=" ".join(p for p in (c.texto, f'intitle:"{c.titulo}"' if c.titulo else "", f'inauthor:"{c.autor}"' if c.autor else "") if p), maxResults=n, printType="books", **({"key": _clave_google()} if _clave_google() else {}))))
+    r = json.loads(_get("https://www.googleapis.com/books/v1/volumes?" + _q(q=_libre(c), maxResults=n, printType="books", **({"key": _clave_google()} if _clave_google() else {}))))
     for v in r.get("items", []):
         i, a = v.get("volumeInfo", {}), v.get("accessInfo", {})
         url, formato = "", "web"

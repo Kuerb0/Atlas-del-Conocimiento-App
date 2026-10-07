@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.5.0 - Instalador
+title Arbol de la estadistica 1.5.1 - Actualizar
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=1.5.0"
+set "ARBOL_MODO=actualizar"
+set "ARBOL_VERSION=1.5.1"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -494,7 +494,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.5.0
+1.5.1
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -2778,7 +2778,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.5.0"
+version = "1.5.1"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3458,7 +3458,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.5.0"
+__version__ = "1.5.1"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -15055,6 +15055,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -15077,8 +15079,15 @@ def _get(url: str, binario: bool = False, limite: int = MAX_BYTES):
     """GET por https con tope de tamaño. Es el único punto de red (los tests lo sustituyen)."""
     if not url.startswith("https://"):
         raise ValueError(f"solo https: {url[:60]}")
-    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": AGENTE}), timeout=20) as r:
-        datos = r.read(limite + 1)
+    for intento in (1, 2):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": AGENTE}), timeout=20) as r:
+                datos = r.read(limite + 1)
+            break
+        except urllib.error.HTTPError as e:
+            if intento == 2 or e.code not in (500, 502, 503, 504):          # un fallo del servidor suele ser pasajero: se reintenta una vez
+                raise
+            time.sleep(1.5)
     if len(datos) > limite:
         raise ValueError(f"más de {limite >> 20} MB: no se descarga")
     return datos if binario else datos.decode("utf-8", "replace")
@@ -15168,7 +15177,7 @@ def _openlibrary(c, n):
 
 def _googlebooks(c, n):
     """Catálogo de Google Books: ficha, categorías y enlace para verlo. Solo es descargable si Google lo marca como dominio público y da enlace de PDF/EPUB."""
-    r = json.loads(_get("https://www.googleapis.com/books/v1/volumes?" + _q(q=" ".join(p for p in (c.texto, f'intitle:"{c.titulo}"' if c.titulo else "", f'inauthor:"{c.autor}"' if c.autor else "") if p), maxResults=n, printType="books", **({"key": _clave_google()} if _clave_google() else {}))))
+    r = json.loads(_get("https://www.googleapis.com/books/v1/volumes?" + _q(q=_libre(c), maxResults=n, printType="books", **({"key": _clave_google()} if _clave_google() else {}))))
     for v in r.get("items", []):
         i, a = v.get("volumeInfo", {}), v.get("accessInfo", {})
         url, formato = "", "web"
@@ -31385,6 +31394,7 @@ def test_sugiere_por_semillas_y_por_tu_biblioteca(monkeypatch, tmp_path):
 
 def test_sin_modelo_devuelve_none_y_no_reintenta(monkeypatch, tmp_path):
     monkeypatch.setenv("ARBOL_MODELO", "no-existe/modelo")
+    monkeypatch.setattr(c, "ACTIVO", True)
     monkeypatch.setattr(c, "_embedder", lambda *a, **k: (_ for _ in ()).throw(OSError("sin red")))
     c._cache.pop("fallo", None)
     assert c.sugerir("lo que sea", tmp_path) is None and c._cache["fallo"] is True
@@ -34440,7 +34450,7 @@ def test_titulo_autor_tipo_y_formato(monkeypatch):
     assert {x["fuente"] for x in r["resultados"]} <= set(t.LIBROS) and not any("arxiv" in u or "openalex" in u for u in vistas)
     assert [x["id"] for x in r["resultados"] if x["fuente"] == "gutenberg"] == ["7"]            # el autor coincide («Laplace»)
     assert t.buscar(titulo="Essai", autor="Newton", tipo="libro", fuentes=("gutenberg",))["resultados"] == []   # otro autor: fuera
-    assert any("intitle" in u and "inauthor" in u for u in vistas) and any("title=Essai" in u and "author=laplace" in u for u in vistas)
+    assert any("googleapis" in u and "Essai+laplace" in u for u in vistas) and any("title=Essai" in u and "author=laplace" in u for u in vistas)
     assert {x["formato"] for x in t.buscar("probability", formato="epub")["resultados"]} == {"epub"}
     assert t.buscar("probability", tipo="articulo")["resultados"] and {x["fuente"] for x in t.buscar("probability", tipo="articulo")["resultados"]} <= set(t.ARTICULOS)
     assert t.buscar() == {"resultados": [], "errores": {}}                                          # sin nada que buscar no se llama a la red
