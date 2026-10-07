@@ -42,6 +42,22 @@ def test_voto_de_las_materias_web(tmp_path, monkeypatch):
     assert im.clasificar(f, tmp_path)["metodo"] == "reglas"                         # sin red (o desactivado) se clasifica como siempre
 
 
+def test_la_consulta_web_vale_tambien_para_archivos_con_guiones_bajos(tmp_path, monkeypatch):
+    """Los libros de la biblioteca se guardan como The_Reluctant_Spy.epub: ese nombre son 3 palabras, no una."""
+    monkeypatch.setattr(c, "WEB", True)
+    vistos = []
+    monkeypatch.setattr(im, "_materias_web", lambda t: vistos.append(t) or ["Fiction"])
+    f = tmp_path / "The_Reluctant_Spy.epub"; _epub(f, "texto generico " * 300)
+    assert im.clasificar(f, tmp_path)["genero"] == "novela" and vistos == ["The Reluctant Spy"]
+
+
+def test_vocabulario_de_inversion_cuenta_como_finanzas(tmp_path):
+    f = tmp_path / "backtest.md"
+    f.write_text("# Backtest de una estrategia\n\nRatio de Sharpe, drawdown máximo y backtest de la media móvil: " * 6, encoding="utf-8")
+    r = im.clasificar(f, tmp_path)
+    assert r["genero"] == "economia"
+
+
 def test_la_forma_de_la_obra_manda_sobre_el_tema(tmp_path, monkeypatch):
     monkeypatch.setattr(c, "WEB", True)
     f = tmp_path / "The Reluctant Spy.epub"; _epub(f, "la CIA el gobierno el Estado politica democracia " * 300)

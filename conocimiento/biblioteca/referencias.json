@@ -1,4 +1,198 @@
 {
+ "codigo/Finanzas_y_normativa/markowitz.py": {
+  "capitulos": [
+   {
+    "titulo": "estadisticos",
+    "pagina": null
+   },
+   {
+    "titulo": "cartera_minima_varianza",
+    "pagina": null
+   },
+   {
+    "titulo": "cartera_tangente",
+    "pagina": null
+   },
+   {
+    "titulo": "rentabilidad_y_volatilidad",
+    "pagina": null
+   },
+   {
+    "titulo": "frontera_eficiente",
+    "pagina": null
+   }
+  ],
+  "paginas": 0,
+  "titulo": "markowitz",
+  "galaxia": "codigo",
+  "subtema": "Finanzas y normativa",
+  "genero": "tecnologia",
+  "tipo": "codigo",
+  "etiquetas": "",
+  "hash": "cc3e3651aaa06e93adb2d3dad7f2ca7e8070c3b4",
+  "fecha": "2026-10-07T20:35:52",
+  "automatico": true,
+  "metodo": "reglas",
+  "motivo": "archivo de código (.py); el tema «Finanzas y normativa» puntúa 21; subgénero «Algoritmos y estructuras de datos»",
+  "materias_web": [],
+  "propuesta": {
+   "galaxia": "codigo",
+   "subtema": "Finanzas y normativa",
+   "genero": "tecnologia",
+   "tipo": "codigo",
+   "subgenero": "algoritmos"
+  },
+  "subgenero": "algoritmos"
+ },
+ "codigo/General/backtest_media_movil.ipynb": {
+  "capitulos": [
+   {
+    "titulo": "Backtest de una estrategia de media móvil",
+    "pagina": null
+   },
+   {
+    "titulo": "Conclusiones",
+    "pagina": null
+   }
+  ],
+  "paginas": 0,
+  "titulo": "backtest media movil",
+  "galaxia": "codigo",
+  "subtema": "General",
+  "genero": "tecnologia",
+  "tipo": "codigo",
+  "etiquetas": "",
+  "hash": "e1d29a9e99519f2dadc0e31b87c33c8e2353644a",
+  "fecha": "2026-10-07T20:35:27",
+  "automatico": true,
+  "metodo": "reglas",
+  "motivo": "archivo de código (.ipynb); subgénero «Bases de datos y ciencia de datos»",
+  "materias_web": [],
+  "propuesta": {
+   "galaxia": "codigo",
+   "subtema": "General",
+   "genero": "tecnologia",
+   "tipo": "codigo",
+   "subgenero": "datos"
+  },
+  "subgenero": "datos"
+ },
+ "codigo/General/consulta_ventas.sql": {
+  "capitulos": [
+   {
+    "titulo": "consulta_ventas",
+    "pagina": null
+   }
+  ],
+  "paginas": 0,
+  "titulo": "consulta ventas",
+  "galaxia": "codigo",
+  "subtema": "General",
+  "genero": "tecnologia",
+  "tipo": "codigo",
+  "etiquetas": "",
+  "hash": "730a368c06ab47fcadd765a0b8a9c5dbff8b0b59",
+  "fecha": "2026-10-07T20:35:51",
+  "automatico": true,
+  "metodo": "reglas",
+  "motivo": "archivo de código (.sql); subgénero «Bases de datos y ciencia de datos»",
+  "materias_web": [],
+  "propuesta": {
+   "galaxia": "codigo",
+   "subtema": "General",
+   "genero": "tecnologia",
+   "tipo": "codigo",
+   "subgenero": "datos"
+  },
+  "subgenero": "datos"
+ },
+ "codigo/Regresion_y_GLM/modelo_ols.r": {
+  "capitulos": [
+   {
+    "titulo": "modelo_ols",
+    "pagina": null
+   }
+  ],
+  "paginas": 0,
+  "titulo": "modelo ols",
+  "galaxia": "codigo",
+  "subtema": "Regresión y GLM",
+  "genero": "tecnologia",
+  "tipo": "codigo",
+  "etiquetas": "",
+  "hash": "41d2b75049f83e6cfeba5fb9b6552c276b6601af",
+  "fecha": "2026-10-07T20:35:52",
+  "automatico": true,
+  "metodo": "reglas",
+  "motivo": "archivo de código (.r); el tema «Regresión y GLM» puntúa 9; subgénero «Bases de datos y ciencia de datos»",
+  "materias_web": [],
+  "propuesta": {
+   "galaxia": "codigo",
+   "subtema": "Regresión y GLM",
+   "genero": "tecnologia",
+   "tipo": "codigo",
+   "subgenero": "datos"
+  },
+  "subgenero": "datos"
+ },
+ "codigo/Regresion_y_GLM/regresion_logistica.sas": {
+  "capitulos": [
+   {
+    "titulo": "regresion_logistica",
+    "pagina": null
+   }
+  ],
+  "paginas": 0,
+  "titulo": "regresion logistica",
+  "galaxia": "codigo",
+  "subtema": "Regresión y GLM",
+  "genero": "tecnologia",
+  "tipo": "codigo",
+  "etiquetas": "",
+  "hash": "03accf997d958599f6ec6bb3365886162f9a4a22",
+  "fecha": "2026-10-07T20:36:02",
+  "automatico": true,
+  "metodo": "reglas",
+  "motivo": "archivo de código (.sas); el tema «Regresión y GLM» puntúa 14; subgénero «Bases de datos y ciencia de datos»",
+  "materias_web": [],
+  "propuesta": {
+   "galaxia": "codigo",
+   "subtema": "Regresión y GLM",
+   "genero": "tecnologia",
+   "tipo": "codigo",
+   "subgenero": "datos"
+  },
+  "subgenero": "datos"
+ },
+ "finanzas/Finanzas_y_normativa/capm_apuntes.tex": {
+  "capitulos": [
+   {
+    "titulo": "capm_apuntes",
+    "pagina": null
+   }
+  ],
+  "paginas": 0,
+  "titulo": "capm apuntes",
+  "galaxia": "finanzas",
+  "subtema": "Finanzas y normativa",
+  "genero": "economia",
+  "tipo": "apuntes",
+  "etiquetas": "",
+  "hash": "3b1aca1af670ba1a7e92821ce80a1fe69d3a9e1e",
+  "fecha": "2026-10-07T20:35:28",
+  "automatico": true,
+  "metodo": "reglas",
+  "motivo": "vocabulario financiero (13 términos); el tema «Finanzas y normativa» puntúa 14; subgénero «Derivados y riesgo»",
+  "materias_web": [],
+  "propuesta": {
+   "galaxia": "finanzas",
+   "subtema": "Finanzas y normativa",
+   "genero": "economia",
+   "tipo": "apuntes",
+   "subgenero": "derivados"
+  },
+  "subgenero": "derivados"
+ },
  "libros/Economia_y_finanzas/The_wealth_of_nations.epub": {
   "capitulos": [
    {
@@ -520,5 +714,220 @@
    "genero": "ensayo",
    "tipo": "articulo"
   }
+ },
+ "notas/General/apuntes_roma.md": {
+  "capitulos": [
+   {
+    "titulo": "Roma: apuntes para el examen",
+    "pagina": null
+   }
+  ],
+  "paginas": 0,
+  "titulo": "apuntes roma",
+  "galaxia": "notas",
+  "subtema": "General",
+  "genero": "historia",
+  "tipo": "apuntes",
+  "etiquetas": "",
+  "hash": "54eb073f72870a52664e2171df204e93f56caf1d",
+  "fecha": "2026-10-07T20:35:27",
+  "automatico": true,
+  "metodo": "reglas",
+  "motivo": "documento corto o de apuntes; subgénero «Roma, Grecia y mundo antiguo»",
+  "materias_web": [],
+  "propuesta": {
+   "galaxia": "notas",
+   "subtema": "General",
+   "genero": "historia",
+   "tipo": "apuntes",
+   "subgenero": "antigua"
+  },
+  "subgenero": "antigua"
+ },
+ "notas/General/clientes.csv": {
+  "capitulos": [
+   {
+    "titulo": "clientes",
+    "pagina": null
+   }
+  ],
+  "paginas": 0,
+  "titulo": "clientes",
+  "galaxia": "notas",
+  "subtema": "General",
+  "genero": "estadistica",
+  "tipo": "datos",
+  "etiquetas": "",
+  "hash": "432083448398b67ae3c785b30442bf01ebb54c7e",
+  "fecha": "2026-10-07T20:35:50",
+  "automatico": true,
+  "metodo": "llm",
+  "motivo": "documento corto o de apuntes; género «Tecnología e informática» por parecido con ejemplos (margen 0.04); el LLM propone «Estadística y matemáticas»: Contiene datos estadísticos de clientes; subgénero «Matemática discreta y lógica»",
+  "materias_web": [],
+  "propuesta": {
+   "galaxia": "notas",
+   "subtema": "General",
+   "genero": "estadistica",
+   "tipo": "datos",
+   "subgenero": "discreta"
+  },
+  "subgenero": "discreta"
+ },
+ "notas/General/configuracion.yaml": {
+  "capitulos": [
+   {
+    "titulo": "configuracion",
+    "pagina": null
+   }
+  ],
+  "paginas": 0,
+  "titulo": "configuracion",
+  "galaxia": "notas",
+  "subtema": "General",
+  "genero": "tecnologia",
+  "tipo": "datos",
+  "etiquetas": "",
+  "hash": "cebb8fd91c9508f6b21254ef0ed054f725026125",
+  "fecha": "2026-10-07T20:35:50",
+  "automatico": true,
+  "metodo": "parecido",
+  "motivo": "documento corto o de apuntes; género «Tecnología e informática» por parecido con ejemplos (margen 0.05); subgénero «Bases de datos y ciencia de datos»",
+  "materias_web": [],
+  "propuesta": {
+   "galaxia": "notas",
+   "subtema": "General",
+   "genero": "tecnologia",
+   "tipo": "datos",
+   "subgenero": "datos"
+  },
+  "subgenero": "datos"
+ },
+ "notas/General/estructura_datos.json": {
+  "capitulos": [
+   {
+    "titulo": "estructura_datos",
+    "pagina": null
+   }
+  ],
+  "paginas": 0,
+  "titulo": "estructura datos",
+  "galaxia": "notas",
+  "subtema": "General",
+  "genero": "tecnologia",
+  "tipo": "datos",
+  "etiquetas": "",
+  "hash": "844b38a5366708c90a0b392c7fb7f2e360bc1301",
+  "fecha": "2026-10-07T20:35:51",
+  "automatico": true,
+  "metodo": "parecido",
+  "motivo": "documento corto o de apuntes; género «Tecnología e informática» por parecido con ejemplos (margen 0.11); subgénero «Bases de datos y ciencia de datos»",
+  "materias_web": [],
+  "propuesta": {
+   "galaxia": "notas",
+   "subtema": "General",
+   "genero": "tecnologia",
+   "tipo": "datos",
+   "subgenero": "datos"
+  },
+  "subgenero": "datos"
+ },
+ "notas/General/pagina_curso.html": {
+  "capitulos": [
+   {
+    "titulo": "pagina_curso",
+    "pagina": null
+   }
+  ],
+  "paginas": 0,
+  "titulo": "pagina curso",
+  "galaxia": "notas",
+  "subtema": "General",
+  "genero": "ciencia",
+  "tipo": "apuntes",
+  "etiquetas": "",
+  "hash": "9ac08bf1f0194c53bcbc61d08c5b49fe3aa3df55",
+  "fecha": "2026-10-07T20:36:01",
+  "automatico": true,
+  "metodo": "llm",
+  "motivo": "documento corto o de apuntes; género «Educación y pedagogía» por parecido con ejemplos (margen 0.01); el LLM propone «Ciencia y divulgación»: Explora conceptos matemáticos en series temporales.; subgénero «Geología y ciencias de la Tierra»",
+  "materias_web": [],
+  "propuesta": {
+   "galaxia": "notas",
+   "subtema": "General",
+   "genero": "ciencia",
+   "tipo": "apuntes",
+   "subgenero": "tierra"
+  },
+  "subgenero": "tierra"
+ },
+ "notas/General/receta_carbonara.md": {
+  "capitulos": [
+   {
+    "titulo": "Carbonara con guanciale",
+    "pagina": null
+   }
+  ],
+  "paginas": 0,
+  "titulo": "receta carbonara",
+  "galaxia": "notas",
+  "subtema": "General",
+  "genero": "cocina",
+  "tipo": "apuntes",
+  "etiquetas": "",
+  "hash": "5bbc05d7f57722028530ffb71e61ad1284c13449",
+  "fecha": "2026-10-07T20:36:02",
+  "automatico": true,
+  "metodo": "parecido",
+  "motivo": "documento corto o de apuntes; género «Cocina y gastronomía» por parecido con ejemplos (margen 0.32); subgénero «Recetas»",
+  "materias_web": [],
+  "propuesta": {
+   "galaxia": "notas",
+   "subtema": "General",
+   "genero": "cocina",
+   "tipo": "apuntes",
+   "subgenero": "recetas"
+  },
+  "subgenero": "recetas"
+ },
+ "notas/Inferencia_y_contrastes/apuntes_contrastes.md": {
+  "capitulos": [
+   {
+    "titulo": "Contrastes de hipótesis",
+    "pagina": null
+   },
+   {
+    "titulo": "t de Student",
+    "pagina": null
+   },
+   {
+    "titulo": "Chi-cuadrado",
+    "pagina": null
+   },
+   {
+    "titulo": "Tamaño del efecto",
+    "pagina": null
+   }
+  ],
+  "paginas": 0,
+  "titulo": "apuntes contrastes",
+  "galaxia": "notas",
+  "subtema": "Inferencia y contrastes",
+  "genero": "estadistica",
+  "tipo": "apuntes",
+  "etiquetas": "",
+  "hash": "476c21264688ea317a9de68fd22f37fc2981df6a",
+  "fecha": "2026-10-07T20:35:26",
+  "automatico": true,
+  "metodo": "reglas",
+  "motivo": "documento corto o de apuntes; el tema «Inferencia y contrastes» puntúa 11; subgénero «Inferencia y contrastes»",
+  "materias_web": [],
+  "propuesta": {
+   "galaxia": "notas",
+   "subtema": "Inferencia y contrastes",
+   "genero": "estadistica",
+   "tipo": "apuntes",
+   "subgenero": "inferencia"
+  },
+  "subgenero": "inferencia"
  }
 }

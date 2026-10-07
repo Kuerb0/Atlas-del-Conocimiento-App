@@ -61,3 +61,23 @@ def test_la_app_clasifica_en_segundo_plano_y_publica_el_estado(tmp_path, monkeyp
     assert [a["estado"] for a in st["archivos"]] == ["listo", "listo"] and st["fase"] == "fin"
     assert st["archivos"][0]["resultado"]["genero"] == "historia" and st["archivos"][1]["resultado"]["galaxia"] == "codigo"
     assert "decision" in st["archivos"][0]["etapas"] and st["archivos"][0]["etapas"]["decision"]["estado"] == "fin"
+
+
+def test_el_genero_del_codigo_sale_de_su_contenido_y_el_llm_no_inventa(tmp_path, monkeypatch):
+    from conocimiento import llm
+    cod = tmp_path / "cartera.py"
+    cod.write_text('"""Cartera eficiente de Markowitz: rentabilidad, volatilidad, bonos, derivados, VaR y frontera eficiente."""\n' + "def cartera_minima_varianza(sigma):\n    return sigma\n" * 5, encoding="utf-8")
+    r = im.clasificar(cod, tmp_path)
+    assert r["galaxia"] == "codigo" and r["genero"] == "economia" and r["subgenero"] in {s[0] for s in im.taxonomia.subgeneros("economia")}      # código de finanzas: género Economía, sigue en la galaxia Código
+    # un LLM que propone un género absurdo (fuera de los 3 más probables) se ignora
+    f = tmp_path / "Zorrotz Quimbaya.epub"
+    import zipfile
+    with zipfile.ZipFile(f, "w") as z:
+        z.writestr("mimetype", "application/epub+zip"); z.writestr("c.xhtml", "<p>" + "probabilidad estimacion regresion varianza contrastes " * 80 + "</p>")
+    monkeypatch.setattr(llm, "ACTIVO", True)
+    monkeypatch.setattr(llm, "disponible", lambda *a, **k: True)
+    monkeypatch.setattr(llm, "clasificar", lambda *a, **k: {"genero": "cocina", "motivo": "absurdo"})
+    monkeypatch.setattr(c, "dudoso", lambda *a, **k: True)
+    eventos = {}
+    out = im.clasificar(f, tmp_path, etapa=lambda n, d: eventos.update({n: d}))
+    assert out["genero"] == "estadistica" and out["metodo"] != "llm" and "no estaba entre los 3 más probables" in eventos["llm"]["omitido"]

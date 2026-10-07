@@ -17,9 +17,9 @@ def _montar(tmp_path):
 
 def test_indexa_busca_y_es_incremental(tmp_path):
     fuentes, db = _montar(tmp_path)
-    r = k.indexar(db, fuentes)
+    r = k.indexar(db, fuentes, carpeta=tmp_path)
     assert r["nuevos"] > 100 and r["borrados"] == 0
-    assert k.indexar(db, fuentes)["nuevos"] == 0                       # segunda pasada: nada que hacer
+    assert k.indexar(db, fuentes, carpeta=tmp_path)["nuevos"] == 0                       # segunda pasada: nada que hacer
     h = k.buscar("frontera eficiente", "finanzas", db=db)[0]
     assert h["coleccion"] == "finanzas" and h["ubicacion"] == "Cartera"
     assert k.buscar("duracion modificada", coleccion="finanzas", db=db)[0]["ruta"].endswith("apunte.docx")   # sin acentos y desde .docx
@@ -28,14 +28,14 @@ def test_indexa_busca_y_es_incremental(tmp_path):
 
 def test_filtra_por_tipo_de_archivo(tmp_path):
     fuentes, db = _montar(tmp_path)
-    k.indexar(db, fuentes)
+    k.indexar(db, fuentes, carpeta=tmp_path)
     assert {Path(x["ruta"]).suffix for x in k.buscar("frontera eficiente", "finanzas", db=db, formato="md")} == {".md"}
     assert [Path(x["ruta"]).suffix for x in k.buscar("duracion", "finanzas", db=db, formato=".docx")] == [".docx"]
     assert k.buscar("duracion", "finanzas", db=db, formato="pdf") == []
 
 
 def test_codigo_conceptos_y_sinonimos(tmp_path):
-    db = tmp_path / "i.db"; k.indexar(db, {})
+    db = tmp_path / "i.db"; k.indexar(db, {}, carpeta=tmp_path)
     assert any(x["titulo"] == "tabla_odds_ratios" for x in k.buscar("odds ratios tabla", "codigo", 5, db))
     con = k._abrir(db)
     g = con.execute("select frase from grupos where grupo in (select grupo from grupos where frase = 'vif')").fetchall()
@@ -47,9 +47,9 @@ def test_codigo_conceptos_y_sinonimos(tmp_path):
 
 def test_borrado_y_sin_indice(tmp_path):
     fuentes, db = _montar(tmp_path)
-    k.indexar(db, fuentes)
+    k.indexar(db, fuentes, carpeta=tmp_path)
     (tmp_path / "notas" / "tfm.md").unlink()
-    assert k.indexar(db, fuentes)["borrados"] == 1 and not k.buscar("Markowitz", "finanzas", db=db)
+    assert k.indexar(db, fuentes, carpeta=tmp_path)["borrados"] == 1 and not k.buscar("Markowitz", "finanzas", db=db)
     try:
         k.buscar("x", db=tmp_path / "no.db"); assert False
     except FileNotFoundError:

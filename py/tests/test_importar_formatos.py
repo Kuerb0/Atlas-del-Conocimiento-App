@@ -31,7 +31,8 @@ def test_importa_codigo_cuadernos_datos_y_apuntes(tmp_path):
     res = {Path(r["ruta"]).name: r for r in im.importar([d / n for n in ("limpieza.py", "analisis.ipynb", "notas.md", "ventas.csv", "clase.pptx", "programa.exe")], k_dir, db=db)}
     assert res["programa.exe"]["estado"] == "error" and "no admitido" in res["programa.exe"]["mensaje"]
     assert all(res[n]["estado"] == "ok" for n in ("limpieza.py", "analisis.ipynb", "notas.md", "ventas.csv", "clase.pptx"))
-    assert res["limpieza.py"]["galaxia"] == "codigo" and res["limpieza.py"]["tipo"] == "codigo" and res["limpieza.py"]["genero"] == "tecnologia"
+    assert res["limpieza.py"]["galaxia"] == "codigo" and res["limpieza.py"]["tipo"] == "codigo" and res["limpieza.py"]["genero"] == "tecnologia"       # código sin tema de estadística ni finanzas: tecnología
+    assert res["ventas.csv"]["subgenero"] == ""                                                                                                 # una tabla de números no tiene subgénero
     assert res["analisis.ipynb"]["galaxia"] == "codigo" and res["ventas.csv"]["tipo"] == "datos" and res["notas.md"]["tipo"] == "apuntes"
     assert [c["titulo"] for c in im.capitulos(Path(res["limpieza.py"]["destino"]))[0]] == ["depurar_quimbaya", "Tuxtla"]
     assert [c["titulo"] for c in im.capitulos(Path(res["analisis.ipynb"]["destino"]))[0]] == ["Regresión zorrotz"]

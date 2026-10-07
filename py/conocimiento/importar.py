@@ -54,7 +54,7 @@ _TEMA_PALABRAS = {
     "t_sim": r"simulation|simulacion|monte carlo|mcmc|bayesian|bayesiano|posterior|prior|experimental design|diseno de experimentos|factorial|randomi[sz]ation|aleatorizacion",
     "t_pob": r"survival analysis|analisis de supervivencia|kaplan|hazard|censoring|censura|demograph\w+|demografi\w+|mortality|mortalidad|life tables?|tablas de vida|cohort|epidemiolog\w+",
     "t_seg": r"insurance|seguros?|actuarial|claims?|siniestros?|premium|reserves?|reservas|ruin|credibility|credibilidad|risk theory|reinsurance",
-    "t_fin": r"portfolio|cartera|bonds?|bonos|derivatives?|derivados|interest rates?|tipos de interes|volatility|volatilidad|capm|markowitz|black-?scholes|value at risk|solvency|solvencia|basel"}
+    "t_fin": r"sharpe|drawdown|backtest\w*|moving averages?|medias? moviles?|trading|sortino|alpha de jensen|portfolio|cartera|bonds?|bonos|derivatives?|derivados|interest rates?|tipos de interes|volatility|volatilidad|capm|markowitz|black-?scholes|value at risk|solvency|solvencia|basel"}
 _TEMA_RE = {k: re.compile(r"\b(?:" + v + r")\b") for k, v in _TEMA_PALABRAS.items()}
 GENEROS_CON_TEMA = {"estadistica", "economia", "tecnologia"}          # solo a estos se les asigna un tema del catálogo de estadística: a un libro de historia no le corresponde ninguno
 
@@ -434,8 +434,8 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
         gp["economia" if tid == "t_fin" else "estadistica"] += p        # lo que casa con los temas de estadística/finanzas también cuenta como ese género
     gp["economia"] += fin // 2
     genero = max(gp, key=gp.get) if max(gp.values()) >= 4 else "otro"
-    if tipo == "codigo":
-        genero = "tecnologia"
+    if tipo == "codigo":                                                   # el código va a la galaxia Código, pero su género es el de su contenido: finanzas, estadística o, si no, tecnología
+        genero = ("economia" if tid == "t_fin" else "estadistica") if p >= 6 else "tecnologia"
     subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
     if tipo == "codigo":
         galaxia, motivo = "codigo", f"archivo de código ({ext})"
@@ -458,7 +458,7 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
     metodo, materias, s = "reglas", [], None
     web = None
     forma = None
-    if not corr and tipo in ("libro", "articulo") and clasificador.WEB and len(f.stem.split()) >= 2:    # materias reales de la obra según Open Library (si hay red)
+    if not corr and tipo in ("libro", "articulo") and clasificador.WEB and len(titulo_corto(f.stem).split()) >= 2:    # materias reales de la obra según Open Library (si hay red)
         ev("web", "inicio")
         materias = _materias_web(titulo_corto(f.stem))
         web = _genero_materias(materias)
@@ -495,22 +495,26 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
     else:                                                                  # caso dudoso: se pregunta al LLM local (Ollama)
         ev("llm", "inicio")
         r = llm.clasificar(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500]), materias, {k: v for k, v in GENEROS.items()}, carpeta) if llm.disponible(carpeta) else None
-        if r:
+        marcador = clasificador.puntuar(gp, s, web) if s else gp
+        top3 = [g for g, v in sorted(marcador.items(), key=lambda kv: -kv[1])[:3] if v > 0]
+        if r and top3 and r["genero"] not in top3:                          # un modelo pequeño a veces se inventa un género: si no está entre los 3 más probables, se ignora
+            ev("llm", "fin", omitido=f"propuso «{GENEROS.get(r['genero'], r['genero'])}», que no estaba entre los 3 más probables: se ignora")
+        elif r:
             genero, metodo = r["genero"], "llm"
             subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
             motivo += f"; el LLM propone «{GENEROS[genero]}»: {r['motivo']}"
-            ev("llm", "fin", genero=genero, genero_nombre=GENEROS[genero], razon=r["motivo"], barras=_barras(clasificador.puntuar(gp, s, web) if s else gp, genero))
+            ev("llm", "fin", genero=genero, genero_nombre=GENEROS[genero], razon=r["motivo"], barras=_barras(marcador, genero))
         else:
             ev("llm", "fin", omitido="Ollama no está disponible")
     if materias and metodo not in ("reglas", "llm"):
         motivo += f"; materias web: {', '.join(materias[:4])}"
     ev("subgenero", "inicio")
-    sg = clasificador.subgenero(clasificador.texto_libro(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500])), genero, carpeta)
+    sg = None if tipo == "datos" else clasificador.subgenero(clasificador.texto_libro(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500])), genero, carpeta)       # una tabla de números no tiene tema
     if sg:
         motivo += f"; subgénero «{sg['nombre']}»"
         ev("subgenero", "fin", id=sg["id"], nombre=sg["nombre"], barras=[{"id": k, "nombre": taxonomia.nombre_sub(genero, k, carpeta), "valor": round(100 * v / max(max(sg["puntos"].values()), 1e-9))} for k, v in sg["puntos"].items()])
     else:
-        ev("subgenero", "fin", omitido="este género no tiene subgéneros" if not taxonomia.subgeneros(genero, carpeta) else "no hay pistas suficientes")
+        ev("subgenero", "fin", omitido="los datos numéricos no tienen un tema que clasificar" if tipo == "datos" else "este género no tiene subgéneros" if not taxonomia.subgeneros(genero, carpeta) else "no hay pistas suficientes")
     ev("decision", "fin", genero=genero, genero_nombre=GENEROS.get(genero, genero), galaxia=galaxia, tipo=tipo, subgenero_nombre=sg["nombre"] if sg else "", metodo=metodo, motivo=motivo)
     palabras = re.findall(r"[a-z]+", t[:20000])
     es, en = sum(w in _ES for w in palabras), sum(w in _EN for w in palabras)

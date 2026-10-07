@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.10.0 - Instalador
+title Arbol de la estadistica 1.10.1 - Actualizar
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=1.10.0"
+set "ARBOL_MODO=actualizar"
+set "ARBOL_VERSION=1.10.1"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -680,7 +680,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.10.0
+1.10.1
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -3016,7 +3016,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.10.0"
+version = "1.10.1"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3696,7 +3696,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.10.0"
+__version__ = "1.10.1"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -14879,7 +14879,7 @@ _TEMA_PALABRAS = {
     "t_sim": r"simulation|simulacion|monte carlo|mcmc|bayesian|bayesiano|posterior|prior|experimental design|diseno de experimentos|factorial|randomi[sz]ation|aleatorizacion",
     "t_pob": r"survival analysis|analisis de supervivencia|kaplan|hazard|censoring|censura|demograph\w+|demografi\w+|mortality|mortalidad|life tables?|tablas de vida|cohort|epidemiolog\w+",
     "t_seg": r"insurance|seguros?|actuarial|claims?|siniestros?|premium|reserves?|reservas|ruin|credibility|credibilidad|risk theory|reinsurance",
-    "t_fin": r"portfolio|cartera|bonds?|bonos|derivatives?|derivados|interest rates?|tipos de interes|volatility|volatilidad|capm|markowitz|black-?scholes|value at risk|solvency|solvencia|basel"}
+    "t_fin": r"sharpe|drawdown|backtest\w*|moving averages?|medias? moviles?|trading|sortino|alpha de jensen|portfolio|cartera|bonds?|bonos|derivatives?|derivados|interest rates?|tipos de interes|volatility|volatilidad|capm|markowitz|black-?scholes|value at risk|solvency|solvencia|basel"}
 _TEMA_RE = {k: re.compile(r"\b(?:" + v + r")\b") for k, v in _TEMA_PALABRAS.items()}
 GENEROS_CON_TEMA = {"estadistica", "economia", "tecnologia"}          # solo a estos se les asigna un tema del catálogo de estadística: a un libro de historia no le corresponde ninguno
 
@@ -15259,8 +15259,8 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
         gp["economia" if tid == "t_fin" else "estadistica"] += p        # lo que casa con los temas de estadística/finanzas también cuenta como ese género
     gp["economia"] += fin // 2
     genero = max(gp, key=gp.get) if max(gp.values()) >= 4 else "otro"
-    if tipo == "codigo":
-        genero = "tecnologia"
+    if tipo == "codigo":                                                   # el código va a la galaxia Código, pero su género es el de su contenido: finanzas, estadística o, si no, tecnología
+        genero = ("economia" if tid == "t_fin" else "estadistica") if p >= 6 else "tecnologia"
     subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
     if tipo == "codigo":
         galaxia, motivo = "codigo", f"archivo de código ({ext})"
@@ -15283,7 +15283,7 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
     metodo, materias, s = "reglas", [], None
     web = None
     forma = None
-    if not corr and tipo in ("libro", "articulo") and clasificador.WEB and len(f.stem.split()) >= 2:    # materias reales de la obra según Open Library (si hay red)
+    if not corr and tipo in ("libro", "articulo") and clasificador.WEB and len(titulo_corto(f.stem).split()) >= 2:    # materias reales de la obra según Open Library (si hay red)
         ev("web", "inicio")
         materias = _materias_web(titulo_corto(f.stem))
         web = _genero_materias(materias)
@@ -15320,22 +15320,26 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
     else:                                                                  # caso dudoso: se pregunta al LLM local (Ollama)
         ev("llm", "inicio")
         r = llm.clasificar(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500]), materias, {k: v for k, v in GENEROS.items()}, carpeta) if llm.disponible(carpeta) else None
-        if r:
+        marcador = clasificador.puntuar(gp, s, web) if s else gp
+        top3 = [g for g, v in sorted(marcador.items(), key=lambda kv: -kv[1])[:3] if v > 0]
+        if r and top3 and r["genero"] not in top3:                          # un modelo pequeño a veces se inventa un género: si no está entre los 3 más probables, se ignora
+            ev("llm", "fin", omitido=f"propuso «{GENEROS.get(r['genero'], r['genero'])}», que no estaba entre los 3 más probables: se ignora")
+        elif r:
             genero, metodo = r["genero"], "llm"
             subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
             motivo += f"; el LLM propone «{GENEROS[genero]}»: {r['motivo']}"
-            ev("llm", "fin", genero=genero, genero_nombre=GENEROS[genero], razon=r["motivo"], barras=_barras(clasificador.puntuar(gp, s, web) if s else gp, genero))
+            ev("llm", "fin", genero=genero, genero_nombre=GENEROS[genero], razon=r["motivo"], barras=_barras(marcador, genero))
         else:
             ev("llm", "fin", omitido="Ollama no está disponible")
     if materias and metodo not in ("reglas", "llm"):
         motivo += f"; materias web: {', '.join(materias[:4])}"
     ev("subgenero", "inicio")
-    sg = clasificador.subgenero(clasificador.texto_libro(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500])), genero, carpeta)
+    sg = None if tipo == "datos" else clasificador.subgenero(clasificador.texto_libro(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500])), genero, carpeta)       # una tabla de números no tiene tema
     if sg:
         motivo += f"; subgénero «{sg['nombre']}»"
         ev("subgenero", "fin", id=sg["id"], nombre=sg["nombre"], barras=[{"id": k, "nombre": taxonomia.nombre_sub(genero, k, carpeta), "valor": round(100 * v / max(max(sg["puntos"].values()), 1e-9))} for k, v in sg["puntos"].items()])
     else:
-        ev("subgenero", "fin", omitido="este género no tiene subgéneros" if not taxonomia.subgeneros(genero, carpeta) else "no hay pistas suficientes")
+        ev("subgenero", "fin", omitido="los datos numéricos no tienen un tema que clasificar" if tipo == "datos" else "este género no tiene subgéneros" if not taxonomia.subgeneros(genero, carpeta) else "no hay pistas suficientes")
     ev("decision", "fin", genero=genero, genero_nombre=GENEROS.get(genero, genero), galaxia=galaxia, tipo=tipo, subgenero_nombre=sg["nombre"] if sg else "", metodo=metodo, motivo=motivo)
     palabras = re.findall(r"[a-z]+", t[:20000])
     es, en = sum(w in _ES for w in palabras), sum(w in _EN for w in palabras)
@@ -32446,9 +32450,9 @@ def _montar(tmp_path):
 
 def test_indexa_busca_y_es_incremental(tmp_path):
     fuentes, db = _montar(tmp_path)
-    r = k.indexar(db, fuentes)
+    r = k.indexar(db, fuentes, carpeta=tmp_path)
     assert r["nuevos"] > 100 and r["borrados"] == 0
-    assert k.indexar(db, fuentes)["nuevos"] == 0                       # segunda pasada: nada que hacer
+    assert k.indexar(db, fuentes, carpeta=tmp_path)["nuevos"] == 0                       # segunda pasada: nada que hacer
     h = k.buscar("frontera eficiente", "finanzas", db=db)[0]
     assert h["coleccion"] == "finanzas" and h["ubicacion"] == "Cartera"
     assert k.buscar("duracion modificada", coleccion="finanzas", db=db)[0]["ruta"].endswith("apunte.docx")   # sin acentos y desde .docx
@@ -32457,14 +32461,14 @@ def test_indexa_busca_y_es_incremental(tmp_path):
 
 def test_filtra_por_tipo_de_archivo(tmp_path):
     fuentes, db = _montar(tmp_path)
-    k.indexar(db, fuentes)
+    k.indexar(db, fuentes, carpeta=tmp_path)
     assert {Path(x["ruta"]).suffix for x in k.buscar("frontera eficiente", "finanzas", db=db, formato="md")} == {".md"}
     assert [Path(x["ruta"]).suffix for x in k.buscar("duracion", "finanzas", db=db, formato=".docx")] == [".docx"]
     assert k.buscar("duracion", "finanzas", db=db, formato="pdf") == []
 
 
 def test_codigo_conceptos_y_sinonimos(tmp_path):
-    db = tmp_path / "i.db"; k.indexar(db, {})
+    db = tmp_path / "i.db"; k.indexar(db, {}, carpeta=tmp_path)
     assert any(x["titulo"] == "tabla_odds_ratios" for x in k.buscar("odds ratios tabla", "codigo", 5, db))
     con = k._abrir(db)
     g = con.execute("select frase from grupos where grupo in (select grupo from grupos where frase = 'vif')").fetchall()
@@ -32476,9 +32480,9 @@ def test_codigo_conceptos_y_sinonimos(tmp_path):
 
 def test_borrado_y_sin_indice(tmp_path):
     fuentes, db = _montar(tmp_path)
-    k.indexar(db, fuentes)
+    k.indexar(db, fuentes, carpeta=tmp_path)
     (tmp_path / "notas" / "tfm.md").unlink()
-    assert k.indexar(db, fuentes)["borrados"] == 1 and not k.buscar("Markowitz", "finanzas", db=db)
+    assert k.indexar(db, fuentes, carpeta=tmp_path)["borrados"] == 1 and not k.buscar("Markowitz", "finanzas", db=db)
     try:
         k.buscar("x", db=tmp_path / "no.db"); assert False
     except FileNotFoundError:
@@ -34072,7 +34076,8 @@ def test_importa_codigo_cuadernos_datos_y_apuntes(tmp_path):
     res = {Path(r["ruta"]).name: r for r in im.importar([d / n for n in ("limpieza.py", "analisis.ipynb", "notas.md", "ventas.csv", "clase.pptx", "programa.exe")], k_dir, db=db)}
     assert res["programa.exe"]["estado"] == "error" and "no admitido" in res["programa.exe"]["mensaje"]
     assert all(res[n]["estado"] == "ok" for n in ("limpieza.py", "analisis.ipynb", "notas.md", "ventas.csv", "clase.pptx"))
-    assert res["limpieza.py"]["galaxia"] == "codigo" and res["limpieza.py"]["tipo"] == "codigo" and res["limpieza.py"]["genero"] == "tecnologia"
+    assert res["limpieza.py"]["galaxia"] == "codigo" and res["limpieza.py"]["tipo"] == "codigo" and res["limpieza.py"]["genero"] == "tecnologia"       # código sin tema de estadística ni finanzas: tecnología
+    assert res["ventas.csv"]["subgenero"] == ""                                                                                                 # una tabla de números no tiene subgénero
     assert res["analisis.ipynb"]["galaxia"] == "codigo" and res["ventas.csv"]["tipo"] == "datos" and res["notas.md"]["tipo"] == "apuntes"
     assert [c["titulo"] for c in im.capitulos(Path(res["limpieza.py"]["destino"]))[0]] == ["depurar_quimbaya", "Tuxtla"]
     assert [c["titulo"] for c in im.capitulos(Path(res["analisis.ipynb"]["destino"]))[0]] == ["Regresión zorrotz"]
@@ -35041,6 +35046,22 @@ def test_voto_de_las_materias_web(tmp_path, monkeypatch):
     assert im.clasificar(f, tmp_path)["metodo"] == "reglas"                         # sin red (o desactivado) se clasifica como siempre
 
 
+def test_la_consulta_web_vale_tambien_para_archivos_con_guiones_bajos(tmp_path, monkeypatch):
+    """Los libros de la biblioteca se guardan como The_Reluctant_Spy.epub: ese nombre son 3 palabras, no una."""
+    monkeypatch.setattr(c, "WEB", True)
+    vistos = []
+    monkeypatch.setattr(im, "_materias_web", lambda t: vistos.append(t) or ["Fiction"])
+    f = tmp_path / "The_Reluctant_Spy.epub"; _epub(f, "texto generico " * 300)
+    assert im.clasificar(f, tmp_path)["genero"] == "novela" and vistos == ["The Reluctant Spy"]
+
+
+def test_vocabulario_de_inversion_cuenta_como_finanzas(tmp_path):
+    f = tmp_path / "backtest.md"
+    f.write_text("# Backtest de una estrategia\n\nRatio de Sharpe, drawdown máximo y backtest de la media móvil: " * 6, encoding="utf-8")
+    r = im.clasificar(f, tmp_path)
+    assert r["genero"] == "economia"
+
+
 def test_la_forma_de_la_obra_manda_sobre_el_tema(tmp_path, monkeypatch):
     monkeypatch.setattr(c, "WEB", True)
     f = tmp_path / "The Reluctant Spy.epub"; _epub(f, "la CIA el gobierno el Estado politica democracia " * 300)
@@ -35927,6 +35948,26 @@ def test_la_app_clasifica_en_segundo_plano_y_publica_el_estado(tmp_path, monkeyp
     assert [a["estado"] for a in st["archivos"]] == ["listo", "listo"] and st["fase"] == "fin"
     assert st["archivos"][0]["resultado"]["genero"] == "historia" and st["archivos"][1]["resultado"]["galaxia"] == "codigo"
     assert "decision" in st["archivos"][0]["etapas"] and st["archivos"][0]["etapas"]["decision"]["estado"] == "fin"
+
+
+def test_el_genero_del_codigo_sale_de_su_contenido_y_el_llm_no_inventa(tmp_path, monkeypatch):
+    from conocimiento import llm
+    cod = tmp_path / "cartera.py"
+    cod.write_text('"""Cartera eficiente de Markowitz: rentabilidad, volatilidad, bonos, derivados, VaR y frontera eficiente."""\n' + "def cartera_minima_varianza(sigma):\n    return sigma\n" * 5, encoding="utf-8")
+    r = im.clasificar(cod, tmp_path)
+    assert r["galaxia"] == "codigo" and r["genero"] == "economia" and r["subgenero"] in {s[0] for s in im.taxonomia.subgeneros("economia")}      # código de finanzas: género Economía, sigue en la galaxia Código
+    # un LLM que propone un género absurdo (fuera de los 3 más probables) se ignora
+    f = tmp_path / "Zorrotz Quimbaya.epub"
+    import zipfile
+    with zipfile.ZipFile(f, "w") as z:
+        z.writestr("mimetype", "application/epub+zip"); z.writestr("c.xhtml", "<p>" + "probabilidad estimacion regresion varianza contrastes " * 80 + "</p>")
+    monkeypatch.setattr(llm, "ACTIVO", True)
+    monkeypatch.setattr(llm, "disponible", lambda *a, **k: True)
+    monkeypatch.setattr(llm, "clasificar", lambda *a, **k: {"genero": "cocina", "motivo": "absurdo"})
+    monkeypatch.setattr(c, "dudoso", lambda *a, **k: True)
+    eventos = {}
+    out = im.clasificar(f, tmp_path, etapa=lambda n, d: eventos.update({n: d}))
+    assert out["genero"] == "estadistica" and out["metodo"] != "llm" and "no estaba entre los 3 más probables" in eventos["llm"]["omitido"]
 :::END
 :::BEGIN py/visor/agujero.js|text
 /* agujero.js — el agujero negro de la pestaña «Importar»: disco de acreción en órbita, anillo de luz y halo curvado por la gravedad (como en Interstellar).
