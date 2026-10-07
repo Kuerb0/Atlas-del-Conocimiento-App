@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.8.2 - Actualizar
+title Arbol de la estadistica 1.8.3 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=actualizar"
-set "ARBOL_VERSION=1.8.2"
+set "ARBOL_MODO=instalar"
+set "ARBOL_VERSION=1.8.3"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -369,6 +369,168 @@ function Abrir-App($dest) {
     else { Start-Process -FilePath (Ruta $dest 'abrir_arbol.bat') -WindowStyle Hidden -WorkingDirectory $dest }
 }
 
+
+# ---------------------------------------------------------------- IA local: embeddings (fastembed) + LLM (Ollama), con barras de progreso
+$Bloque = [string][char]0x2588; $Claro = [string][char]0x2591; $Ok = [string][char]0x2713; $No = [string][char]0x2717
+$ModeloLLM = 'qwen2.5:3b'
+$ModeloEmb = 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'
+
+function Barra($pct, $texto) {
+    if ($pct -lt 0) { $pct = 0 }; if ($pct -gt 100) { $pct = 100 }
+    $n = [int](30 * $pct / 100)
+    $linea = ('      ' + ($Bloque * $n) + ($Claro * (30 - $n)) + (' {0,3}%  ' -f [int]$pct) + $texto)
+    try { [Console]::Write("`r" + $linea.PadRight(110)) } catch { }
+}
+function Barra-Fin { try { [Console]::WriteLine() } catch { } }
+
+function Estado-Linea($bien, $texto, $detalle) {                  # ojo: PowerShell no distingue mayúsculas, un parámetro $ok taparía el símbolo $Ok
+    if ($bien) { Write-Host ("      $Ok $texto" + $(if ($detalle) { "  ($detalle)" } else { '' })) -ForegroundColor Green }
+    else { Write-Host ("      $No $texto" + $(if ($detalle) { "  ($detalle)" } else { '' })) -ForegroundColor Yellow }
+}
+
+function Tamano-Remoto($url) {
+    $n = [int64]0
+    try { foreach ($l in @(& curl.exe -sIL $url 2>$null)) { if ($l -match '^(?i)content-length:\s*(\d+)') { $n = [int64]$Matches[1] } } } catch { }
+    return $n
+}
+
+# Descarga con barra de progreso, velocidad y reanudación (curl -C -): si se corta, al repetir sigue por donde iba.
+function Descargar-Con-Barra($url, $fichero, $etiqueta) {
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if (-not $curl) {
+        try { Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $fichero -TimeoutSec 3600; return (Test-Path -LiteralPath $fichero) } catch { return $false }
+    }
+    $total = Tamano-Remoto $url
+    $p = Start-Process -FilePath $curl.Source -ArgumentList @('-L', '-C', '-', '--fail', '--retry', '5', '-s', '-o', ('"' + $fichero + '"'), ('"' + $url + '"')) -PassThru -WindowStyle Hidden
+    $null = $p.Handle
+    $ultimo = [int64]0; $tUlt = Get-Date; $vel = 0.0
+    while (-not $p.HasExited) {
+        Start-Sleep -Milliseconds 400
+        $tam = if (Test-Path -LiteralPath $fichero) { (Get-Item -LiteralPath $fichero).Length } else { 0 }
+        $dt = ((Get-Date) - $tUlt).TotalSeconds
+        if ($dt -ge 1) { $vel = ($tam - $ultimo) / $dt; $ultimo = $tam; $tUlt = Get-Date }
+        $pct = if ($total -gt 0) { 100.0 * $tam / $total } else { 0 }
+        Barra $pct ('{0}  {1:N0} de {2:N0} MB  {3:N1} MB/s' -f $etiqueta, ($tam / 1MB), ($total / 1MB), ($vel / 1MB))
+    }
+    $p.WaitForExit()
+    $tam = if (Test-Path -LiteralPath $fichero) { (Get-Item -LiteralPath $fichero).Length } else { 0 }
+    $bien = ($p.ExitCode -eq 0) -and ($total -le 0 -or $tam -ge $total)
+    if ($bien) { Barra 100 ('{0}  {1:N0} MB' -f $etiqueta, ($tam / 1MB)) }
+    Barra-Fin
+    return $bien
+}
+
+# Espera a que termine un proceso mostrando una barra que avanza con el tiempo (no se sabe cuánto falta) y, si se indica, el tamaño de una carpeta.
+function Esperar-Con-Barra($proceso, $texto, $carpeta, $esperadoMB) {
+    $giro = '|', '/', '-', '\'
+    $i = 0
+    while (-not $proceso.HasExited) {
+        $extra = ''; $pct = -1
+        if ($carpeta -and (Test-Path -LiteralPath $carpeta) -and $esperadoMB -gt 0) {
+            $mb = ((Get-ChildItem -LiteralPath $carpeta -Recurse -File -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum) / 1MB
+            $pct = 100.0 * $mb / $esperadoMB; $extra = ('  {0:N0} de ~{1:N0} MB' -f $mb, $esperadoMB)
+        }
+        if ($pct -ge 0) { Barra $pct ($texto + $extra) }
+        else { try { [Console]::Write("`r      " + $giro[$i % 4] + ' ' + $texto + '   ') } catch { } }
+        $i++; Start-Sleep -Milliseconds 400
+    }
+    $proceso.WaitForExit()
+    if ($carpeta -and $esperadoMB -gt 0) { Barra 100 $texto }
+    Barra-Fin
+}
+
+function Buscar-Ollama {
+    $c = Get-Command ollama -ErrorAction SilentlyContinue
+    if ($c) { return $c.Source }
+    $p = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe'
+    if (Test-Path -LiteralPath $p) { return $p }
+    return $null
+}
+function Ollama-Responde { try { Invoke-RestMethod -Uri 'http://localhost:11434/api/tags' -TimeoutSec 8 | Out-Null; return $true } catch { return $false } }      # la primera llamada de PowerShell tarda 2-3 s: con 2 s de margen daba falsos negativos
+function Arrancar-Ollama($exe) {
+    if (Ollama-Responde) { return $true }
+    # El servidor es «ollama serve». La aplicación de la bandeja a veces no lo levanta (queda «server not ready»), así que si en 8 s no responde se arranca directamente.
+    try { Start-Process -FilePath $exe -ArgumentList 'serve' -WindowStyle Hidden -RedirectStandardOutput (Join-Path ([IO.Path]::GetTempPath()) 'ollama_serve_out.txt') -RedirectStandardError (Join-Path ([IO.Path]::GetTempPath()) 'ollama_serve_err.txt') } catch { }      # con la salida redirigida arranca; oculta y sin redirigir se queda colgado
+    for ($i = 0; $i -lt 40; $i++) { if (Ollama-Responde) { return $true }; Start-Sleep -Seconds 1 }
+    return $false
+}
+function Tiene-Modelo-Ollama($modelo) {
+    try { $r = Invoke-RestMethod -Uri 'http://localhost:11434/api/tags' -TimeoutSec 8; return [bool]($r.models | Where-Object { $_.name -eq $modelo }) } catch { return $false }
+}
+function Tiene-Modelo-Embeddings($dest) {
+    $m = Ruta $dest 'conocimiento' 'modelos'
+    if (-not (Test-Path -LiteralPath $m)) { return $false }
+    $mb = ((Get-ChildItem -LiteralPath $m -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match 'MiniLM' } | Measure-Object Length -Sum).Sum) / 1MB
+    return ($mb -gt 150)
+}
+
+function Instalar-Ollama {
+    $url = 'https://github.com/ollama/ollama/releases/latest/download/OllamaSetup.exe'
+    $f = Join-Path ([IO.Path]::GetTempPath()) 'OllamaSetup.exe'
+    Info 'Descargando el instalador oficial de Ollama (github.com/ollama/ollama, ~1,6 GB; si se corta, repite y sigue donde iba)...'
+    if (-not (Descargar-Con-Barra $url $f 'Ollama')) { Aviso 'No se pudo descargar Ollama (¿internet?). Repite esto cuando tengas conexión.'; return $null }
+    $firma = Get-AuthenticodeSignature -LiteralPath $f
+    if ($firma.Status -ne 'Valid' -or ([string]$firma.SignerCertificate.Subject) -notmatch 'Ollama') {
+        Aviso 'La firma digital del instalador no es la de Ollama Inc.: no lo ejecuto.'
+        Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue
+        return $null
+    }
+    Info 'Firma digital verificada (Ollama Inc.). Instalando (solo para tu usuario)...'
+    $p = Start-Process -FilePath $f -ArgumentList @('/VERYSILENT', '/NORESTART', '/SUPPRESSMSGBOXES') -PassThru
+    $null = $p.Handle
+    Esperar-Con-Barra $p 'Instalando Ollama' $null 0
+    Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue
+    return (Buscar-Ollama)
+}
+
+# Comprueba qué hay, muestra una tabla ✓/✗ con lo que ya está instalado y descarga solo lo que falta.
+function Preparar-IA($py, $dest) {
+    Paso '[IA local] Comprobando qué hay instalado (reglas + parecido con embeddings + LLM con Ollama)...'
+    $tieneFE = $false
+    try { & $py -c 'import fastembed' 2>$null; $tieneFE = ($LASTEXITCODE -eq 0) } catch { }
+    $tieneEmb = Tiene-Modelo-Embeddings $dest
+    $exe = Buscar-Ollama
+    $respondia = if ($exe) { Arrancar-Ollama $exe } else { $false }          # si está instalado pero apagado, se arranca para poder mirar qué modelos tiene
+    $tieneLLM = if ($respondia) { Tiene-Modelo-Ollama $ModeloLLM } else { $false }
+    Estado-Linea $tieneFE 'fastembed (embeddings locales)' $(if ($tieneFE) { 'ya instalado' } else { 'falta, ~60 MB' })
+    Estado-Linea $tieneEmb 'modelo de parecido MiniLM' $(if ($tieneEmb) { 'ya descargado' } else { 'falta, ~240 MB' })
+    Estado-Linea ([bool]$exe) 'Ollama' $(if ($exe) { $exe } else { 'falta, ~1,6 GB' })
+    Estado-Linea $tieneLLM "modelo $ModeloLLM" $(if ($tieneLLM) { 'ya descargado' } elseif ($exe -and -not $respondia) { 'Ollama no arranca: ábrelo y repite' } else { 'falta, ~1,9 GB' })
+    $faltaAlgo = (-not $tieneFE) -or (-not $tieneEmb) -or (-not $exe) -or ($exe -and -not $tieneLLM)
+    if (-not $faltaAlgo) { Info 'Todo al día: no hay nada que descargar.'; return }
+    if (-not $env:ARBOL_DESTINO) {
+        $r = Read-Host '  ¿Instalar lo que falta? Es opcional: sin ello el Árbol clasifica con reglas, pero peor [S/n]'
+        if ($r -match '^\s*[nN]') { Info 'Omitido. Puedes repetirlo cuando quieras ejecutando de nuevo este archivo.'; return }
+    }
+    if (-not $tieneFE) {
+        Paso '[IA local] Instalando fastembed...'
+        & $py -m pip install --disable-pip-version-check --no-warn-script-location -q fastembed | Out-Host
+        $tieneFE = ($LASTEXITCODE -eq 0)
+        if (-not $tieneFE) { Aviso 'fastembed no se instaló (¿internet o versión de Python?): el Árbol seguirá con reglas.' }
+    }
+    if ($tieneFE -and -not $tieneEmb) {
+        Paso '[IA local] Descargando el modelo de parecido (MiniLM, 240 MB)...'
+        $env:HF_HUB_DISABLE_SYMLINKS_WARNING = '1'
+        $p = Start-Process -FilePath $py -ArgumentList @('-m', 'conocimiento', 'modelos') -WorkingDirectory (Ruta $dest 'py') -PassThru -WindowStyle Hidden
+        $null = $p.Handle
+        Esperar-Con-Barra $p 'Modelo MiniLM' (Ruta $dest 'conocimiento' 'modelos') 240
+        if ($p.ExitCode -ne 0) { Aviso 'El modelo de parecido no se descargó del todo; se reintentará la próxima vez que se use.' }
+    }
+    if (-not $exe) {
+        Paso '[IA local] Instalando Ollama (el motor del LLM local)...'
+        $exe = Instalar-Ollama
+        if (-not $exe) { return }
+        Info "Ollama instalado en $exe"
+    }
+    Paso '[IA local] Arrancando Ollama...'
+    if (-not (Arrancar-Ollama $exe)) { Aviso 'Ollama no respondió. Ábrelo desde el menú Inicio y repite esto para bajar el modelo.'; return }
+    if (-not (Tiene-Modelo-Ollama $ModeloLLM)) {
+        Paso "[IA local] Descargando el modelo $ModeloLLM (1,9 GB; Ollama muestra su propio progreso)..."
+        & $exe pull $ModeloLLM | Out-Host
+        if (Tiene-Modelo-Ollama $ModeloLLM) { Estado-Linea $true "modelo $ModeloLLM" 'listo' } else { Aviso "El modelo $ModeloLLM no se descargó. Repite esto con conexión." }
+    } else { Estado-Linea $true "modelo $ModeloLLM" 'ya descargado' }
+}
+
 # ---------------------------------------------------------------- flujo común tras copiar los ficheros
 function Preparar-Python-Y-Visor($dest) {
     Paso '[Python] Buscando Python 3.10 o superior...'
@@ -402,6 +564,8 @@ function Preparar-Python-Y-Visor($dest) {
     $prueba = & $py -c 'import arbol_estadistica, arbol_estadistica.graficos; print(arbol_estadistica.__version__)' 2>&1
     if ($LASTEXITCODE -eq 0) { Info "Comprobado: arbol_estadistica $($prueba | Select-Object -Last 1)" }
     else { Aviso ('La importación de prueba falló: ' + (($prueba | Select-Object -Last 3) -join ' | ')) }
+
+    if ($EnWindows -and $env:ARBOL_SIN_RED -ne '1' -and $env:ARBOL_SIN_IA -ne '1') { Preparar-IA $py $dest }
 
     Paso '[Catálogo] Añadiendo los conceptos nuevos sin tocar los tuyos...'
     & $py (Ruta $dest 'py' 'fusionar_catalogo.py') | Out-Host
@@ -454,7 +618,29 @@ if ($Modo -eq 'actualizar') {
     Write-Host "  Versión instalada: $anterior  ->  nueva: $Version"
     Write-Host '  Se sustituye el programa (py, teoria, ejemplos, assets, documentos); tu catálogo de'
     Write-Host '  conceptos se conserva y solo se le añaden los conceptos nuevos.'
-    if (-not $env:ARBOL_DESTINO) { $r = Read-Host '  Pulsa Enter para continuar o Q para cancelar'; if ($r -match '^\s*[qQ]') { exit 2 } }
+    if ($anterior -eq $Version -and -not $env:ARBOL_DESTINO) {
+        Write-Host ''
+        Write-Host "  Ya tienes instalada la versión ${Version}: no hace falta sustituir el programa." -ForegroundColor Green
+        Write-Host '  Solo voy a comprobar que están todos los componentes (Python, librerías, IA local) e instalar los que falten.'
+        $r = Read-Host '  Enter = comprobar componentes   R = reinstalar el programa igualmente   Q = salir'
+        if ($r -match '^\s*[qQ]') { exit 2 }
+        if ($r -notmatch '^\s*[rR]') {
+            $pyc = Buscar-Python $dest
+            if (-not $pyc) { Fallo 'No encuentro Python en esta instalación. Usa el instalador completo.' }
+            $Estado.py = $pyc
+            Preparar-IA $pyc $dest
+            Titulo 'Comprobación terminada'
+            exit 0
+        }
+    } elseif (-not $env:ARBOL_DESTINO) { $r = Read-Host '  Pulsa Enter para continuar o Q para cancelar'; if ($r -match '^\s*[qQ]') { exit 2 } }
+    if ($EnWindows) {                                            # una app abierta bloquea la carpeta py: se cierra (con aviso) antes de moverla
+        $abiertas = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^pythonw?\.exe$' -and $_.CommandLine -like '*arbol_app.pyw*' })
+        if ($abiertas.Count) {
+            Info 'La app del Árbol está abierta: la cierro para poder actualizarla (se volverá a abrir al terminar).'
+            foreach ($a in $abiertas) { try { Stop-Process -Id $a.ProcessId -Force -ErrorAction Stop } catch { } }
+            Start-Sleep -Seconds 2
+        }
+    }
 
     $marca = Get-Date -Format 'yyyyMMdd_HHmmss'
     $copias = Join-Path $dest 'anteriores'
@@ -494,7 +680,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.8.2
+1.8.3
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -2793,7 +2979,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.8.2"
+version = "1.8.3"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -2841,9 +3027,6 @@ patsy
 matplotlib>=3.7
 pytest
 pypdf
-:::END
-:::BEGIN py/{r['galaxia']|text
-
 :::END
 :::BEGIN py/aprender/01_fundamentos.json|text
 {
@@ -3476,7 +3659,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.8.2"
+__version__ = "1.8.3"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -14245,6 +14428,7 @@ r = sub.add_parser("revisar", help="lista lo importado por fecha con cómo se cl
 r.add_argument("--desde", default="", help="AAAA-MM-DD")
 r.add_argument("--hasta", default="", help="AAAA-MM-DD")
 r.add_argument("--json", action="store_true", help="salida en JSON (para que Claude la revise)")
+sub.add_parser("modelos", help="descarga el modelo de embeddings (lo usa el instalador)")
 b = sub.add_parser("buscar", help="busca en todas las colecciones")
 b.add_argument("consulta", nargs="+")
 b.add_argument("-c", "--coleccion", help="codigo | conceptos | teoria | libros | finanzas | notas …")
@@ -14264,6 +14448,13 @@ elif a.orden == "importar":
     from .importar import importar
     for r in importar([{"ruta": f, "galaxia": a.galaxia, "subtema": a.subtema, "tipo": a.tipo, "genero": a.genero} for f in a.ficheros]):
         print(f"{r['estado']:10} {r['nombre']}  ->  {r.get('galaxia', '')} › {r.get('subtema', '')} ({r.get('tipo', '')})  {r['mensaje']}")
+elif a.orden == "modelos":
+    from . import clasificador
+    try:
+        print(clasificador.preparar())
+    except Exception as e:
+        print(f"ERROR: {type(e).__name__}: {e}")
+        sys.exit(1)
 elif a.orden == "revisar":
     from .importar import revisar
     filas = revisar(a.desde, a.hasta)
@@ -14452,6 +14643,14 @@ def _embedder(nombre: str, carpeta: Path | str = None):  # los modelos son de to
             return np.array([memo[t] for t in textos])
         _cache[nombre] = emb
     return _cache[nombre]
+
+
+def preparar(carpeta: Path | str | None = None) -> str:
+    """Descarga (si falta) el modelo de embeddings y comprueba que funciona. Lo usa el instalador (`python -m conocimiento modelos`). Devuelve un mensaje; lanza excepción si no se pudo."""
+    carpeta = Path(carpeta or CARPETA)
+    nombre = modelo(carpeta)
+    v = _embedder(nombre, carpeta)(["prueba del modelo"])
+    return f"modelo {nombre} listo ({v.shape[1]} dimensiones) en {Path(CARPETA) / 'modelos'}"
 
 
 def texto_libro(titulo: str, capitulos: list, vista: str = "") -> str:
@@ -15261,8 +15460,10 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import time
 import urllib.request
+from shutil import which
 from pathlib import Path
 
 from . import CARPETA
@@ -15293,6 +15494,27 @@ def _http(url: str, datos: dict | None = None, espera: float = ESPERA) -> dict:
         return json.loads(r.read().decode("utf-8"))
 
 
+def _arrancar() -> None:
+    """Si Ollama está instalado pero apagado, levanta `ollama serve` sin ventana y espera hasta 12 s a que responda. Una sola vez por sesión."""
+    if _estado.get("arrancado"):
+        return
+    _estado["arrancado"] = True
+    exe = which("ollama") or str(Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Ollama" / "ollama.exe")
+    if not Path(exe).exists():
+        return
+    try:
+        subprocess.Popen([exe, "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except OSError:
+        return
+    for _ in range(24):
+        time.sleep(.5)
+        try:
+            _http(URL + "/api/tags", espera=1)
+            return
+        except Exception:
+            continue
+
+
 def disponible(carpeta: Path | str = CARPETA) -> bool:
     """¿Ollama está corriendo y tiene el modelo? Si sí, se mira una sola vez por sesión; si no, cada minuto (la consulta tarda 2 s como mucho)."""
     if not ACTIVO or os.environ.get("ARBOL_LLM", "").lower() in ("no", "0", "off"):
@@ -15300,7 +15522,12 @@ def disponible(carpeta: Path | str = CARPETA) -> bool:
     if "ok" not in _estado or (not _estado["ok"] and time.time() - _estado["t"] > 60):
         a = ajustes(carpeta)
         try:
-            nombres = [m["name"] for m in _http(a["url"] + "/api/tags", espera=2).get("models", [])]
+            try:
+                tags = _http(a["url"] + "/api/tags", espera=5)
+            except Exception:
+                _arrancar()                                              # instalado pero apagado: se enciende (tarda unos segundos la primera vez)
+                tags = _http(a["url"] + "/api/tags", espera=5)
+            nombres = [m["name"] for m in tags.get("models", [])]
             _estado["ok"] = any(n == a["modelo"] or n.split(":")[0] == a["modelo"] for n in nombres) or any(n.startswith(a["modelo"]) for n in nombres)
         except Exception:
             _estado["ok"] = False
@@ -33632,6 +33859,28 @@ def test_el_actualizador_abre_lo_mismo_que_el_acceso_directo():
     assert motor.count("Start-Process -FilePath (Ruta $dest 'abrir_arbol.bat')") == 1               # abrir_arbol.bat solo como último recurso (sin acceso directo)
     bat = (RAIZ / "abrir_arbol.bat").read_text(encoding="utf-8", errors="replace")
     assert 'find /i "pythonw"' in bat                                                                # pythonw no se lanza minimizado: igual que el acceso directo
+
+
+def test_el_motor_del_instalador_es_powershell_valido():
+    """Un error de sintaxis en motor.ps1 solo se vería al ejecutar el .bat en otro ordenador: se valida con el propio analizador de PowerShell."""
+    import shutil
+    import subprocess
+    ps = shutil.which("powershell") or shutil.which("pwsh")
+    if not ps:
+        import pytest
+        pytest.skip("no hay PowerShell")
+    motor = RAIZ / "herramientas" / "plantillas" / "motor.ps1"
+    orden = ("$e=$null;$t=$null;[void][System.Management.Automation.Language.Parser]::ParseFile('" + str(motor) + "',[ref]$t,[ref]$e);"
+             "if($e.Count){$e|%{ 'L'+$_.Extent.StartLineNumber+': '+$_.Message };exit 1}")
+    r = subprocess.run([ps, "-NoProfile", "-Command", orden], capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_el_instalador_detecta_e_instala_la_ia_local():
+    texto = (RAIZ / "herramientas" / "plantillas" / "motor.ps1").read_text(encoding="utf-8")
+    for clave in ("Preparar-IA", "Buscar-Ollama", "Descargar-Con-Barra", "Get-AuthenticodeSignature", "qwen2.5:3b", "ARBOL_SIN_IA", "conocimiento', 'modelos'"):
+        assert clave in texto, clave
+    assert "ARBOL_SIN_RED" in texto.split("function Preparar-Python-Y-Visor")[1]          # sin red no se intenta ninguna descarga
 :::END
 :::BEGIN py/tests/test_llm.py|text
 """LLM local (Ollama) para los casos dudosos, con un Ollama falso: se prueba cuándo se pregunta y cómo se usa la respuesta."""
@@ -33682,6 +33931,15 @@ def test_sin_ollama_o_sin_modelo_no_pasa_nada(monkeypatch, tmp_path):
     llm._estado.clear()
     monkeypatch.setenv("ARBOL_LLM", "no")
     assert llm.disponible(tmp_path) is False
+
+
+def test_si_esta_apagado_intenta_arrancarlo_una_sola_vez(monkeypatch, tmp_path):
+    monkeypatch.setattr(llm, "ACTIVO", True); llm._estado.clear()
+    arranques = []
+    monkeypatch.setattr(llm, "_arrancar", lambda: arranques.append(1))
+    monkeypatch.setattr(llm, "_http", lambda *a, **k: (_ for _ in ()).throw(OSError("apagado")))
+    assert llm.disponible(tmp_path) is False and arranques == [1]
+    llm._estado.clear()
 
 
 def test_respuesta_invalida_y_solo_localhost(monkeypatch, ollama_falso, tmp_path):
@@ -40038,6 +40296,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 5m. **Referencias que viajan:** los PDF/EPUB no suben a GitHub, pero `conocimiento/biblioteca/referencias.json` (los metadatos sin rutas del equipo: título, galaxia, género, capítulos, hash) y `biblioteca/portadas/` sí (`.gitignore`; `importar._guardar` los escribe junto a `metadatos.json`, que sigue siendo local). `leer_metadatos` fusiona ambos, así que en otro equipo el mapa y el Observatorio muestran los libros como referencias vacías («sin el archivo en este equipo»); al importar un archivo con el mismo hash se restaura en su sitio.
 5k. **Telescopio:** pestaña «📡 Telescopio» (`py/conocimiento/telescopio.py`, API `Api.telescopio_buscar/traer`, consola `python -m conocimiento telescopio <consulta> [--traer N]`). Busca **solo fuentes legales**: Project Gutenberg (catálogo OPDS oficial, dominio público; Gutendex se descartó por lento), Google Books y Open Library (catálogo: ficha y enlace; descarga solo si es dominio público o lectura abierta; Google necesita clave en `GOOGLE_BOOKS_KEY` o `conocimiento/google_books.key` porque la cuota anónima diaria suele estar agotada), arXiv, OpenAlex (solo con PDF abierto) e Internet Archive (solo licencia CC/dominio público o publicado ≤ 1929). **No se añaden fuentes piratas (Anna's Archive, Z-Library, LibGen…) ni descargadores de ellas.** `traer` descarga (https, ≤ 200 MB, comprueba que es PDF/EPUB de verdad) y pasa por `importar.importar` con el género sacado de las materias de la obra (`genero_desde_materias`); `materias_de` consulta Open Library para clasificar un título que ya tienes. Tests sin red (`_get` se sustituye): `tests/test_telescopio.py`.
 5p. **Importar cualquier archivo:** además de libros, el importador acepta código (`CODIGO_EXT`: .py .ipynb .r .sas .sql .js …), datos (`DATOS_EXT`: .csv .xlsx .json .yaml …) y apuntes (`APUNTES_EXT`: .pptx .tex .html .rst) — todo en `EXT_IMPORTABLE` (`conocimiento/__init__.py`). El código va a la galaxia Código (tipo `codigo`, género tecnología); los datos al tipo `datos` (solo se indexa la cabecera); los cuadernos se indexan por celdas y su «índice» son los títulos markdown. Las carpetas de `fuentes.json` siguen leyendo solo `EXT` (documentos), para no indexar todo un disco. Otros formatos (imágenes, .zip, .exe) se rechazan con un mensaje claro. Se filtran en el buscador con prefijos como `py:`, `ipynb:`, `csv:`, `sql:`, `pptx:` (`conocimiento.buscar(formato=)`). Test: `tests/test_importar_formatos.py`.
+5s. **Instalador con IA local (compartir por GitHub):** el instalador/actualizador (`herramientas/plantillas/motor.ps1`, función `Preparar-IA`) comprueba y muestra con ✓/✗ qué hay: fastembed, modelo MiniLM (~240 MB, `python -m conocimiento modelos`), Ollama (~1,6 GB) y el modelo `qwen2.5:3b` (~1,9 GB); descarga solo lo que falta, con barra de progreso, velocidad y reanudación (`curl -C -`), verifica la firma digital «Ollama Inc.» antes de ejecutar `OllamaSetup.exe` y pregunta antes de bajar nada (`ARBOL_SIN_IA=1` o `ARBOL_SIN_RED=1` lo omiten). Nada de esto va en el repositorio (3,5 GB): se baja de las fuentes oficiales al instalar. Si ya tienes la misma versión, el actualizador solo comprueba componentes; si la app está abierta, la cierra antes de mover `py`. Trampas PowerShell ya vividas: `"$Version:"` en comillas dobles es una variable con ámbito (usar `${Version}:`); un parámetro `$ok` tapa a `$Ok` (no distingue mayúsculas); `ollama serve` oculto solo arranca con la salida redirigida; la primera llamada de PowerShell a `Invoke-RestMethod` tarda 2-3 s (timeouts ≥ 8 s). `tests/test_instaladores.py` valida la sintaxis de motor.ps1 con el analizador de PowerShell. Para repetir la comprobación: ejecutar de nuevo el `Actualizar.bat` (opción «comprobar componentes»).
 5r. **LLM local (Ollama) para los casos dudosos:** `py/conocimiento/llm.py`. Ollama 0.40 instalado en `%LOCALAPPDATA%\Programs\Ollama` con el modelo `qwen2.5:3b` (1,9 GB; CPU, ~6 s por consulta). Solo se le pregunta el género cuando `clasificador.dudoso` (el mejor género saca menos de `MARGEN_DUDA` al segundo, nada se parece, o reglas flojas sin parecido); responde JSON con enum cerrado de GENEROS y su respuesta cuenta como `metodo = llm`. Todo en localhost (`_http` rechaza otras URLs). Si Ollama no está o no tiene el modelo, se ignora sin error y se vuelve a mirar cada minuto. Ajustes: `ARBOL_LLM` (modelo, o `no`) o `conocimiento/ajustes.json` {"llm": {"modelo": "qwen2.5:7b"}}. **Medido** (`python herramientas/comparar_clasificadores.py --llm qwen2.5:3b`, 66 libros): reglas + parecido 86 %; LLM solo 82 % (con el prompt de descripciones + 4 ejemplos resueltos; con el prompt simple era 50 %: los modelos pequeños necesitan ejemplos); híbrido 88 %. En un PC potente probar `qwen2.5:7b`. Tests: `tests/test_llm.py` (Ollama falso; la suite lo apaga con `llm.ACTIVO = False`).
 5q. **Importar en masa y revisar por fecha:** la casilla «Importar sin revisar (clasifica solo)» de la pestaña Importar clasifica e importa todo lo que sueltes sin pasar por las tarjetas (se recuerda en el navegador). Cada archivo guarda en `metadatos.json` cuándo se importó (`fecha`, con hora), cómo se clasificó (`metodo`: `reglas` | `parecido` | `web`, `motivo`, `materias_web`) y la `propuesta` automática original; así se ve qué corregiste a mano. **Para revisar con Claude:** `python -m conocimiento revisar [--desde AAAA-MM-DD] [--hasta …] [--json]` lista lo importado de más reciente a más antiguo con `corregido` (distinto de la propuesta); el Observatorio ordena por fecha y filtra «importados desde». Claude lee ese JSON, propone la clasificación que él habría hecho y se comparan los desacuerdos para mejorar reglas, frases semilla (`clasificador.SEMILLAS`) o pesos. **Materias web:** para libros y artículos, `importar._materias_web` consulta Open Library por el título (timeout de 6 s; si falla una vez, no se reintenta en la sesión) y el género de esas materias suma `PESO_WEB` en `clasificador.decidir` (o decide si todo lo demás da «otro»). No se hace scraping de páginas: solo APIs de metadatos. Las pruebas desactivan la red con `clasificador.WEB = False`. Tests: `tests/test_revisar.py`.
 5n. **Búsqueda por tipo de archivo y por título/autor:** en el buscador principal los prefijos `pdf:`, `epub:`, `docx:`, `md:`, `txt:` filtran lo que sale de tu conocimiento por formato (`conocimiento.buscar(..., formato=)`; con un prefijo de formato no se listan nodos del mapa). En el Telescopio, «Qué buscamos» (Todo / Un libro / Un artículo) muestra casillas de **Título** y **Autor** (el autor se comprueba en cada resultado), el selector de tipo elige las fuentes (libro: Google Books, Open Library, Gutenberg, Internet Archive; artículo: arXiv, OpenAlex) y «Solo PDF / Solo EPUB» filtra por formato descargable. Consola: `python -m conocimiento telescopio -T título -a autor --tipo libro --formato pdf`.

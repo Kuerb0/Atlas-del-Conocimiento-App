@@ -8,8 +8,10 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 import time
 import urllib.request
+from shutil import which
 from pathlib import Path
 
 from . import CARPETA
@@ -40,6 +42,27 @@ def _http(url: str, datos: dict | None = None, espera: float = ESPERA) -> dict:
         return json.loads(r.read().decode("utf-8"))
 
 
+def _arrancar() -> None:
+    """Si Ollama está instalado pero apagado, levanta `ollama serve` sin ventana y espera hasta 12 s a que responda. Una sola vez por sesión."""
+    if _estado.get("arrancado"):
+        return
+    _estado["arrancado"] = True
+    exe = which("ollama") or str(Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Ollama" / "ollama.exe")
+    if not Path(exe).exists():
+        return
+    try:
+        subprocess.Popen([exe, "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except OSError:
+        return
+    for _ in range(24):
+        time.sleep(.5)
+        try:
+            _http(URL + "/api/tags", espera=1)
+            return
+        except Exception:
+            continue
+
+
 def disponible(carpeta: Path | str = CARPETA) -> bool:
     """¿Ollama está corriendo y tiene el modelo? Si sí, se mira una sola vez por sesión; si no, cada minuto (la consulta tarda 2 s como mucho)."""
     if not ACTIVO or os.environ.get("ARBOL_LLM", "").lower() in ("no", "0", "off"):
@@ -47,7 +70,12 @@ def disponible(carpeta: Path | str = CARPETA) -> bool:
     if "ok" not in _estado or (not _estado["ok"] and time.time() - _estado["t"] > 60):
         a = ajustes(carpeta)
         try:
-            nombres = [m["name"] for m in _http(a["url"] + "/api/tags", espera=2).get("models", [])]
+            try:
+                tags = _http(a["url"] + "/api/tags", espera=5)
+            except Exception:
+                _arrancar()                                              # instalado pero apagado: se enciende (tarda unos segundos la primera vez)
+                tags = _http(a["url"] + "/api/tags", espera=5)
+            nombres = [m["name"] for m in tags.get("models", [])]
             _estado["ok"] = any(n == a["modelo"] or n.split(":")[0] == a["modelo"] for n in nombres) or any(n.startswith(a["modelo"]) for n in nombres)
         except Exception:
             _estado["ok"] = False

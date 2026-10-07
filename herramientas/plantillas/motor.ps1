@@ -354,6 +354,168 @@ function Abrir-App($dest) {
     else { Start-Process -FilePath (Ruta $dest 'abrir_arbol.bat') -WindowStyle Hidden -WorkingDirectory $dest }
 }
 
+
+# ---------------------------------------------------------------- IA local: embeddings (fastembed) + LLM (Ollama), con barras de progreso
+$Bloque = [string][char]0x2588; $Claro = [string][char]0x2591; $Ok = [string][char]0x2713; $No = [string][char]0x2717
+$ModeloLLM = 'qwen2.5:3b'
+$ModeloEmb = 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'
+
+function Barra($pct, $texto) {
+    if ($pct -lt 0) { $pct = 0 }; if ($pct -gt 100) { $pct = 100 }
+    $n = [int](30 * $pct / 100)
+    $linea = ('      ' + ($Bloque * $n) + ($Claro * (30 - $n)) + (' {0,3}%  ' -f [int]$pct) + $texto)
+    try { [Console]::Write("`r" + $linea.PadRight(110)) } catch { }
+}
+function Barra-Fin { try { [Console]::WriteLine() } catch { } }
+
+function Estado-Linea($bien, $texto, $detalle) {                  # ojo: PowerShell no distingue mayúsculas, un parámetro $ok taparía el símbolo $Ok
+    if ($bien) { Write-Host ("      $Ok $texto" + $(if ($detalle) { "  ($detalle)" } else { '' })) -ForegroundColor Green }
+    else { Write-Host ("      $No $texto" + $(if ($detalle) { "  ($detalle)" } else { '' })) -ForegroundColor Yellow }
+}
+
+function Tamano-Remoto($url) {
+    $n = [int64]0
+    try { foreach ($l in @(& curl.exe -sIL $url 2>$null)) { if ($l -match '^(?i)content-length:\s*(\d+)') { $n = [int64]$Matches[1] } } } catch { }
+    return $n
+}
+
+# Descarga con barra de progreso, velocidad y reanudación (curl -C -): si se corta, al repetir sigue por donde iba.
+function Descargar-Con-Barra($url, $fichero, $etiqueta) {
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if (-not $curl) {
+        try { Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $fichero -TimeoutSec 3600; return (Test-Path -LiteralPath $fichero) } catch { return $false }
+    }
+    $total = Tamano-Remoto $url
+    $p = Start-Process -FilePath $curl.Source -ArgumentList @('-L', '-C', '-', '--fail', '--retry', '5', '-s', '-o', ('"' + $fichero + '"'), ('"' + $url + '"')) -PassThru -WindowStyle Hidden
+    $null = $p.Handle
+    $ultimo = [int64]0; $tUlt = Get-Date; $vel = 0.0
+    while (-not $p.HasExited) {
+        Start-Sleep -Milliseconds 400
+        $tam = if (Test-Path -LiteralPath $fichero) { (Get-Item -LiteralPath $fichero).Length } else { 0 }
+        $dt = ((Get-Date) - $tUlt).TotalSeconds
+        if ($dt -ge 1) { $vel = ($tam - $ultimo) / $dt; $ultimo = $tam; $tUlt = Get-Date }
+        $pct = if ($total -gt 0) { 100.0 * $tam / $total } else { 0 }
+        Barra $pct ('{0}  {1:N0} de {2:N0} MB  {3:N1} MB/s' -f $etiqueta, ($tam / 1MB), ($total / 1MB), ($vel / 1MB))
+    }
+    $p.WaitForExit()
+    $tam = if (Test-Path -LiteralPath $fichero) { (Get-Item -LiteralPath $fichero).Length } else { 0 }
+    $bien = ($p.ExitCode -eq 0) -and ($total -le 0 -or $tam -ge $total)
+    if ($bien) { Barra 100 ('{0}  {1:N0} MB' -f $etiqueta, ($tam / 1MB)) }
+    Barra-Fin
+    return $bien
+}
+
+# Espera a que termine un proceso mostrando una barra que avanza con el tiempo (no se sabe cuánto falta) y, si se indica, el tamaño de una carpeta.
+function Esperar-Con-Barra($proceso, $texto, $carpeta, $esperadoMB) {
+    $giro = '|', '/', '-', '\'
+    $i = 0
+    while (-not $proceso.HasExited) {
+        $extra = ''; $pct = -1
+        if ($carpeta -and (Test-Path -LiteralPath $carpeta) -and $esperadoMB -gt 0) {
+            $mb = ((Get-ChildItem -LiteralPath $carpeta -Recurse -File -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum) / 1MB
+            $pct = 100.0 * $mb / $esperadoMB; $extra = ('  {0:N0} de ~{1:N0} MB' -f $mb, $esperadoMB)
+        }
+        if ($pct -ge 0) { Barra $pct ($texto + $extra) }
+        else { try { [Console]::Write("`r      " + $giro[$i % 4] + ' ' + $texto + '   ') } catch { } }
+        $i++; Start-Sleep -Milliseconds 400
+    }
+    $proceso.WaitForExit()
+    if ($carpeta -and $esperadoMB -gt 0) { Barra 100 $texto }
+    Barra-Fin
+}
+
+function Buscar-Ollama {
+    $c = Get-Command ollama -ErrorAction SilentlyContinue
+    if ($c) { return $c.Source }
+    $p = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe'
+    if (Test-Path -LiteralPath $p) { return $p }
+    return $null
+}
+function Ollama-Responde { try { Invoke-RestMethod -Uri 'http://localhost:11434/api/tags' -TimeoutSec 8 | Out-Null; return $true } catch { return $false } }      # la primera llamada de PowerShell tarda 2-3 s: con 2 s de margen daba falsos negativos
+function Arrancar-Ollama($exe) {
+    if (Ollama-Responde) { return $true }
+    # El servidor es «ollama serve». La aplicación de la bandeja a veces no lo levanta (queda «server not ready»), así que si en 8 s no responde se arranca directamente.
+    try { Start-Process -FilePath $exe -ArgumentList 'serve' -WindowStyle Hidden -RedirectStandardOutput (Join-Path ([IO.Path]::GetTempPath()) 'ollama_serve_out.txt') -RedirectStandardError (Join-Path ([IO.Path]::GetTempPath()) 'ollama_serve_err.txt') } catch { }      # con la salida redirigida arranca; oculta y sin redirigir se queda colgado
+    for ($i = 0; $i -lt 40; $i++) { if (Ollama-Responde) { return $true }; Start-Sleep -Seconds 1 }
+    return $false
+}
+function Tiene-Modelo-Ollama($modelo) {
+    try { $r = Invoke-RestMethod -Uri 'http://localhost:11434/api/tags' -TimeoutSec 8; return [bool]($r.models | Where-Object { $_.name -eq $modelo }) } catch { return $false }
+}
+function Tiene-Modelo-Embeddings($dest) {
+    $m = Ruta $dest 'conocimiento' 'modelos'
+    if (-not (Test-Path -LiteralPath $m)) { return $false }
+    $mb = ((Get-ChildItem -LiteralPath $m -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match 'MiniLM' } | Measure-Object Length -Sum).Sum) / 1MB
+    return ($mb -gt 150)
+}
+
+function Instalar-Ollama {
+    $url = 'https://github.com/ollama/ollama/releases/latest/download/OllamaSetup.exe'
+    $f = Join-Path ([IO.Path]::GetTempPath()) 'OllamaSetup.exe'
+    Info 'Descargando el instalador oficial de Ollama (github.com/ollama/ollama, ~1,6 GB; si se corta, repite y sigue donde iba)...'
+    if (-not (Descargar-Con-Barra $url $f 'Ollama')) { Aviso 'No se pudo descargar Ollama (¿internet?). Repite esto cuando tengas conexión.'; return $null }
+    $firma = Get-AuthenticodeSignature -LiteralPath $f
+    if ($firma.Status -ne 'Valid' -or ([string]$firma.SignerCertificate.Subject) -notmatch 'Ollama') {
+        Aviso 'La firma digital del instalador no es la de Ollama Inc.: no lo ejecuto.'
+        Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue
+        return $null
+    }
+    Info 'Firma digital verificada (Ollama Inc.). Instalando (solo para tu usuario)...'
+    $p = Start-Process -FilePath $f -ArgumentList @('/VERYSILENT', '/NORESTART', '/SUPPRESSMSGBOXES') -PassThru
+    $null = $p.Handle
+    Esperar-Con-Barra $p 'Instalando Ollama' $null 0
+    Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue
+    return (Buscar-Ollama)
+}
+
+# Comprueba qué hay, muestra una tabla ✓/✗ con lo que ya está instalado y descarga solo lo que falta.
+function Preparar-IA($py, $dest) {
+    Paso '[IA local] Comprobando qué hay instalado (reglas + parecido con embeddings + LLM con Ollama)...'
+    $tieneFE = $false
+    try { & $py -c 'import fastembed' 2>$null; $tieneFE = ($LASTEXITCODE -eq 0) } catch { }
+    $tieneEmb = Tiene-Modelo-Embeddings $dest
+    $exe = Buscar-Ollama
+    $respondia = if ($exe) { Arrancar-Ollama $exe } else { $false }          # si está instalado pero apagado, se arranca para poder mirar qué modelos tiene
+    $tieneLLM = if ($respondia) { Tiene-Modelo-Ollama $ModeloLLM } else { $false }
+    Estado-Linea $tieneFE 'fastembed (embeddings locales)' $(if ($tieneFE) { 'ya instalado' } else { 'falta, ~60 MB' })
+    Estado-Linea $tieneEmb 'modelo de parecido MiniLM' $(if ($tieneEmb) { 'ya descargado' } else { 'falta, ~240 MB' })
+    Estado-Linea ([bool]$exe) 'Ollama' $(if ($exe) { $exe } else { 'falta, ~1,6 GB' })
+    Estado-Linea $tieneLLM "modelo $ModeloLLM" $(if ($tieneLLM) { 'ya descargado' } elseif ($exe -and -not $respondia) { 'Ollama no arranca: ábrelo y repite' } else { 'falta, ~1,9 GB' })
+    $faltaAlgo = (-not $tieneFE) -or (-not $tieneEmb) -or (-not $exe) -or ($exe -and -not $tieneLLM)
+    if (-not $faltaAlgo) { Info 'Todo al día: no hay nada que descargar.'; return }
+    if (-not $env:ARBOL_DESTINO) {
+        $r = Read-Host '  ¿Instalar lo que falta? Es opcional: sin ello el Árbol clasifica con reglas, pero peor [S/n]'
+        if ($r -match '^\s*[nN]') { Info 'Omitido. Puedes repetirlo cuando quieras ejecutando de nuevo este archivo.'; return }
+    }
+    if (-not $tieneFE) {
+        Paso '[IA local] Instalando fastembed...'
+        & $py -m pip install --disable-pip-version-check --no-warn-script-location -q fastembed | Out-Host
+        $tieneFE = ($LASTEXITCODE -eq 0)
+        if (-not $tieneFE) { Aviso 'fastembed no se instaló (¿internet o versión de Python?): el Árbol seguirá con reglas.' }
+    }
+    if ($tieneFE -and -not $tieneEmb) {
+        Paso '[IA local] Descargando el modelo de parecido (MiniLM, 240 MB)...'
+        $env:HF_HUB_DISABLE_SYMLINKS_WARNING = '1'
+        $p = Start-Process -FilePath $py -ArgumentList @('-m', 'conocimiento', 'modelos') -WorkingDirectory (Ruta $dest 'py') -PassThru -WindowStyle Hidden
+        $null = $p.Handle
+        Esperar-Con-Barra $p 'Modelo MiniLM' (Ruta $dest 'conocimiento' 'modelos') 240
+        if ($p.ExitCode -ne 0) { Aviso 'El modelo de parecido no se descargó del todo; se reintentará la próxima vez que se use.' }
+    }
+    if (-not $exe) {
+        Paso '[IA local] Instalando Ollama (el motor del LLM local)...'
+        $exe = Instalar-Ollama
+        if (-not $exe) { return }
+        Info "Ollama instalado en $exe"
+    }
+    Paso '[IA local] Arrancando Ollama...'
+    if (-not (Arrancar-Ollama $exe)) { Aviso 'Ollama no respondió. Ábrelo desde el menú Inicio y repite esto para bajar el modelo.'; return }
+    if (-not (Tiene-Modelo-Ollama $ModeloLLM)) {
+        Paso "[IA local] Descargando el modelo $ModeloLLM (1,9 GB; Ollama muestra su propio progreso)..."
+        & $exe pull $ModeloLLM | Out-Host
+        if (Tiene-Modelo-Ollama $ModeloLLM) { Estado-Linea $true "modelo $ModeloLLM" 'listo' } else { Aviso "El modelo $ModeloLLM no se descargó. Repite esto con conexión." }
+    } else { Estado-Linea $true "modelo $ModeloLLM" 'ya descargado' }
+}
+
 # ---------------------------------------------------------------- flujo común tras copiar los ficheros
 function Preparar-Python-Y-Visor($dest) {
     Paso '[Python] Buscando Python 3.10 o superior...'
@@ -387,6 +549,8 @@ function Preparar-Python-Y-Visor($dest) {
     $prueba = & $py -c 'import arbol_estadistica, arbol_estadistica.graficos; print(arbol_estadistica.__version__)' 2>&1
     if ($LASTEXITCODE -eq 0) { Info "Comprobado: arbol_estadistica $($prueba | Select-Object -Last 1)" }
     else { Aviso ('La importación de prueba falló: ' + (($prueba | Select-Object -Last 3) -join ' | ')) }
+
+    if ($EnWindows -and $env:ARBOL_SIN_RED -ne '1' -and $env:ARBOL_SIN_IA -ne '1') { Preparar-IA $py $dest }
 
     Paso '[Catálogo] Añadiendo los conceptos nuevos sin tocar los tuyos...'
     & $py (Ruta $dest 'py' 'fusionar_catalogo.py') | Out-Host
@@ -439,7 +603,29 @@ if ($Modo -eq 'actualizar') {
     Write-Host "  Versión instalada: $anterior  ->  nueva: $Version"
     Write-Host '  Se sustituye el programa (py, teoria, ejemplos, assets, documentos); tu catálogo de'
     Write-Host '  conceptos se conserva y solo se le añaden los conceptos nuevos.'
-    if (-not $env:ARBOL_DESTINO) { $r = Read-Host '  Pulsa Enter para continuar o Q para cancelar'; if ($r -match '^\s*[qQ]') { exit 2 } }
+    if ($anterior -eq $Version -and -not $env:ARBOL_DESTINO) {
+        Write-Host ''
+        Write-Host "  Ya tienes instalada la versión ${Version}: no hace falta sustituir el programa." -ForegroundColor Green
+        Write-Host '  Solo voy a comprobar que están todos los componentes (Python, librerías, IA local) e instalar los que falten.'
+        $r = Read-Host '  Enter = comprobar componentes   R = reinstalar el programa igualmente   Q = salir'
+        if ($r -match '^\s*[qQ]') { exit 2 }
+        if ($r -notmatch '^\s*[rR]') {
+            $pyc = Buscar-Python $dest
+            if (-not $pyc) { Fallo 'No encuentro Python en esta instalación. Usa el instalador completo.' }
+            $Estado.py = $pyc
+            Preparar-IA $pyc $dest
+            Titulo 'Comprobación terminada'
+            exit 0
+        }
+    } elseif (-not $env:ARBOL_DESTINO) { $r = Read-Host '  Pulsa Enter para continuar o Q para cancelar'; if ($r -match '^\s*[qQ]') { exit 2 } }
+    if ($EnWindows) {                                            # una app abierta bloquea la carpeta py: se cierra (con aviso) antes de moverla
+        $abiertas = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^pythonw?\.exe$' -and $_.CommandLine -like '*arbol_app.pyw*' })
+        if ($abiertas.Count) {
+            Info 'La app del Árbol está abierta: la cierro para poder actualizarla (se volverá a abrir al terminar).'
+            foreach ($a in $abiertas) { try { Stop-Process -Id $a.ProcessId -Force -ErrorAction Stop } catch { } }
+            Start-Sleep -Seconds 2
+        }
+    }
 
     $marca = Get-Date -Format 'yyyyMMdd_HHmmss'
     $copias = Join-Path $dest 'anteriores'

@@ -48,6 +48,15 @@ def test_sin_ollama_o_sin_modelo_no_pasa_nada(monkeypatch, tmp_path):
     assert llm.disponible(tmp_path) is False
 
 
+def test_si_esta_apagado_intenta_arrancarlo_una_sola_vez(monkeypatch, tmp_path):
+    monkeypatch.setattr(llm, "ACTIVO", True); llm._estado.clear()
+    arranques = []
+    monkeypatch.setattr(llm, "_arrancar", lambda: arranques.append(1))
+    monkeypatch.setattr(llm, "_http", lambda *a, **k: (_ for _ in ()).throw(OSError("apagado")))
+    assert llm.disponible(tmp_path) is False and arranques == [1]
+    llm._estado.clear()
+
+
 def test_respuesta_invalida_y_solo_localhost(monkeypatch, ollama_falso, tmp_path):
     monkeypatch.setattr(llm, "_http", lambda url, datos=None, espera=0: ({"models": [{"name": "qwen2.5:3b"}]} if url.endswith("tags") else {"message": {"content": '{"genero": "inventado"}'}}))
     assert llm.clasificar("t", [], "", [], im.GENEROS, tmp_path) is None                    # género fuera de la lista: se ignora

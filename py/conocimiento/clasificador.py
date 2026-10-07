@@ -78,6 +78,14 @@ def _embedder(nombre: str, carpeta: Path | str = None):  # los modelos son de to
     return _cache[nombre]
 
 
+def preparar(carpeta: Path | str | None = None) -> str:
+    """Descarga (si falta) el modelo de embeddings y comprueba que funciona. Lo usa el instalador (`python -m conocimiento modelos`). Devuelve un mensaje; lanza excepción si no se pudo."""
+    carpeta = Path(carpeta or CARPETA)
+    nombre = modelo(carpeta)
+    v = _embedder(nombre, carpeta)(["prueba del modelo"])
+    return f"modelo {nombre} listo ({v.shape[1]} dimensiones) en {Path(CARPETA) / 'modelos'}"
+
+
 def texto_libro(titulo: str, capitulos: list, vista: str = "") -> str:
     """Lo que se compara de un libro: título, los primeros capítulos y el principio del texto."""
     caps = "; ".join((c["titulo"] if isinstance(c, dict) else str(c)) for c in capitulos[:8])

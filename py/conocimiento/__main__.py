@@ -26,6 +26,7 @@ r = sub.add_parser("revisar", help="lista lo importado por fecha con cómo se cl
 r.add_argument("--desde", default="", help="AAAA-MM-DD")
 r.add_argument("--hasta", default="", help="AAAA-MM-DD")
 r.add_argument("--json", action="store_true", help="salida en JSON (para que Claude la revise)")
+sub.add_parser("modelos", help="descarga el modelo de embeddings (lo usa el instalador)")
 b = sub.add_parser("buscar", help="busca en todas las colecciones")
 b.add_argument("consulta", nargs="+")
 b.add_argument("-c", "--coleccion", help="codigo | conceptos | teoria | libros | finanzas | notas …")
@@ -45,6 +46,13 @@ elif a.orden == "importar":
     from .importar import importar
     for r in importar([{"ruta": f, "galaxia": a.galaxia, "subtema": a.subtema, "tipo": a.tipo, "genero": a.genero} for f in a.ficheros]):
         print(f"{r['estado']:10} {r['nombre']}  ->  {r.get('galaxia', '')} › {r.get('subtema', '')} ({r.get('tipo', '')})  {r['mensaje']}")
+elif a.orden == "modelos":
+    from . import clasificador
+    try:
+        print(clasificador.preparar())
+    except Exception as e:
+        print(f"ERROR: {type(e).__name__}: {e}")
+        sys.exit(1)
 elif a.orden == "revisar":
     from .importar import revisar
     filas = revisar(a.desde, a.hasta)

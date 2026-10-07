@@ -138,3 +138,25 @@ def test_el_actualizador_abre_lo_mismo_que_el_acceso_directo():
     assert motor.count("Start-Process -FilePath (Ruta $dest 'abrir_arbol.bat')") == 1               # abrir_arbol.bat solo como último recurso (sin acceso directo)
     bat = (RAIZ / "abrir_arbol.bat").read_text(encoding="utf-8", errors="replace")
     assert 'find /i "pythonw"' in bat                                                                # pythonw no se lanza minimizado: igual que el acceso directo
+
+
+def test_el_motor_del_instalador_es_powershell_valido():
+    """Un error de sintaxis en motor.ps1 solo se vería al ejecutar el .bat en otro ordenador: se valida con el propio analizador de PowerShell."""
+    import shutil
+    import subprocess
+    ps = shutil.which("powershell") or shutil.which("pwsh")
+    if not ps:
+        import pytest
+        pytest.skip("no hay PowerShell")
+    motor = RAIZ / "herramientas" / "plantillas" / "motor.ps1"
+    orden = ("$e=$null;$t=$null;[void][System.Management.Automation.Language.Parser]::ParseFile('" + str(motor) + "',[ref]$t,[ref]$e);"
+             "if($e.Count){$e|%{ 'L'+$_.Extent.StartLineNumber+': '+$_.Message };exit 1}")
+    r = subprocess.run([ps, "-NoProfile", "-Command", orden], capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_el_instalador_detecta_e_instala_la_ia_local():
+    texto = (RAIZ / "herramientas" / "plantillas" / "motor.ps1").read_text(encoding="utf-8")
+    for clave in ("Preparar-IA", "Buscar-Ollama", "Descargar-Con-Barra", "Get-AuthenticodeSignature", "qwen2.5:3b", "ARBOL_SIN_IA", "conocimiento', 'modelos'"):
+        assert clave in texto, clave
+    assert "ARBOL_SIN_RED" in texto.split("function Preparar-Python-Y-Visor")[1]          # sin red no se intenta ninguna descarga
