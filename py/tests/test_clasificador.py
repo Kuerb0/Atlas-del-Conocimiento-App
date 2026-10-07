@@ -40,6 +40,7 @@ def test_sugiere_por_semillas_y_por_tu_biblioteca(monkeypatch, tmp_path):
 
 def test_sin_modelo_devuelve_none_y_no_reintenta(monkeypatch, tmp_path):
     monkeypatch.setenv("ARBOL_MODELO", "no-existe/modelo")
+    monkeypatch.setattr(c, "ACTIVO", True)
     monkeypatch.setattr(c, "_embedder", lambda *a, **k: (_ for _ in ()).throw(OSError("sin red")))
     c._cache.pop("fallo", None)
     assert c.sugerir("lo que sea", tmp_path) is None and c._cache["fallo"] is True
