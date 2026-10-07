@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.8.3 - Actualizar
+title Arbol de la estadistica 1.9.0 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=actualizar"
-set "ARBOL_VERSION=1.8.3"
+set "ARBOL_MODO=instalar"
+set "ARBOL_VERSION=1.9.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -680,7 +680,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.8.3
+1.9.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -1555,6 +1555,7 @@ def ramas_biblioteca() -> list[dict]:
     Notas: una rama por subtema con un punto por documento. Código, Conceptos, Demos y Finanzas: una rama «Documentos importados». Sin datos: lista vacía."""
     try:
         from conocimiento.importar import GENEROS, GALAXIAS, carpeta_datos, leer_metadatos, titulo_corto
+        from conocimiento import taxonomia
     except Exception:
         return []
     carpeta = carpeta_datos()
@@ -1587,7 +1588,7 @@ def ramas_biblioteca() -> list[dict]:
             items = [_hoja_bib(f"lib_{g}_{i}_{j}", c["titulo"][:90], "capitulo", f"{libro}" + (f" — p. {c['pagina']}" if c.get("pagina") else ""), str(base / rel), rel,
                                pagina=c.get("pagina") or 0, libro=libro, subtema=m.get("subtema", ""), genero=g, paginas=m.get("paginas", 0), etiquetas=m.get("etiquetas", ""),
                                fecha=m.get("fecha", "")[:10], titulo_largo=m.get("titulo", ""), portada=m.get("portada", ""), lineas=8 + min(12, 2 * len(c["titulo"]) // 10)) for j, c in enumerate(caps)]
-            modulos.append({"id": f"lib_{g}_{i}", "nombre": libro, "desc": f"{m.get('subtema', '')} · {m.get('paginas') or '?'} págs. · {len(caps)} capítulos", "archivo": "biblioteca/" + rel, "items": items})
+            modulos.append({"id": f"lib_{g}_{i}", "nombre": libro, "desc": f"{taxonomia.nombre_sub(g, m.get('subgenero', ''), carpeta) or m.get('subtema', '')} · {m.get('paginas') or '?'} págs. · {len(caps)} capítulos", "archivo": "biblioteca/" + rel, "items": items})
         ramas.append({"id": f"gen_{g}", "nombre": GENEROS.get(g, g), "desc": f"{len(lista)} libro{'s' if len(lista) != 1 else ''} de {GENEROS.get(g, g).lower()}",
                       "modulos": modulos, "galaxia": "libros", "biblioteca": True, "color": color()})
 
@@ -1612,6 +1613,11 @@ def ensamblar(datos: dict) -> str:
     agujero_js = (CODIGO / "visor" / "agujero.js").read_text(encoding="utf-8").replace("</", "<\\/")
     eclipses_js = (CODIGO / "visor" / "eclipses.js").read_text(encoding="utf-8").replace("</", "<\\/")
     js = json.dumps(datos, ensure_ascii=False).replace("</", "<\\/")
+    try:
+        from conocimiento.importar import GENEROS as _G
+    except Exception:
+        _G = {"otro": "Otros"}
+    plantilla = plantilla.replace("/*__GENEROS_NOM__*/{}", json.dumps(_G, ensure_ascii=False))
     return (plantilla.replace("/*__DEMOS_JS__*/", demos_js).replace("/*__MAPA3D_JS__*/", mapa_js).replace("/*__CEREBRO_JS__*/", cerebro_js).replace("/*__AGUJERO_JS__*/", agujero_js).replace("/*__ECLIPSES_JS__*/", eclipses_js)
             .replace("__ICONO__", icono).replace("__DATOS__", js))
 
@@ -2979,7 +2985,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.8.3"
+version = "1.9.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3659,7 +3665,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.8.3"
+__version__ = "1.9.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -14580,7 +14586,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import CARPETA
+from . import CARPETA, _norm
 
 MODELO = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 ACTIVO = True            # False: solo reglas (los tests y el script de comparación lo usan)
@@ -14616,6 +14622,16 @@ SEMILLAS = {
     "arte": ["Arte, música, pintura, cine, arquitectura, poesía y literatura", "Art history and culture: painters, composers, film, theatre, poems and design",
              "Historia del arte y la música: movimientos, estilos, artistas y obras"],
 }
+
+
+def semillas_todas(carpeta: Path | str | None = None) -> dict:
+    """SEMILLAS de los 12 géneros de siempre + las de los géneros nuevos, sacadas de las frases de sus subgéneros (3 semillas por género)."""
+    from . import taxonomia
+    s = {g: list(v) for g, v in SEMILLAS.items()}
+    for g, subs in taxonomia.cargar(carpeta or CARPETA)[1].items():
+        if g not in s and subs:
+            s[g] = ["; ".join(x[2] for x in subs[:2]), "; ".join(x[3] for x in subs[:2]), "; ".join(x[2] for x in subs[2:4]) or subs[0][2]]
+    return s
 
 
 def modelo(carpeta: Path | str = CARPETA) -> str:
@@ -14661,7 +14677,7 @@ def texto_libro(titulo: str, capitulos: list, vista: str = "") -> str:
 
 def _ejemplos(carpeta: Path | str) -> list[tuple[str, str, float]]:
     """(texto, género, peso): las semillas (peso 1) y lo importado (1,5; 2,5 si lo corregiste a mano)."""
-    ej = [(t, g, 1.0) for g, ts in SEMILLAS.items() for t in ts]
+    ej = [(t, g, 1.0) for g, ts in semillas_todas(carpeta).items() for t in ts]
     try:
         from .importar import GENEROS, leer_metadatos
         for m in leer_metadatos(Path(carpeta)).values():
@@ -14692,6 +14708,53 @@ def sugerir(texto: str, carpeta: Path | str | None = None) -> dict | None:
         puntos[g] = float(np.mean(v))
     orden = sorted(puntos, key=puntos.get, reverse=True)
     return {"genero": orden[0], "confianza": puntos[orden[0]] - puntos[orden[1]], "puntos": {g: round(puntos[g], 3) for g in orden}}
+
+
+_PARADA = set("para como pero sobre entre desde hasta este esta estos estas the and for with from that this their about which sus los las del una por con".split())
+
+
+def _palabras(t: str) -> set:
+    return {w for w in __import__("re").findall(r"[a-z]{4,}", _norm(t)) if w not in _PARADA}
+
+
+def subgenero(texto: str, genero: str, carpeta: Path | str | None = None) -> dict | None:
+    """Subgénero (de la taxonomía del género) que mejor describe el texto: {'id','nombre','confianza','puntos': {id: 0-100}} o None si el género no tiene subgéneros.
+    Con modelo de embeddings compara con las frases del subgénero y con lo que ya tienes en esa categoría; sin modelo, por palabras en común."""
+    from . import taxonomia
+    carpeta = Path(carpeta or CARPETA)
+    subs = taxonomia.subgeneros(genero, carpeta)
+    if not subs:
+        return None
+    puntos = None
+    if ACTIVO and not _cache.get("fallo"):
+        try:
+            emb = _embedder(modelo(carpeta), carpeta)
+            ej = [(s[2], s[0], 1.0) for s in subs] + [(s[3], s[0], 1.0) for s in subs]
+            try:
+                from .importar import leer_metadatos
+                ids = {s[0] for s in subs}
+                for m in leer_metadatos(carpeta).values():
+                    if m.get("genero") == genero and m.get("subgenero") in ids:
+                        ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), m.get("etiquetas", "")), m["subgenero"], 1.5 if m.get("automatico") else 2.5))
+            except Exception:
+                pass
+            sims = emb([e[0] for e in ej]) @ emb([texto])[0]
+            puntos = {}
+            for sid in ids:
+                v = sorted((s + .04 * (e[2] - 1) for s, e in zip(sims, ej) if e[1] == sid), reverse=True)[:2]
+                puntos[sid] = float(np.mean(v))
+        except Exception:
+            _cache["fallo"] = True
+            puntos = None
+    if puntos is None:                                                   # sin modelo: palabras en común con las frases del subgénero
+        pt = _palabras(texto)
+        puntos = {s[0]: len(pt & _palabras(s[2] + " " + s[3])) / (len(_palabras(s[2] + " " + s[3])) ** .5 or 1) for s in subs}
+        if not any(puntos.values()):
+            return None
+    orden = sorted(puntos, key=puntos.get, reverse=True)
+    segundo = puntos[orden[1]] if len(orden) > 1 else 0.0
+    return {"id": orden[0], "nombre": taxonomia.nombre_sub(genero, orden[0], carpeta), "confianza": puntos[orden[0]] - segundo,
+            "puntos": {sid: round(100 * puntos[sid], 1) for sid in orden[:4]}}
 
 
 def decidir(reglas: dict, genero_reglas: str, parecido: dict, web: str | None = None) -> tuple[str, bool]:
@@ -14754,13 +14817,14 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from . import CARPETA, CODIGO_EXT, DATOS_EXT, DB, EXT_IMPORTABLE, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, indexar, llm
+from . import CARPETA, CODIGO_EXT, DATOS_EXT, DB, EXT_IMPORTABLE, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, indexar, llm, taxonomia
 
 GALAXIAS = {"codigo": "Código", "conceptos": "Conceptos", "demos": "Demos y guías", "finanzas": "Finanzas", "libros": "Libros", "notas": "Notas y enlaces"}
 TIPOS = {"libro": "Libro", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "codigo": "Código", "datos": "Datos", "otro": "Otro"}
-GENEROS = {"historia": "Historia", "economia": "Economía y finanzas", "ensayo": "Ensayo y filosofía", "estadistica": "Estadística y matemáticas", "ciencia": "Ciencia y divulgación",
-           "novela": "Novela y ficción", "biografia": "Biografía y memorias", "politica": "Política y sociedad", "tecnologia": "Tecnología e informática",
-           "psicologia": "Psicología y salud", "arte": "Arte, música y cultura", "otro": "Otros"}
+_GENEROS_BASE = {"historia": "Historia", "economia": "Economía y finanzas", "ensayo": "Ensayo y filosofía", "estadistica": "Estadística y matemáticas", "ciencia": "Ciencia y divulgación",
+                 "novela": "Novela y ficción", "biografia": "Biografía y memorias", "politica": "Política y sociedad", "tecnologia": "Tecnología e informática",
+                 "psicologia": "Psicología y salud", "arte": "Arte, música y cultura"}
+GENEROS = {**_GENEROS_BASE, **taxonomia.cargar(CARPETA)[0], "otro": "Otros"}          # los 11 de siempre + los nuevos (derecho, cocina, salud…) + los tuyos de conocimiento/taxonomia.json
 _GEN_PALABRAS = {
     "historia": r"history|historia|empire|imperio|war|guerra|century|siglo|ancient|antigu|medieval|revolution|revolucion|dynasty|dinastia|republic|republica|romans?|romanos?|civilization|civilizacion|kingdom|reino|conquest|conquista",
     "economia": r"economics|economy|economia|economist|market|mercado|capitalism|capitalismo|trade|comercio|inflation|inflacion|monetary|monetaria|fiscal|growth|crecimiento|bank|banco|poverty|pobreza|wealth|riqueza|gdp|pib|labor|empresa|business|inversion|invest|finanzas|finance",
@@ -14885,7 +14949,9 @@ def titulo_corto(nombre: str, n: int = 60) -> str:
 
 
 _COLOR_GENERO = {"historia": (150, 90, 50), "economia": (40, 120, 80), "ensayo": (110, 80, 150), "estadistica": (40, 90, 170), "ciencia": (30, 130, 150), "novela": (160, 60, 90),
-                 "biografia": (140, 110, 40), "politica": (150, 60, 50), "tecnologia": (60, 70, 90), "psicologia": (130, 70, 130), "arte": (170, 90, 120), "otro": (80, 90, 110)}
+                 "biografia": (140, 110, 40), "politica": (150, 60, 50), "tecnologia": (60, 70, 90), "psicologia": (130, 70, 130), "arte": (170, 90, 120), "otro": (80, 90, 110),
+                 "derecho": (90, 90, 120), "cocina": (190, 110, 50), "salud": (50, 140, 110), "viajes": (60, 130, 170), "idiomas": (120, 100, 60), "educacion": (100, 120, 160),
+                 "religion": (120, 90, 70), "deporte": (60, 150, 80), "hogar": (130, 100, 80)}
 
 
 def _imagen_epub(f: Path) -> bytes | None:
@@ -15048,6 +15114,7 @@ def opciones() -> dict:
     ramas = sorted(p.name for p in (RAIZ / "py" / "arbol_estadistica").iterdir() if p.is_dir() and not p.name.startswith("_")) if (RAIZ / "py" / "arbol_estadistica").is_dir() else []
     temas = [t["nombre"] for t in _catalogo()["temas"]]
     return {"generos": [{"id": k, "nombre": v} for k, v in GENEROS.items()],
+            "subgeneros": {g: [{"id": s[0], "nombre": s[1]} for s in subs] for g, subs in taxonomia.cargar(CARPETA)[1].items()},
             "galaxias": [{"id": k, "nombre": v} for k, v in GALAXIAS.items()], "tipos": [{"id": k, "nombre": v} for k, v in TIPOS.items()],
             "subtemas": {"codigo": ramas + ["General"], "conceptos": temas + ["General"], "demos": ["Demos", "Guías", "General"],
                          "finanzas": ["Carteras y riesgo", "Renta fija", "Derivados", "Actuarial y seguros", "General"] + [t for t in temas if "inanz" in t],
@@ -15186,11 +15253,16 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
             motivo += f"; el LLM propone «{GENEROS[genero]}»: {r['motivo']}"
     if materias and metodo not in ("reglas", "llm"):
         motivo += f"; materias web: {', '.join(materias[:4])}"
+    sg = clasificador.subgenero(clasificador.texto_libro(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500])), genero, carpeta)
+    if sg:
+        motivo += f"; subgénero «{sg['nombre']}»"
     palabras = re.findall(r"[a-z]+", t[:20000])
     es, en = sum(w in _ES for w in palabras), sum(w in _EN for w in palabras)
     h = _sha1(f)
     dup = next((rel for rel, m in leer_metadatos(carpeta).items() if m.get("hash") == h), "")
     return {"galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "titulo": titulo_corto(f.stem), "titulo_largo": f.stem, "motivo": motivo, "metodo": metodo, "materias_web": materias[:8], "paginas": paginas,
+            "subgenero": sg["id"] if sg else "", "subgenero_nombre": sg["nombre"] if sg else "",
+            "subgeneros": [{"id": k, "nombre": taxonomia.nombre_sub(genero, k, carpeta), "puntos": v} for k, v in sg["puntos"].items()] if sg else [],
             "tamano": f.stat().st_size, "extension": ext.lstrip("."), "idioma": "es" if es > en else "en" if en else "", "duplicado": dup,
             "vista_previa": re.sub(r"\s+", " ", texto[:1500]).strip()[:380],
             "temas": [{"tema": nombre_t, "puntos": pt} for (_, nombre_t), pt in sorted(puntos.items(), key=lambda kv: -kv[1])[:4] if pt >= 3] if genero in GENEROS_CON_TEMA else [],
@@ -15260,7 +15332,11 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
             tipo = d.get("tipo") if d.get("tipo") in TIPOS else auto["tipo"]
             genero = d.get("genero") if d.get("genero") in GENEROS else auto["genero"]
             titulo = (d.get("titulo") or "").strip() or auto["titulo"]
-            destino = base / galaxia / _slug(GENEROS[genero] if galaxia == "libros" else subtema)      # Libros: una carpeta por género
+            validos = {s[0]: s[1] for s in taxonomia.subgeneros(genero, carpeta)}
+            subgenero = d.get("subgenero") if d.get("subgenero") in validos else (auto["subgenero"] if auto["genero"] == genero else "")
+            destino = base / galaxia / _slug(GENEROS[genero] if galaxia == "libros" else subtema)      # Libros: una carpeta por género…
+            if galaxia == "libros" and subgenero:
+                destino = destino / _slug(validos[subgenero])                                          # …y dentro, una por subgénero
             destino.mkdir(parents=True, exist_ok=True)
             nombre = _slug(titulo)[:80] or "documento"                          # nombre corto: evita rutas larguísimas (límite de Windows) y es legible
             fin, n = destino / f"{nombre}{f.suffix}", 1
@@ -15273,7 +15349,7 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
             meta[rel] = {"capitulos": caps, "paginas": pags, "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "etiquetas": (d.get("etiquetas") or "").strip(), "origen": str(f), "hash": h,
                          "fecha": datetime.now().isoformat(timespec="seconds"), "automatico": not (d.get("galaxia") or d.get("subtema") or d.get("tipo") or d.get("genero")) and (d.get("titulo") or auto["titulo"]).strip() == auto["titulo"],
                          "metodo": auto["metodo"], "motivo": auto["motivo"], "materias_web": auto.get("materias_web", []),
-                         "propuesta": {"galaxia": auto["galaxia"], "subtema": auto["subtema"], "genero": auto["genero"], "tipo": auto["tipo"]}}
+                         "propuesta": {"galaxia": auto["galaxia"], "subtema": auto["subtema"], "genero": auto["genero"], "tipo": auto["tipo"], "subgenero": auto["subgenero"]}, "subgenero": subgenero}
             hashes[h] = rel
             if tipo == "libro":
                 nom = "portadas/" + h[:10] + ".jpg"
@@ -15286,7 +15362,8 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
                     movido = True
                 except OSError:
                     pass
-            salida.append({**r, "movido": movido, "estado": "ok", "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "destino": str(fin), "mensaje": auto["motivo"]})
+            salida.append({**r, "movido": movido, "estado": "ok", "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "destino": str(fin), "mensaje": auto["motivo"],
+                           "subgenero": subgenero, "subgenero_nombre": validos.get(subgenero, "")})
         except Exception as e:
             salida.append({**r, "estado": "error", "mensaje": str(e)})
     if any(s["estado"] == "ok" for s in salida):
@@ -15342,7 +15419,7 @@ def reclasificar(carpeta: Path | None = None) -> list[tuple]:
 
 
 # ---------- gestionar lo importado (pestaña «Observatorio») ----------
-CAMPOS = ("titulo", "galaxia", "genero", "subtema", "tipo", "etiquetas")
+CAMPOS = ("titulo", "galaxia", "genero", "subgenero", "subtema", "tipo", "etiquetas")
 
 
 def _guardar(carpeta: Path, meta: dict) -> None:
@@ -15357,7 +15434,8 @@ def _guardar(carpeta: Path, meta: dict) -> None:
 def _ficha(carpeta: Path, rel: str, m: dict, con_portada: bool = True) -> dict:
     f = Path(carpeta) / "biblioteca" / rel
     return {"rel": rel, "existe": f.is_file(), "titulo": m.get("titulo", ""), "titulo_largo": Path(m.get("origen", "")).stem or m.get("titulo", ""), "galaxia": m.get("galaxia", ""),
-            "genero": m.get("genero", "otro"), "subtema": m.get("subtema", ""), "tipo": m.get("tipo", ""), "etiquetas": m.get("etiquetas", ""), "paginas": m.get("paginas", 0),
+            "genero": m.get("genero", "otro"), "subgenero": m.get("subgenero", ""), "subgenero_nombre": taxonomia.nombre_sub(m.get("genero", ""), m.get("subgenero", ""), carpeta),
+            "subtema": m.get("subtema", ""), "tipo": m.get("tipo", ""), "etiquetas": m.get("etiquetas", ""), "paginas": m.get("paginas", 0),
             "capitulos": len(m.get("capitulos", [])), "fecha": m.get("fecha", "")[:10], "automatico": bool(m.get("automatico")), "fecha_hora": m.get("fecha", ""), "metodo": m.get("metodo", ""), "motivo": m.get("motivo", ""), "extension": f.suffix.lstrip(".").lower(),
             "tamano": f.stat().st_size if f.is_file() else 0, "ruta": str(f), "portada": portada_datauri(carpeta, m.get("portada", "")) if con_portada else ""}
 
@@ -15390,7 +15468,11 @@ def editar(rel: str, cambios: dict, carpeta: Path | None = None, db: Path | None
             raise ValueError(f"valor no válido para {k}: {v}")
         if k == "titulo" and not v:
             continue
+        if k == "subgenero" and v and v not in {s[0] for s in taxonomia.subgeneros(cambios.get("genero") or m.get("genero", ""), carpeta)}:
+            raise ValueError(f"ese subgénero no es de {GENEROS.get(cambios.get('genero') or m.get('genero'), '?')}")
         m[k] = v
+        if k == "genero" and "subgenero" not in cambios and m.get("subgenero") not in {s[0] for s in taxonomia.subgeneros(v, carpeta)}:
+            m["subgenero"] = ""                                       # al cambiar de género, el subgénero antiguo ya no vale
     m["automatico"] = False
     _guardar(carpeta, meta)
     if m.get("galaxia") != antes:
@@ -15409,9 +15491,9 @@ def revisar(desde: str = "", hasta: str = "", carpeta: Path | None = None) -> li
         if (desde and f < desde) or (hasta and f > hasta):
             continue
         prop = m.get("propuesta") or {}
-        filas.append({"rel": rel, "fecha": m.get("fecha", ""), "titulo": m.get("titulo", ""), "galaxia": m.get("galaxia"), "genero": m.get("genero"), "subtema": m.get("subtema"), "tipo": m.get("tipo"),
+        filas.append({"rel": rel, "fecha": m.get("fecha", ""), "titulo": m.get("titulo", ""), "galaxia": m.get("galaxia"), "genero": m.get("genero"), "subgenero": m.get("subgenero", ""), "subtema": m.get("subtema"), "tipo": m.get("tipo"),
                       "metodo": m.get("metodo", ""), "motivo": m.get("motivo", ""), "materias_web": m.get("materias_web", []), "propuesta": prop,
-                      "corregido": bool(prop) and any(prop.get(k) != m.get(k) for k in ("galaxia", "genero", "subtema", "tipo"))})
+                      "corregido": bool(prop) and any(prop.get(k) != m.get(k) for k in ("galaxia", "genero", "subtema", "tipo", "subgenero") if k in prop)})
     return sorted(filas, key=lambda x: x["fecha"], reverse=True)
 
 
@@ -15421,7 +15503,7 @@ def reclasificar_uno(rel: str, carpeta: Path | None = None, db: Path | None = No
     m, f = meta[rel], carpeta / "biblioteca" / rel
     c = clasificar(f, carpeta)
     antes = m.get("galaxia")
-    m["galaxia"], m["genero"], m["subtema"], m["automatico"] = c["galaxia"], c["genero"], c["subtema"], True
+    m["galaxia"], m["genero"], m["subtema"], m["automatico"], m["subgenero"] = c["galaxia"], c["genero"], c["subtema"], True, c["subgenero"]
     _guardar(carpeta, meta)
     if m["galaxia"] != antes:
         _galaxia_en_indice(db or carpeta / "indice.db", str(f), m["galaxia"])
@@ -15542,8 +15624,9 @@ EJEMPLOS = [("Orgullo y prejuicio", "Una joven inglesa y un rico caballero super
 
 
 def _prompt(titulo: str, capitulos: list, vista: str, materias: list, generos: dict) -> str:
-    from .clasificador import SEMILLAS
-    lista = "\n".join(f"- {g}: {SEMILLAS[g][0] if g in SEMILLAS else 'no encaja en ninguno de los demás'}" for g in generos)
+    from .clasificador import semillas_todas
+    S = semillas_todas()
+    lista = "\n".join(f"- {g}: {S[g][0] if g in S else 'no encaja en ninguno de los demás'}" for g in generos)
     ej = "\n".join(f'Libro: «{t}». Sinopsis: {s}\n{{"genero": "{g}", "motivo": "…"}}' for t, s, g in EJEMPLOS)
     caps = "; ".join((c["titulo"] if isinstance(c, dict) else str(c)) for c in capitulos[:8]) or "(sin índice)"
     return (f"Eres bibliotecario. Elige el género que mejor describe el LIBRO (no solo las palabras de su título).\nGéneros:\n{lista}\n\nEjemplos resueltos:\n{ej}\n\n"
@@ -15564,6 +15647,222 @@ def clasificar(titulo: str, capitulos: list, vista: str, materias: list, generos
         return {"genero": j["genero"], "motivo": str(j.get("motivo", ""))[:160]} if j.get("genero") in generos else None
     except Exception:
         return None
+:::END
+:::BEGIN py/conocimiento/taxonomia.py|text
+"""Taxonomía de la biblioteca: género (nivel 1) › subgénero (nivel 2). Cada subgénero lleva una frase en español y otra en inglés: con ellas el clasificador por parecido
+decide el subgénero entre los de su género (y el LLM, si hay duda, elige entre ellos). Se amplía sin tocar el código con `conocimiento/taxonomia.json` (ver `cargar`).
+
+Formato de GENEROS_NUEVOS y TAXONOMIA: id -> (nombre, [(subid, nombre, frase_es, frase_en), ...]).
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+# Géneros que se añaden a los 12 de siempre (historia, economia, ensayo, estadistica, ciencia, novela, biografia, politica, tecnologia, psicologia, arte, otro).
+GENEROS_NUEVOS = {
+    "derecho": "Derecho y legislación", "cocina": "Cocina y gastronomía", "salud": "Salud y medicina", "viajes": "Viajes y geografía",
+    "idiomas": "Idiomas y lingüística", "educacion": "Educación y pedagogía", "religion": "Religión y espiritualidad", "deporte": "Deporte y ocio",
+    "hogar": "Hogar, jardín y bricolaje",
+}
+
+TAXONOMIA: dict[str, list[tuple[str, str, str, str]]] = {
+    "historia": [
+        ("antigua", "Roma, Grecia y mundo antiguo", "Roma antigua, Grecia clásica, Egipto, César, Alejandro Magno, imperios del mundo antiguo", "ancient Rome, classical Greece, Egypt, the Roman Republic and Empire, Alexander the Great"),
+        ("medieval", "Edad Media", "Edad Media, feudalismo, cruzadas, caballeros, Bizancio, el islam medieval y las monarquías", "medieval history, feudalism, the Crusades, knights, Byzantium, the Middle Ages"),
+        ("moderna", "Edad Moderna y Renacimiento", "Renacimiento, Reforma, descubrimientos, imperios coloniales, absolutismo y siglo XVIII", "Renaissance, Reformation, age of discovery, early modern Europe, absolutism and Enlightenment"),
+        ("revoluciones", "Revoluciones y siglo XIX", "Revolución francesa, Napoleón, revoluciones liberales, imperialismo e industrialización del siglo XIX", "French Revolution, Napoleon, nineteenth century, imperialism and industrialization"),
+        ("guerras_mundiales", "Guerras mundiales y siglo XX", "Primera y Segunda Guerra Mundial, nazismo, Guerra Fría, Holocausto y el siglo XX", "World War I and II, Nazi Germany, the Cold War, the Holocaust and the twentieth century"),
+        ("espana", "Historia de España", "Historia de España, Reconquista, Reyes Católicos, Imperio español, Guerra Civil y transición", "history of Spain, Reconquista, Spanish Empire, Civil War and Franco"),
+        ("america", "Historia de América", "Historia de América, conquista, independencias, Estados Unidos, Latinoamérica y culturas precolombinas", "history of the Americas, conquest, independence, United States, Latin America, pre-Columbian cultures"),
+        ("militar", "Historia militar", "Batallas, estrategia militar, ejércitos, campañas y generales a lo largo de la historia", "military history, battles, strategy, armies, campaigns and generals"),
+        ("ideas", "Historia de las ideas y de la ciencia", "Historia de las ideas, de la ciencia, de la filosofía y de las religiones", "history of ideas, of science, of philosophy and religion"),
+        ("arqueologia", "Arqueología y antropología", "Arqueología, prehistoria, civilizaciones perdidas, antropología y orígenes de la humanidad", "archaeology, prehistory, lost civilizations, anthropology and the origins of humankind"),
+    ],
+    "economia": [
+        ("macro", "Macroeconomía", "Macroeconomía: PIB, inflación, desempleo, política monetaria y fiscal, ciclos económicos y banca central", "macroeconomics: GDP, inflation, unemployment, monetary and fiscal policy, business cycles, central banks"),
+        ("micro", "Microeconomía", "Microeconomía: oferta y demanda, elasticidad, consumidores, empresas, mercados y teoría de juegos", "microeconomics: supply and demand, elasticity, consumers, firms, markets and game theory"),
+        ("inversion", "Inversión y bolsa", "Invertir en bolsa, acciones, fondos indexados, análisis fundamental y técnico, gestión de carteras", "investing in the stock market, shares, index funds, fundamental and technical analysis, portfolio management"),
+        ("finanzas", "Finanzas corporativas y valoración", "Finanzas corporativas, valoración de empresas, flujos de caja descontados, estructura de capital", "corporate finance, company valuation, discounted cash flow, capital structure"),
+        ("derivados", "Derivados y riesgo", "Derivados financieros, opciones, futuros, gestión del riesgo, VaR y mercados de renta fija", "derivatives, options, futures, risk management, value at risk and fixed income markets"),
+        ("negocios", "Empresa, emprendimiento y marketing", "Emprendimiento, estrategia empresarial, liderazgo, marketing, ventas y gestión de equipos", "entrepreneurship, business strategy, leadership, marketing, sales and management"),
+        ("desarrollo", "Desarrollo, pobreza y desigualdad", "Desarrollo económico, pobreza, desigualdad, globalización, comercio internacional y países en desarrollo", "economic development, poverty, inequality, globalization, international trade"),
+        ("historia_eco", "Historia y pensamiento económico", "Historia del pensamiento económico, Adam Smith, Marx, Keynes, escuelas económicas y crisis históricas", "history of economic thought, Adam Smith, Marx, Keynes, schools of economics and historical crises"),
+        ("cripto", "Criptomonedas y fintech", "Bitcoin, criptomonedas, blockchain, finanzas descentralizadas y tecnología financiera", "Bitcoin, cryptocurrencies, blockchain, decentralized finance and fintech"),
+        ("contabilidad", "Contabilidad y banca", "Contabilidad, balances, auditoría, banca, seguros y regulación financiera", "accounting, balance sheets, auditing, banking, insurance and financial regulation"),
+    ],
+    "ensayo": [
+        ("antigua", "Filosofía antigua y estoicismo", "Filosofía griega, Platón, Aristóteles, estoicismo, Marco Aurelio, Séneca y epicureísmo", "ancient philosophy, Plato, Aristotle, Stoicism, Marcus Aurelius, Seneca and Epicureanism"),
+        ("moderna", "Filosofía moderna y razón", "Filosofía moderna, Descartes, Kant, Hume, racionalismo, empirismo e Ilustración", "modern philosophy, Descartes, Kant, Hume, rationalism, empiricism and Enlightenment"),
+        ("existencialismo", "Existencialismo y absurdo", "Existencialismo, Nietzsche, Sartre, Camus, el sentido de la vida, la libertad y el absurdo", "existentialism, Nietzsche, Sartre, Camus, the meaning of life, freedom and the absurd"),
+        ("etica", "Ética y moral", "Ética, moral, virtud, justicia, deberes y dilemas morales", "ethics, morality, virtue, justice, duty and moral dilemmas"),
+        ("politica_fil", "Filosofía política y sociedad", "Filosofía política, libertad, contrato social, estado, Mill, Locke, Rawls y justicia social", "political philosophy, liberty, social contract, the state, Mill, Locke, Rawls"),
+        ("logica", "Lógica y filosofía de la ciencia", "Lógica, epistemología, filosofía de la ciencia, conocimiento, verdad y método científico", "logic, epistemology, philosophy of science, knowledge, truth and scientific method"),
+        ("sabiduria", "Sabiduría oriental y vida buena", "Filosofía oriental, budismo, taoísmo, sabiduría práctica, mindfulness y cómo vivir una buena vida", "Eastern philosophy, Buddhism, Taoism, practical wisdom, mindfulness and how to live well"),
+        ("ensayo_lit", "Ensayo literario y crítica cultural", "Ensayos personales, crítica cultural, reflexiones sobre la sociedad, la tecnología y la época", "personal essays, cultural criticism, reflections on society, technology and our times"),
+    ],
+    "estadistica": [
+        ("probabilidad", "Probabilidad y procesos", "Probabilidad, variables aleatorias, distribuciones, esperanza, cadenas de Markov y procesos estocásticos", "probability, random variables, distributions, expectation, Markov chains and stochastic processes"),
+        ("inferencia", "Inferencia y contrastes", "Inferencia estadística, estimación, intervalos de confianza, contrastes de hipótesis y verosimilitud", "statistical inference, estimation, confidence intervals, hypothesis testing and likelihood"),
+        ("regresion", "Regresión y modelos lineales", "Regresión lineal y logística, modelos lineales generalizados, ANOVA, residuos y selección de variables", "linear and logistic regression, generalized linear models, ANOVA, residuals and variable selection"),
+        ("bayes", "Estadística bayesiana", "Estadística bayesiana, distribuciones a priori y a posteriori, MCMC y modelos jerárquicos", "Bayesian statistics, prior and posterior distributions, MCMC and hierarchical models"),
+        ("series", "Series temporales y previsión", "Series temporales, ARIMA, estacionalidad, autocorrelación, previsión y modelos de volatilidad", "time series, ARIMA, seasonality, autocorrelation, forecasting and volatility models"),
+        ("ml_est", "Aprendizaje estadístico y minería de datos", "Aprendizaje estadístico, clasificación, árboles, bosques aleatorios, validación cruzada y reducción de dimensión", "statistical learning, classification, trees, random forests, cross-validation and dimension reduction"),
+        ("muestreo", "Muestreo, diseño y encuestas", "Muestreo, encuestas, diseño de experimentos, ensayos clínicos y análisis causal", "sampling, surveys, design of experiments, clinical trials and causal inference"),
+        ("supervivencia", "Supervivencia, actuarial y fiabilidad", "Análisis de supervivencia, matemática actuarial, tablas de vida, seguros y fiabilidad", "survival analysis, actuarial mathematics, life tables, insurance and reliability"),
+        ("algebra", "Álgebra lineal", "Álgebra lineal, matrices, espacios vectoriales, valores propios y descomposiciones", "linear algebra, matrices, vector spaces, eigenvalues and decompositions"),
+        ("analisis", "Cálculo y análisis", "Cálculo diferencial e integral, análisis real, ecuaciones diferenciales y optimización", "calculus, real analysis, differential equations and optimization"),
+        ("discreta", "Matemática discreta y lógica", "Matemática discreta, combinatoria, grafos, teoría de números, lógica y demostraciones", "discrete mathematics, combinatorics, graphs, number theory, logic and proofs"),
+    ],
+    "ciencia": [
+        ("fisica", "Física", "Física, mecánica, relatividad, física cuántica, partículas y termodinámica", "physics, mechanics, relativity, quantum physics, particles and thermodynamics"),
+        ("cosmos", "Astronomía y cosmología", "Astronomía, cosmología, el universo, agujeros negros, planetas, estrellas y exploración espacial", "astronomy, cosmology, the universe, black holes, planets, stars and space exploration"),
+        ("quimica", "Química y materiales", "Química, elementos, reacciones, materiales y tabla periódica", "chemistry, elements, reactions, materials and the periodic table"),
+        ("biologia", "Biología y evolución", "Biología, evolución, selección natural, genética, ADN, células y origen de la vida", "biology, evolution, natural selection, genetics, DNA, cells and the origin of life"),
+        ("neuro", "Neurociencia y mente", "Neurociencia, cerebro, memoria, conciencia, sueño y funcionamiento de la mente", "neuroscience, the brain, memory, consciousness, sleep and how the mind works"),
+        ("ecologia", "Ecología, clima y medio ambiente", "Ecología, cambio climático, medio ambiente, biodiversidad, energía y sostenibilidad", "ecology, climate change, environment, biodiversity, energy and sustainability"),
+        ("tierra", "Geología y ciencias de la Tierra", "Geología, la Tierra, volcanes, océanos, paleontología y dinosaurios", "geology, the Earth, volcanoes, oceans, paleontology and dinosaurs"),
+        ("divulgacion", "Divulgación y método científico", "Divulgación científica, historia de la ciencia, método científico y grandes descubrimientos", "popular science, history of science, the scientific method and great discoveries"),
+    ],
+    "novela": [
+        ("historica", "Novela histórica", "Novela histórica ambientada en Roma, la Edad Media u otras épocas, con personajes reales y batallas", "historical fiction set in ancient Rome, the Middle Ages or other eras, with real figures and battles"),
+        ("negra", "Novela negra y policíaca", "Novela negra, policíaca, detectives, crímenes, asesinatos e investigación", "crime fiction, detective novels, murders and investigation"),
+        ("thriller", "Thriller y espionaje", "Thriller, espionaje, conspiraciones, agentes secretos, intriga y suspense", "thriller, espionage, conspiracies, secret agents, intrigue and suspense"),
+        ("scifi", "Ciencia ficción", "Ciencia ficción, futuro, viajes espaciales, robots, distopías e inteligencia artificial", "science fiction, the future, space travel, robots, dystopias and artificial intelligence"),
+        ("fantasia", "Fantasía", "Fantasía épica, magia, dragones, reinos imaginarios, héroes y mundos inventados", "epic fantasy, magic, dragons, imaginary kingdoms, heroes and invented worlds"),
+        ("romance", "Romance y drama", "Novela romántica, historias de amor, relaciones, familia y drama personal", "romance novels, love stories, relationships, family and personal drama"),
+        ("clasicos", "Clásicos de la literatura", "Clásicos de la literatura universal, grandes novelas del siglo XIX y XX, realismo y tragedia", "classics of world literature, great nineteenth and twentieth century novels, realism and tragedy"),
+        ("terror", "Terror y misterio", "Terror, misterio, lo sobrenatural, fantasmas, monstruos y relatos góticos", "horror, mystery, the supernatural, ghosts, monsters and gothic tales"),
+        ("contemporanea", "Narrativa contemporánea", "Narrativa contemporánea, novela actual, relatos y cuentos, realismo mágico", "contemporary fiction, short stories, magical realism and literary novels"),
+        ("juvenil", "Juvenil y cómic", "Literatura juvenil, aventuras para jóvenes, cómics y novela gráfica", "young adult fiction, adventure for young readers, comics and graphic novels"),
+    ],
+    "biografia": [
+        ("politicos", "Políticos y líderes", "Biografía de políticos, presidentes, líderes, reyes y emperadores", "biography of politicians, presidents, leaders, kings and emperors"),
+        ("cientificos", "Científicos y pensadores", "Biografía de científicos, matemáticos, filósofos e inventores", "biography of scientists, mathematicians, philosophers and inventors"),
+        ("artistas", "Artistas y músicos", "Biografía de artistas, pintores, músicos, escritores y actores", "biography of artists, painters, musicians, writers and actors"),
+        ("empresarios", "Empresarios e innovadores", "Biografía de empresarios, fundadores, inversores e innovadores tecnológicos", "biography of entrepreneurs, founders, investors and tech innovators"),
+        ("espias", "Militares, espías y aventureros", "Memorias de militares, agentes secretos, espías, exploradores y aventureros", "memoirs of soldiers, spies, secret agents, explorers and adventurers"),
+        ("deportistas", "Deportistas", "Biografía de deportistas, atletas, futbolistas y entrenadores", "biography of athletes, footballers and coaches"),
+        ("memorias", "Memorias y autobiografías", "Memorias personales, autobiografía, historia de vida y relatos en primera persona", "personal memoir, autobiography, life story and first-person narratives"),
+    ],
+    "politica": [
+        ("teoria", "Teoría política", "Teoría política, poder, estado, democracia, ideologías, liberalismo, socialismo y autoritarismo", "political theory, power, the state, democracy, ideologies, liberalism, socialism and authoritarianism"),
+        ("internacional", "Relaciones internacionales y geopolítica", "Relaciones internacionales, geopolítica, diplomacia, guerra, alianzas y orden mundial", "international relations, geopolitics, diplomacy, war, alliances and world order"),
+        ("instituciones", "Instituciones y políticas públicas", "Instituciones, gobierno, partidos, elecciones, políticas públicas y administración", "institutions, government, parties, elections, public policy and administration"),
+        ("seguridad", "Seguridad, inteligencia y terrorismo", "Seguridad nacional, servicios de inteligencia, CIA, terrorismo, espionaje y guerra contra el terror", "national security, intelligence services, the CIA, terrorism, espionage and the war on terror"),
+        ("sociologia", "Sociología y sociedad", "Sociología, sociedad, clases sociales, género, migraciones, cultura y cambio social", "sociology, society, social classes, gender, migration, culture and social change"),
+        ("nacionalismo", "Nacionalismo e identidad", "Nacionalismo, identidad, naciones, totalitarismo, imperialismo y movimientos políticos", "nationalism, identity, nations, totalitarianism, imperialism and political movements"),
+        ("medios", "Medios, propaganda y opinión pública", "Medios de comunicación, periodismo, propaganda, opinión pública y comunicación política", "media, journalism, propaganda, public opinion and political communication"),
+        ("persuasion", "Poder y estrategia", "Poder, estrategia, manipulación, persuasión, negociación y liderazgo político", "power, strategy, manipulation, persuasion, negotiation and political leadership"),
+    ],
+    "tecnologia": [
+        ("programacion", "Programación y lenguajes", "Programación, Python, lenguajes, código limpio, funciones y buenas prácticas de desarrollo", "programming, Python, languages, clean code, functions and development best practices"),
+        ("ingenieria_sw", "Ingeniería del software", "Ingeniería del software, arquitectura, patrones de diseño, pruebas y metodologías ágiles", "software engineering, architecture, design patterns, testing and agile methodologies"),
+        ("datos", "Bases de datos y ciencia de datos", "Bases de datos, SQL, ciencia de datos, análisis de datos con pandas, visualización y ETL", "databases, SQL, data science, data analysis with pandas, visualization and ETL"),
+        ("ia", "Inteligencia artificial y aprendizaje profundo", "Inteligencia artificial, redes neuronales, aprendizaje profundo, modelos de lenguaje y visión por computador", "artificial intelligence, neural networks, deep learning, language models and computer vision"),
+        ("redes", "Redes, seguridad y sistemas", "Redes, TCP/IP, ciberseguridad, criptografía, sistemas operativos, Linux y administración", "networks, TCP/IP, cybersecurity, cryptography, operating systems, Linux and administration"),
+        ("web", "Desarrollo web y móvil", "Desarrollo web, JavaScript, HTML, CSS, frameworks y aplicaciones móviles", "web development, JavaScript, HTML, CSS, frameworks and mobile apps"),
+        ("cloud", "Cloud, DevOps y hardware", "Cloud, DevOps, contenedores, infraestructura, electrónica, hardware y sistemas embebidos", "cloud computing, DevOps, containers, infrastructure, electronics, hardware and embedded systems"),
+        ("algoritmos", "Algoritmos y estructuras de datos", "Algoritmos, estructuras de datos, complejidad computacional y resolución de problemas", "algorithms, data structures, computational complexity and problem solving"),
+        ("sociedad_tec", "Tecnología y sociedad", "Impacto social de la tecnología, internet, redes sociales, privacidad y futuro del trabajo", "social impact of technology, the internet, social media, privacy and the future of work"),
+    ],
+    "psicologia": [
+        ("cognitiva", "Psicología cognitiva y decisiones", "Psicología cognitiva, sesgos, toma de decisiones, pensamiento rápido y lento, racionalidad", "cognitive psychology, biases, decision making, fast and slow thinking, rationality"),
+        ("clinica", "Psicología clínica y salud mental", "Psicología clínica, trastornos mentales, ansiedad, depresión, terapia y psicopatología", "clinical psychology, mental disorders, anxiety, depression, therapy and psychopathology"),
+        ("emocional", "Emociones y relaciones", "Emociones, inteligencia emocional, relaciones, empatía, apego y comunicación", "emotions, emotional intelligence, relationships, empathy, attachment and communication"),
+        ("habitos", "Hábitos, productividad y desarrollo personal", "Hábitos, productividad, motivación, desarrollo personal, disciplina y superación", "habits, productivity, motivation, personal development, discipline and self-improvement"),
+        ("social", "Psicología social y del comportamiento", "Psicología social, comportamiento humano, persuasión, influencia, grupos y conformidad", "social psychology, human behavior, persuasion, influence, groups and conformity"),
+        ("sentido", "Sentido, bienestar y resiliencia", "Sentido de la vida, felicidad, bienestar, resiliencia, logoterapia y superación del sufrimiento", "meaning of life, happiness, wellbeing, resilience, logotherapy and overcoming suffering"),
+        ("sueno", "Sueño, cerebro y salud", "Sueño, descanso, cerebro, estrés, salud mental y hábitos saludables", "sleep, rest, the brain, stress, mental health and healthy habits"),
+    ],
+    "arte": [
+        ("visuales", "Pintura y artes visuales", "Pintura, escultura, fotografía, historia del arte, museos y movimientos artísticos", "painting, sculpture, photography, art history, museums and art movements"),
+        ("musica", "Música", "Música, compositores, historia de la música, instrumentos, teoría musical y géneros", "music, composers, history of music, instruments, music theory and genres"),
+        ("cine", "Cine, teatro y series", "Cine, directores, teatro, guion, series de televisión y lenguaje audiovisual", "film, directors, theatre, screenwriting, television series and audiovisual language"),
+        ("arquitectura", "Arquitectura y diseño", "Arquitectura, urbanismo, diseño gráfico, diseño industrial y funcionalismo", "architecture, urbanism, graphic design, industrial design and functionalism"),
+        ("poesia", "Poesía", "Poesía, poemas, versos, poetas y antologías poéticas", "poetry, poems, verse, poets and poetic anthologies"),
+        ("critica", "Crítica literaria y cultura", "Crítica literaria, teoría de la literatura, cultura popular y análisis de obras", "literary criticism, literary theory, popular culture and analysis of works"),
+        ("ver", "Cómo mirar y entender el arte", "Cómo mirar el arte, interpretar imágenes, publicidad y cultura visual", "how to look at art, interpreting images, advertising and visual culture"),
+    ],
+    "derecho": [
+        ("civil", "Derecho civil y mercantil", "Derecho civil, contratos, propiedad, sociedades mercantiles y obligaciones", "civil law, contracts, property, commercial companies and obligations"),
+        ("penal", "Derecho penal y procesal", "Derecho penal, delitos, penas, procesos judiciales y criminología", "criminal law, offences, penalties, court proceedings and criminology"),
+        ("constitucional", "Derecho constitucional y administrativo", "Derecho constitucional, derechos fundamentales, administración pública y Unión Europea", "constitutional law, fundamental rights, public administration and the European Union"),
+        ("fiscal", "Fiscalidad y derecho laboral", "Fiscalidad, impuestos, derecho laboral, seguridad social y normativa bancaria", "taxation, taxes, labour law, social security and banking regulation"),
+        ("internacional_der", "Derecho internacional", "Derecho internacional, tratados, derechos humanos y justicia internacional", "international law, treaties, human rights and international justice"),
+    ],
+    "cocina": [
+        ("recetas", "Recetas", "Recetas de cocina, ingredientes, platos, pasta, arroz, carnes y postres", "recipes, ingredients, dishes, pasta, rice, meat and desserts"),
+        ("tecnica", "Técnica culinaria y repostería", "Técnicas de cocina, repostería, panadería, cocina molecular y chefs", "cooking techniques, pastry, baking, molecular gastronomy and chefs"),
+        ("vino", "Vino, bebidas y cultura gastronómica", "Vino, cerveza, café, bebidas, enología y cultura gastronómica", "wine, beer, coffee, drinks, oenology and food culture"),
+        ("nutricion", "Nutrición y dietas", "Nutrición, dietas, alimentación saludable, ayuno y ciencia de los alimentos", "nutrition, diets, healthy eating, fasting and food science"),
+    ],
+    "salud": [
+        ("medicina", "Medicina y enfermedades", "Medicina, enfermedades, diagnóstico, tratamiento, anatomía y fisiología", "medicine, diseases, diagnosis, treatment, anatomy and physiology"),
+        ("epidemiologia", "Salud pública y epidemiología", "Salud pública, epidemiología, vacunas, pandemias y sistemas sanitarios", "public health, epidemiology, vaccines, pandemics and health systems"),
+        ("ejercicio", "Ejercicio y bienestar físico", "Ejercicio físico, entrenamiento, fitness, longevidad y bienestar", "physical exercise, training, fitness, longevity and wellbeing"),
+        ("alternativa", "Medicina integrativa y cuidados", "Cuidados, enfermería, medicina integrativa, primeros auxilios y envejecimiento", "care, nursing, integrative medicine, first aid and ageing"),
+    ],
+    "viajes": [
+        ("guias", "Guías de viaje", "Guías de viaje, destinos, itinerarios, ciudades, turismo y consejos para viajar", "travel guides, destinations, itineraries, cities, tourism and travel tips"),
+        ("relatos", "Relatos de viaje y exploración", "Relatos de viajes, exploradores, aventuras, expediciones y crónicas", "travel writing, explorers, adventures, expeditions and chronicles"),
+        ("geografia", "Geografía y mapas", "Geografía, mapas, países, regiones, cartografía y geografía humana", "geography, maps, countries, regions, cartography and human geography"),
+    ],
+    "idiomas": [
+        ("aprendizaje", "Aprender idiomas", "Aprender idiomas, gramática, vocabulario, inglés, francés, italiano y métodos de estudio", "learning languages, grammar, vocabulary, English, French, Italian and study methods"),
+        ("linguistica", "Lingüística y escritura", "Lingüística, etimología, historia de las lenguas, redacción y estilo de escritura", "linguistics, etymology, history of languages, writing and style"),
+    ],
+    "educacion": [
+        ("pedagogia", "Pedagogía y enseñanza", "Pedagogía, enseñanza, didáctica, aprendizaje, docentes y sistemas educativos", "pedagogy, teaching, didactics, learning, teachers and education systems"),
+        ("estudio", "Técnicas de estudio y oposiciones", "Técnicas de estudio, memoria, oposiciones, exámenes, orientación académica y universidad", "study techniques, memory, exams, academic guidance and university"),
+        ("apuntes", "Apuntes y material de curso", "Apuntes de clase, horarios, temarios, guías docentes y material de asignaturas", "class notes, timetables, syllabi, course guides and subject material"),
+    ],
+    "religion": [
+        ("cristianismo", "Cristianismo y Biblia", "Cristianismo, Biblia, teología, iglesia, Jesús y espiritualidad cristiana", "Christianity, the Bible, theology, the church, Jesus and Christian spirituality"),
+        ("otras", "Otras religiones y mitología", "Islam, judaísmo, budismo, hinduismo, mitología, religiones comparadas y esoterismo", "Islam, Judaism, Buddhism, Hinduism, mythology, comparative religion and esotericism"),
+    ],
+    "deporte": [
+        ("deportes", "Deportes y entrenamiento", "Deportes, fútbol, baloncesto, tenis, ciclismo, running, entrenamiento y competición", "sports, football, basketball, tennis, cycling, running, training and competition"),
+        ("juegos", "Juegos, ajedrez y ocio", "Juegos, ajedrez, videojuegos, juegos de mesa, aficiones y ocio", "games, chess, video games, board games, hobbies and leisure"),
+    ],
+    "hogar": [
+        ("bricolaje", "Bricolaje y manualidades", "Bricolaje, reparaciones, carpintería, manualidades y herramientas", "DIY, repairs, carpentry, crafts and tools"),
+        ("jardin", "Jardín y huerto", "Jardinería, plantas, huerto, árboles y cuidado del jardín", "gardening, plants, vegetable garden, trees and garden care"),
+        ("organizacion", "Organización del hogar y finanzas personales", "Organización del hogar, orden, minimalismo, ahorro y finanzas personales", "home organization, decluttering, minimalism, saving and personal finance"),
+    ],
+}
+
+
+def cargar(carpeta: Path | str | None = None) -> tuple[dict, dict]:
+    """(géneros nuevos {id: nombre}, taxonomía {género: [(subid, nombre, frase_es, frase_en)]}) más lo que añadas tú en `conocimiento/taxonomia.json`:
+    {"generos": {"id": "Nombre"}, "sub": {"genero": [{"id": "x", "nombre": "…", "frases": ["…", "…"]}]}}. Tus subgéneros se suman (mismo id = sustituye)."""
+    generos, tax = dict(GENEROS_NUEVOS), {g: list(v) for g, v in TAXONOMIA.items()}
+    if carpeta is not None:
+        try:
+            mio = json.loads((Path(carpeta) / "taxonomia.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            mio = {}
+        generos.update(mio.get("generos", {}))
+        for g, subs in mio.get("sub", {}).items():
+            actuales = {s[0]: s for s in tax.setdefault(g, [])}
+            for s in subs:
+                fr = s.get("frases", [])
+                actuales[s["id"]] = (s["id"], s.get("nombre", s["id"]), fr[0] if fr else s.get("nombre", ""), fr[1] if len(fr) > 1 else (fr[0] if fr else ""))
+            tax[g] = list(actuales.values())
+    return generos, tax
+
+
+def subgeneros(genero: str, carpeta: Path | str | None = None) -> list[tuple[str, str, str, str]]:
+    """[(subid, nombre, frase_es, frase_en)] del género (con lo que hayas añadido en taxonomia.json); [] si el género no tiene."""
+    return cargar(carpeta)[1].get(genero, [])
+
+
+def nombre_sub(genero: str, subid: str, carpeta: Path | str | None = None) -> str:
+    return next((s[1] for s in subgeneros(genero, carpeta) if s[0] == subid), "")
+
+
+if __name__ == "__main__":
+    print(sum(len(v) for v in TAXONOMIA.values()), "subgéneros en", len(TAXONOMIA), "géneros")
 :::END
 :::BEGIN py/conocimiento/telescopio.py|text
 """Telescopio: busca obras de acceso abierto o dominio público, las trae a la biblioteca y las clasifica con los metadatos reales (materias).
@@ -31911,7 +32210,7 @@ def _con_modelo_falso(monkeypatch):
 def test_sugiere_por_semillas_y_por_tu_biblioteca(monkeypatch, tmp_path):
     _con_modelo_falso(monkeypatch)
     s = c.sugerir("Historia de imperios, guerras, reyes y civilizaciones antiguas", tmp_path)
-    assert s["genero"] == "historia" and s["confianza"] > 0 and set(s["puntos"]) == set(c.SEMILLAS)
+    assert s["genero"] == "historia" and s["confianza"] > 0 and set(s["puntos"]) == set(c.semillas_todas(tmp_path))
     # un libro tuyo con una palabra rara arrastra a los parecidos hacia el género que fijaste
     b = tmp_path / "biblioteca"; b.mkdir()
     (b / "metadatos.json").write_text(json.dumps({"libros/x/a.pdf": {"titulo": "Zorrotz quimbaya tuxtla", "genero": "arte", "automatico": False}}), encoding="utf-8")
@@ -33923,6 +34222,7 @@ def test_disponible_y_respuesta(ollama_falso, tmp_path):
 
 def test_sin_ollama_o_sin_modelo_no_pasa_nada(monkeypatch, tmp_path):
     monkeypatch.setattr(llm, "ACTIVO", True); llm._estado.clear()
+    monkeypatch.setattr(llm, "_arrancar", lambda: None)                                     # que el test no encienda un Ollama de verdad
     monkeypatch.setattr(llm, "_http", lambda *a, **k: (_ for _ in ()).throw(OSError("conexión rechazada")))
     assert llm.disponible(tmp_path) is False and llm.clasificar("t", [], "", [], im.GENEROS, tmp_path) is None
     llm._estado.clear()
@@ -35139,6 +35439,88 @@ def test_ajuste_no_respuesta_corrige_sesgo():
     R = r["respondentes"]
     sin = R.y.mean(); con = np.average(R.y, weights=R.peso_ajustado)
     assert abs(con - d.y.mean()) < 0.1 < abs(sin - d.y.mean()) and r["tasa_respuesta"] == pytest.approx(0.5, abs=0.02) and r["avisos"]
+:::END
+:::BEGIN py/tests/test_taxonomia.py|text
+"""Taxonomía género › subgénero: datos coherentes, ampliable por el usuario, y el subgénero se calcula, se guarda, se corrige y se revisa."""
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conocimiento import clasificador as c
+from conocimiento import importar as im
+from conocimiento import taxonomia as tx
+
+ROMA = "Roma antigua: Julio César, la república romana, las legiones, Augusto y el imperio. Alejandro Magno y Grecia clásica. " * 6
+
+
+def test_los_datos_de_la_taxonomia_son_coherentes():
+    assert sum(len(v) for v in tx.TAXONOMIA.values()) >= 100 and len(tx.GENEROS_NUEVOS) == 9
+    for g, subs in tx.TAXONOMIA.items():
+        assert g in im.GENEROS and subs, g
+        ids = [s[0] for s in subs]
+        assert len(ids) == len(set(ids)), f"ids repetidos en {g}"
+        assert all(len(s) == 4 and all(str(x).strip() for x in s) for s in subs), g          # id, nombre, frase en español, frase en inglés
+    assert set(tx.GENEROS_NUEVOS) <= set(tx.TAXONOMIA) and set(tx.GENEROS_NUEVOS) <= set(im.GENEROS)
+    assert list(im.GENEROS)[-1] == "otro"
+
+
+def test_el_usuario_amplia_la_taxonomia_sin_tocar_el_codigo(tmp_path):
+    (tmp_path / "taxonomia.json").write_text(json.dumps({
+        "generos": {"astrologia": "Astrología"},
+        "sub": {"historia": [{"id": "vikingos", "nombre": "Vikingos", "frases": ["Vikingos, drakkars y sagas nórdicas", "Vikings, longships and Norse sagas"]},
+                             {"id": "antigua", "nombre": "Mundo antiguo (mío)", "frases": ["a", "b"]}],
+                "astrologia": [{"id": "signos", "nombre": "Signos", "frases": ["Signos del zodiaco"]}]}}), encoding="utf-8")
+    generos, tax = tx.cargar(tmp_path)
+    assert generos["astrologia"] == "Astrología" and "derecho" in generos
+    ids = {s[0]: s for s in tax["historia"]}
+    assert "vikingos" in ids and ids["antigua"][1] == "Mundo antiguo (mío)" and len(tax["historia"]) == len(tx.TAXONOMIA["historia"]) + 1   # suma, y mismo id = sustituye
+    assert tx.nombre_sub("astrologia", "signos", tmp_path) == "Signos" and tx.subgeneros("no_existe", tmp_path) == []
+
+
+def test_subgenero_sin_modelo_por_palabras(monkeypatch, tmp_path):
+    monkeypatch.setattr(c, "ACTIVO", False)
+    r = c.subgenero(ROMA, "historia", tmp_path)
+    assert r["id"] == "antigua" and r["nombre"].startswith("Roma") and set(r["puntos"]) <= {s[0] for s in tx.TAXONOMIA["historia"]}
+    assert c.subgenero("zzz qqq", "historia", tmp_path) is None            # nada en común: no inventa
+    assert c.subgenero(ROMA, "otro", tmp_path) is None                      # «otro» no tiene subgéneros
+    sem = c.semillas_todas(tmp_path)
+    assert set(tx.GENEROS_NUEVOS) <= set(sem) and all(len(v) >= 2 for v in sem.values())
+
+
+def test_importar_guarda_el_subgenero_lo_valida_y_se_puede_corregir(tmp_path):
+    o = tmp_path / "o"; o.mkdir()
+    (o / "apuntes_roma.md").write_text("# Roma\n\n" + ROMA, encoding="utf-8")
+    (o / "otros.md").write_text("# Roma\n\n" + ROMA + " diferente", encoding="utf-8")
+    k, db = tmp_path / "k", tmp_path / "i.db"
+    auto = im.clasificar(o / "apuntes_roma.md", k)
+    assert auto["genero"] == "historia" and auto["subgenero"] == "antigua" and auto["subgeneros"] and "subgénero" in auto["motivo"]
+    r = im.importar([o / "apuntes_roma.md", {"ruta": o / "otros.md", "subgenero": "no_vale"}], k, db=db)
+    assert all(x["estado"] == "ok" and x["subgenero"] == "antigua" for x in r)                   # un subgénero inválido se ignora y manda el automático
+    rel = next(iter(im.leer_metadatos(k)))
+    assert im.leer_metadatos(k)[rel]["subgenero"] == "antigua" and im.leer_metadatos(k)[rel]["propuesta"]["subgenero"] == "antigua"
+    f = im.editar(rel, {"subgenero": "medieval"}, k, db=db)
+    assert f["subgenero"] == "medieval" and f["subgenero_nombre"] == "Edad Media"
+    with pytest.raises(ValueError):
+        im.editar(rel, {"subgenero": "fisica"}, k, db=db)                                         # un subgénero de otro género no vale
+    g = im.editar(rel, {"genero": "ciencia"}, k, db=db)
+    assert g["subgenero"] == ""                                                                  # al cambiar de género se limpia el subgénero que ya no corresponde
+    fila = next(x for x in im.revisar(carpeta=k) if x["rel"] == rel)
+    assert fila["corregido"] and fila["propuesta"]["subgenero"] == "antigua"
+    assert im.opciones()["subgeneros"]["historia"][0]["id"] == "antigua" and "cocina" in {x["id"] for x in im.opciones()["generos"]}
+
+
+def test_libros_van_a_carpeta_de_genero_y_subgenero(tmp_path):
+    import zipfile
+    f = tmp_path / "SPQR historia.epub"
+    with zipfile.ZipFile(f, "w") as z:
+        z.writestr("mimetype", "application/epub+zip"); z.writestr("c.xhtml", "<p>" + ROMA + "</p>")
+    r = im.importar([{"ruta": f, "galaxia": "libros", "genero": "historia"}], tmp_path / "k", db=tmp_path / "i.db")[0]
+    assert r["estado"] == "ok" and r["subgenero"] == "antigua"
+    partes = Path(r["destino"]).parts
+    assert partes[-3:-1] == ("Historia", "Roma_Grecia_y_mundo_antiguo"), partes
 :::END
 :::BEGIN py/tests/test_telescopio.py|text
 """Telescopio sin red: las respuestas de las fuentes se simulan sustituyendo telescopio._get."""
@@ -38617,8 +38999,8 @@ function detalleDocumento(n, d) {         /* un capítulo de un libro o un docum
     else { $('#q').value = n.nombre; buscar(); $('#q').focus(); }
   };
 }
-var GENEROS_NOM = {historia: 'Historia', economia: 'Economía y finanzas', ensayo: 'Ensayo y filosofía', estadistica: 'Estadística y matemáticas', ciencia: 'Ciencia y divulgación', novela: 'Novela y ficción',
-                   biografia: 'Biografía y memorias', politica: 'Política y sociedad', tecnologia: 'Tecnología e informática', psicologia: 'Psicología y salud', arte: 'Arte, música y cultura', otro: 'Otros'};
+var GENEROS_NOM = /*__GENEROS_NOM__*/{};
+Object.keys(GENEROS_NOM).forEach(function (k) { if (!ALIAS_AMBITO[k]) ALIAS_AMBITO[k] = {ge: k}; });          /* cada género se puede usar como prefijo de búsqueda (derecho: cocina: salud: …) */
 function esLibro(m) { return m.kind === 'modulo' && m.hijos.length > 0 && m.hijos[0].tipo === 'capitulo'; }
 function detalleLibro(m) {                  /* el panel de un libro: ficha y lista de capítulos (en el mapa solo se ven al pulsar el libro) */
   var d = $('#detalle'), c0 = m.hijos[0], r = m.parent, gen = c0.genero && GENEROS_NOM[c0.genero] ? GENEROS_NOM[c0.genero] : '';
@@ -38815,7 +39197,7 @@ async function impAnadir(rutas) {
     if (cl.error) { impAviso(cl.error); continue; }
     var c = cl[0];
     imp.archivos.push({ruta: c.ruta, nombre: c.ruta.split(/[\\/]/).pop(), auto: c, titulo: c.titulo, galaxia: 'auto', genero: 'auto', subtema: '', tipo: 'auto', etiquetas: '',
-      incluir: !c.duplicado, abierto: imp.archivos.length === 0, estado: '', res: null});
+      subgenero: 'auto', incluir: !c.duplicado, abierto: imp.archivos.length === 0, estado: '', res: null});
     impRender();
   }
   agujero.ocupado(false); impAviso('');
@@ -38832,12 +39214,12 @@ function impBarras(items, nombreKey, valKey, sel, tipo) {
     return '<div class="imp-bar' + (sel === nom || sel === x.id ? ' sel' : '') + '" data-fija="' + tipo + '" data-v="' + esc(x.id || nom) + '" title="Pulsa para fijarlo"><span>' + esc(nom) + '</span><span><i style="width:' + Math.round(100 * x[valKey] / max) + '%"></i></span><em>' + x[valKey] + '</em></div>'; }).join('');
 }
 function impTarjeta(a, i, o) {
-  var c = a.auto, G = o.galaxias, ga = a.galaxia === 'auto' ? c.galaxia : a.galaxia, ge = a.genero === 'auto' ? c.genero : a.genero, ti = a.tipo === 'auto' ? c.tipo : a.tipo, su = a.subtema || c.subtema;
+  var c = a.auto, G = o.galaxias, ga = a.galaxia === 'auto' ? c.galaxia : a.galaxia, ge = a.genero === 'auto' ? c.genero : a.genero, ti = a.tipo === 'auto' ? c.tipo : a.tipo, su = a.subtema || c.subtema, sgs = (o.subgeneros || {})[ge] || [], sg = a.subgenero === 'auto' ? c.subgenero : a.subgenero, sgNom = (sgs.filter(function (x) { return x.id === sg; })[0] || {}).nombre || '';
   var col = GAL[ga] ? 'rgb(' + GAL[ga].color.join(',') + ')' : '#9fb0cc';
   var h = '<div class="imp-card' + (a.incluir ? '' : ' off') + (a.estado === 'listo' ? ' listo' : a.estado === 'error' ? ' error' : '') + '" data-i="' + i + '"><div class="imp-cab">' +
     '<input type="checkbox" data-c="incluir"' + (a.incluir ? ' checked' : '') + ' title="Incluir en la importación">' +
     '<input type="text" data-c="titulo" value="' + esc(a.titulo) + '" title="' + esc(c.titulo_largo || a.nombre) + '">' +
-    '<div class="imp-ins"><span class="gal" style="color:' + col + '">' + esc(impNom(G, ga)) + '</span><span>' + esc(impNom(o.generos, ge)) + '</span><span>' + esc(su) + '</span><span>' + esc(impNom(o.tipos, ti)) + '</span>' +
+    '<div class="imp-ins"><span class="gal" style="color:' + col + '">' + esc(impNom(G, ga)) + '</span><span>' + esc(impNom(o.generos, ge)) + '</span>' + (sgNom ? '<span>' + esc(sgNom) + '</span>' : '') + '<span>' + esc(su) + '</span><span>' + esc(impNom(o.tipos, ti)) + '</span>' +
     '<span>' + esc(c.extension.toUpperCase()) + ' · ' + fmtTam(c.tamano) + (c.paginas ? ' · ' + c.paginas + ' págs.' : '') + (c.idioma ? ' · ' + c.idioma : '') + '</span>' +
     (c.duplicado ? '<span class="aviso">ya importado</span>' : '') + '</div>' +
     '<span class="imp-est" style="color:' + (a.estado === 'error' ? '#ff8a73' : '#7be08a') + '">' + (a.estado === 'hecho' ? '' : '') + esc(a.estadoTxt || '') + '</span>' +
@@ -38845,10 +39227,12 @@ function impTarjeta(a, i, o) {
   h += '<div class="imp-cuerpo"' + (a.abierto ? '' : ' hidden') + '><div class="imp-campos">' +
     '<label>Galaxia<select data-c="galaxia">' + impOpt(G, a.galaxia, 'Automática (' + impNom(G, c.galaxia) + ')') + '</select></label>' +
     '<label>Género<select data-c="genero">' + impOpt(o.generos, a.genero, 'Automático (' + impNom(o.generos, c.genero) + ')') + '</select></label>' +
+    '<label>Subgénero<select data-c="subgenero">' + impOpt(sgs, a.subgenero, 'Automático (' + esc((sgs.filter(function (x) { return x.id === c.subgenero; })[0] || {}).nombre || '—') + ')') + '</select></label>' +
     '<label>Subtema<input type="text" data-c="subtema" list="impSub" placeholder="Automático (' + esc(c.subtema) + ')" value="' + esc(a.subtema) + '"></label>' +
     '<label>Tipo<select data-c="tipo">' + impOpt(o.tipos, a.tipo, 'Automático (' + impNom(o.tipos, c.tipo) + ')') + '</select></label>' +
     '<label style="grid-column:1/-1">Etiquetas (separadas por comas)<input type="text" data-c="etiquetas" placeholder="p. ej. regresión, tfm, repaso" value="' + esc(a.etiquetas) + '"></label></div>' +
     '<div class="imp-det"><h4>Género más probable</h4>' + (c.generos.length ? impBarras(c.generos, 'nombre', 'puntos', a.genero === 'auto' ? c.genero : a.genero, 'genero') : '<p class="imp-nota">Sin pistas claras: «Otros».</p>') +
+    '<h4 style="margin-top:8px">Subgénero más probable</h4>' + ((c.subgeneros || []).length ? impBarras(c.subgeneros, 'nombre', 'puntos', sg, 'subgenero') : '<p class="imp-nota">Sin subgéneros para este género.</p>') +
     '<h4 style="margin-top:8px">Temas de estadística detectados</h4>' + (c.temas.length ? impBarras(c.temas, 'tema', 'puntos', su, 'subtema') : '<p class="imp-nota">Ninguno del catálogo.</p>') + '</div>' +
     '<div class="imp-det"><h4>Capítulos detectados (' + c.n_capitulos + ')</h4>' + (c.capitulos.length ? '<ol class="imp-caps">' + c.capitulos.map(function (x) { return '<li>' + esc(recorta(x, 60)) + '</li>'; }).join('') + (c.n_capitulos > c.capitulos.length ? '<li>… y ' + (c.n_capitulos - c.capitulos.length) + ' más</li>' : '') + '</ol>' : '<p class="imp-nota">Sin índice: se importará como un solo bloque.</p>') +
     (c.vista_previa ? '<h4 style="margin-top:8px">Vista previa</h4><p class="imp-prev">«' + esc(c.vista_previa) + '…»</p>' : '') +
@@ -38879,7 +39263,7 @@ function impRender() {
     h += imp.resultados.map(function (r) {
       var g = r.galaxia && GAL[r.galaxia] ? GAL[r.galaxia].nombre : '';
       return '<div class="imp-res"><span class="' + (r.estado === 'ok' ? 'ok' : r.estado === 'duplicado' ? 'dup' : 'err') + '">' + (r.estado === 'ok' ? '✓' : r.estado === 'duplicado' ? '＝' : '✗') + '</span><b>' + esc(recorta(r.titulo || r.nombre, 60)) + '</b><span>' +
-        (r.estado === 'ok' ? '→ ' + esc(g) + ' › ' + esc(r.subtema) + (r.genero && GENEROS_NOM[r.genero] ? ' · ' + esc(GENEROS_NOM[r.genero]) : '') + ' (' + esc(r.tipo) + ')' : esc(r.mensaje)) + '</span></div>';
+        (r.estado === 'ok' ? '→ ' + esc(g) + ' › ' + esc(r.subtema) + (r.genero && GENEROS_NOM[r.genero] ? ' · ' + esc(GENEROS_NOM[r.genero]) : '') + (r.subgenero_nombre ? ' › ' + esc(r.subgenero_nombre) : '') + ' (' + esc(r.tipo) + ')' : esc(r.mensaje)) + '</span></div>';
     }).join('');
   }
   p.innerHTML = h;
@@ -38890,7 +39274,7 @@ $('#impPanel').addEventListener('input', function (ev) {         /* texto: solo 
 });
 $('#impPanel').addEventListener('change', function (ev) {
   var f = ev.target.closest('.imp-card'), c = ev.target.dataset.c;
-  if (f && c) { var a = imp.archivos[+f.dataset.i]; a[c] = ev.target.type === 'checkbox' ? ev.target.checked : ev.target.value; impRender(); return; }
+  if (f && c) { var a = imp.archivos[+f.dataset.i]; a[c] = ev.target.type === 'checkbox' ? ev.target.checked : ev.target.value; if (c === 'genero') a.subgenero = 'auto'; impRender(); return; }
   if (ev.target.id === 'gModo') { imp.modo = ev.target.value; return; }
   var m = {gGal: 'galaxia', gGen: 'genero', gSub: 'subtema', gTipo: 'tipo', gEti: 'etiquetas'}[ev.target.id]; if (!m) return;       /* «Para todos» */
   imp.archivos.forEach(function (a) { a[m] = ev.target.value; }); var g = {gGal: $('#gGal').value, gGen: $('#gGen').value, gSub: $('#gSub').value, gTipo: $('#gTipo').value, gEti: $('#gEti').value}; impRender();
@@ -38900,7 +39284,7 @@ $('#impPanel').addEventListener('click', function (ev) {
   var f = ev.target.closest('.imp-card'), a = f ? imp.archivos[+f.dataset.i] : null;
   if (ev.target.closest('[data-q]') && a) { imp.archivos.splice(+f.dataset.i, 1); impRender(); }
   else if (ev.target.closest('[data-ab]') && a) { a.abierto = !a.abierto; impRender(); }
-  else if (ev.target.closest('[data-fija]') && a) { var b = ev.target.closest('[data-fija]'); a[b.dataset.fija] = b.dataset.v; impRender(); }      /* pulsar una barra fija ese género o subtema */
+  else if (ev.target.closest('[data-fija]') && a) { var b = ev.target.closest('[data-fija]'); a[b.dataset.fija] = b.dataset.v; if (b.dataset.fija === 'genero') a.subgenero = 'auto'; impRender(); }      /* pulsar una barra fija ese género o subtema */
   else if (ev.target.id === 'impMas') impElegir();
   else if (ev.target.id === 'impTodo') { var abrir = !imp.archivos.every(function (x) { return x.abierto; }); imp.archivos.forEach(function (x) { x.abierto = abrir; }); impRender(); }
   else if (ev.target.id === 'impGo') impImportar();
@@ -38912,7 +39296,7 @@ async function impImportar() {
   for (var k = 0; k < cola.length; k++) {                          /* de uno en uno; cada archivo se importa en segundo plano y aquí se ve su avance real (copiar, leer páginas, indexar) */
     var a = cola[k]; a.estado = 'trabajando'; a.estadoTxt = '⏳ 0%'; impRender();
     var ini = await api.importar_archivos([{ruta: a.ruta, titulo: a.titulo, galaxia: a.galaxia === 'auto' ? null : a.galaxia, genero: a.genero === 'auto' ? null : a.genero,
-      subtema: a.subtema || null, tipo: a.tipo === 'auto' ? null : a.tipo, etiquetas: a.etiquetas, modo: imp.modo}]), st = {fase: 'fin', resultado: {error: ini && ini.error}};
+      subtema: a.subtema || null, subgenero: a.subgenero === 'auto' ? null : a.subgenero, tipo: a.tipo === 'auto' ? null : a.tipo, etiquetas: a.etiquetas, modo: imp.modo}]), st = {fase: 'fin', resultado: {error: ini && ini.error}};
     if (!ini.error) do {
       await espera(350); st = await api.estado_trabajo();
       var fr = (k + Math.min(st.frac || 0, 1)) / cola.length; var bar = $('#impProg'); if (bar) bar.style.width = Math.round(100 * fr) + '%';
@@ -38999,7 +39383,7 @@ async function bibCargar() {
 function bibVista() {
   var f = norm(bib.filtro);
   return (bib.lista || []).filter(function (x) {
-    return (!bib.gal || x.galaxia === bib.gal) && (!bib.desde || (x.fecha_hora || '').slice(0, 10) >= bib.desde) && (!f || norm([x.titulo, x.titulo_largo, x.genero, GENEROS_NOM[x.genero], x.subtema, x.etiquetas, x.tipo, x.galaxia].join(' ')).indexOf(f) >= 0);
+    return (!bib.gal || x.galaxia === bib.gal) && (!bib.desde || (x.fecha_hora || '').slice(0, 10) >= bib.desde) && (!f || norm([x.titulo, x.titulo_largo, x.genero, GENEROS_NOM[x.genero], x.subgenero_nombre, x.subtema, x.etiquetas, x.tipo, x.galaxia].join(' ')).indexOf(f) >= 0);
   }).sort(function (a, b) { return bib.orden === 'gal' ? 0 : String(b.fecha_hora || '').localeCompare(String(a.fecha_hora || '')); });
 }
 function bibTarjeta(x) {
@@ -39009,7 +39393,9 @@ function bibTarjeta(x) {
     '<div class="bib-portada">' + (x.portada ? '<img alt="" src="' + x.portada + '">' : esc((x.extension || '').toUpperCase())) + '</div>' +
     '<div class="bib-campos"><label class="ancho">Título<input type="text" data-c="titulo" value="' + esc(x.titulo) + '" title="' + esc(x.titulo_largo) + '"></label>' +
     '<label>Galaxia<select data-c="galaxia">' + opts(o.galaxias, x.galaxia) + '</select></label><label>Género<select data-c="genero">' + opts(o.generos, x.genero) + '</select></label>' +
-    '<label>Tipo<select data-c="tipo">' + opts(o.tipos, x.tipo) + '</select></label><label>Subtema<input type="text" data-c="subtema" list="impSub" value="' + esc(x.subtema) + '"></label>' +
+    '<label>Tipo<select data-c="tipo">' + opts(o.tipos, x.tipo) + '</select></label>' +
+    '<label>Subgénero<select data-c="subgenero"><option value="">—</option>' + opts((o.subgeneros || {})[x.genero] || [], x.subgenero) + '</select></label>' +
+    '<label>Subtema<input type="text" data-c="subtema" list="impSub" value="' + esc(x.subtema) + '"></label>' +
     '<label class="ancho">Etiquetas<input type="text" data-c="etiquetas" value="' + esc(x.etiquetas) + '" placeholder="separadas por comas"></label></div>' +
     '<div class="bib-acc"><button class="btn primario" data-a="abrir" type="button"' + (x.existe ? '' : ' disabled') + '>Abrir</button>' +
     '<button class="btn" data-a="recl" type="button" title="Vuelve a decidir galaxia, género y subtema según el contenido y tus correcciones anteriores">Reclasificar</button>' +
@@ -40296,6 +40682,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 5m. **Referencias que viajan:** los PDF/EPUB no suben a GitHub, pero `conocimiento/biblioteca/referencias.json` (los metadatos sin rutas del equipo: título, galaxia, género, capítulos, hash) y `biblioteca/portadas/` sí (`.gitignore`; `importar._guardar` los escribe junto a `metadatos.json`, que sigue siendo local). `leer_metadatos` fusiona ambos, así que en otro equipo el mapa y el Observatorio muestran los libros como referencias vacías («sin el archivo en este equipo»); al importar un archivo con el mismo hash se restaura en su sitio.
 5k. **Telescopio:** pestaña «📡 Telescopio» (`py/conocimiento/telescopio.py`, API `Api.telescopio_buscar/traer`, consola `python -m conocimiento telescopio <consulta> [--traer N]`). Busca **solo fuentes legales**: Project Gutenberg (catálogo OPDS oficial, dominio público; Gutendex se descartó por lento), Google Books y Open Library (catálogo: ficha y enlace; descarga solo si es dominio público o lectura abierta; Google necesita clave en `GOOGLE_BOOKS_KEY` o `conocimiento/google_books.key` porque la cuota anónima diaria suele estar agotada), arXiv, OpenAlex (solo con PDF abierto) e Internet Archive (solo licencia CC/dominio público o publicado ≤ 1929). **No se añaden fuentes piratas (Anna's Archive, Z-Library, LibGen…) ni descargadores de ellas.** `traer` descarga (https, ≤ 200 MB, comprueba que es PDF/EPUB de verdad) y pasa por `importar.importar` con el género sacado de las materias de la obra (`genero_desde_materias`); `materias_de` consulta Open Library para clasificar un título que ya tienes. Tests sin red (`_get` se sustituye): `tests/test_telescopio.py`.
 5p. **Importar cualquier archivo:** además de libros, el importador acepta código (`CODIGO_EXT`: .py .ipynb .r .sas .sql .js …), datos (`DATOS_EXT`: .csv .xlsx .json .yaml …) y apuntes (`APUNTES_EXT`: .pptx .tex .html .rst) — todo en `EXT_IMPORTABLE` (`conocimiento/__init__.py`). El código va a la galaxia Código (tipo `codigo`, género tecnología); los datos al tipo `datos` (solo se indexa la cabecera); los cuadernos se indexan por celdas y su «índice» son los títulos markdown. Las carpetas de `fuentes.json` siguen leyendo solo `EXT` (documentos), para no indexar todo un disco. Otros formatos (imágenes, .zip, .exe) se rechazan con un mensaje claro. Se filtran en el buscador con prefijos como `py:`, `ipynb:`, `csv:`, `sql:`, `pptx:` (`conocimiento.buscar(formato=)`). Test: `tests/test_importar_formatos.py`.
+5t. **Taxonomía género › subgénero:** `py/conocimiento/taxonomia.py` (123 subgéneros en 20 géneros; los 11 de siempre + derecho, cocina, salud, viajes, idiomas, educación, religión, deporte y hogar; cada subgénero lleva una frase en español y otra en inglés). **Ampliable sin tocar código** con `conocimiento/taxonomia.json`: `{"generos": {"id": "Nombre"}, "sub": {"genero": [{"id": "x", "nombre": "…", "frases": ["es", "en"]}]}}` (mismo id = sustituye; recarga con el botón ⟳ Actualizar). `clasificador.subgenero(texto, genero)` elige el subgénero entre los de su género (embeddings con las frases y con lo que ya tienes en esa categoría; sin modelo, por palabras en común); los géneros nuevos no tienen reglas de palabras clave, solo parecido y LLM (sus semillas salen de las frases de sus subgéneros: `semillas_todas`). Se guarda en `metadatos.json` como `subgenero` (más `propuesta.subgenero`), los libros van a `biblioteca/libros/<Género>/<Subgénero>/`, hay selector en las tarjetas de importación y en el Observatorio (cambiar de género limpia el subgénero) y cada género es prefijo de búsqueda (`cocina:`, `derecho:`…). **Medido** (`python herramientas/comparar_clasificadores.py`, 84 libros, 20 géneros, MiniLM): género 89 % (reglas 83 %, parecido 88 %); subgénero 87 % dado el género correcto y 74 % de principio a fin. Al ampliar la taxonomía o cambiar las frases, volver a medir. Tests: `tests/test_taxonomia.py`.
 5s. **Instalador con IA local (compartir por GitHub):** el instalador/actualizador (`herramientas/plantillas/motor.ps1`, función `Preparar-IA`) comprueba y muestra con ✓/✗ qué hay: fastembed, modelo MiniLM (~240 MB, `python -m conocimiento modelos`), Ollama (~1,6 GB) y el modelo `qwen2.5:3b` (~1,9 GB); descarga solo lo que falta, con barra de progreso, velocidad y reanudación (`curl -C -`), verifica la firma digital «Ollama Inc.» antes de ejecutar `OllamaSetup.exe` y pregunta antes de bajar nada (`ARBOL_SIN_IA=1` o `ARBOL_SIN_RED=1` lo omiten). Nada de esto va en el repositorio (3,5 GB): se baja de las fuentes oficiales al instalar. Si ya tienes la misma versión, el actualizador solo comprueba componentes; si la app está abierta, la cierra antes de mover `py`. Trampas PowerShell ya vividas: `"$Version:"` en comillas dobles es una variable con ámbito (usar `${Version}:`); un parámetro `$ok` tapa a `$Ok` (no distingue mayúsculas); `ollama serve` oculto solo arranca con la salida redirigida; la primera llamada de PowerShell a `Invoke-RestMethod` tarda 2-3 s (timeouts ≥ 8 s). `tests/test_instaladores.py` valida la sintaxis de motor.ps1 con el analizador de PowerShell. Para repetir la comprobación: ejecutar de nuevo el `Actualizar.bat` (opción «comprobar componentes»).
 5r. **LLM local (Ollama) para los casos dudosos:** `py/conocimiento/llm.py`. Ollama 0.40 instalado en `%LOCALAPPDATA%\Programs\Ollama` con el modelo `qwen2.5:3b` (1,9 GB; CPU, ~6 s por consulta). Solo se le pregunta el género cuando `clasificador.dudoso` (el mejor género saca menos de `MARGEN_DUDA` al segundo, nada se parece, o reglas flojas sin parecido); responde JSON con enum cerrado de GENEROS y su respuesta cuenta como `metodo = llm`. Todo en localhost (`_http` rechaza otras URLs). Si Ollama no está o no tiene el modelo, se ignora sin error y se vuelve a mirar cada minuto. Ajustes: `ARBOL_LLM` (modelo, o `no`) o `conocimiento/ajustes.json` {"llm": {"modelo": "qwen2.5:7b"}}. **Medido** (`python herramientas/comparar_clasificadores.py --llm qwen2.5:3b`, 66 libros): reglas + parecido 86 %; LLM solo 82 % (con el prompt de descripciones + 4 ejemplos resueltos; con el prompt simple era 50 %: los modelos pequeños necesitan ejemplos); híbrido 88 %. En un PC potente probar `qwen2.5:7b`. Tests: `tests/test_llm.py` (Ollama falso; la suite lo apaga con `llm.ACTIVO = False`).
 5q. **Importar en masa y revisar por fecha:** la casilla «Importar sin revisar (clasifica solo)» de la pestaña Importar clasifica e importa todo lo que sueltes sin pasar por las tarjetas (se recuerda en el navegador). Cada archivo guarda en `metadatos.json` cuándo se importó (`fecha`, con hora), cómo se clasificó (`metodo`: `reglas` | `parecido` | `web`, `motivo`, `materias_web`) y la `propuesta` automática original; así se ve qué corregiste a mano. **Para revisar con Claude:** `python -m conocimiento revisar [--desde AAAA-MM-DD] [--hasta …] [--json]` lista lo importado de más reciente a más antiguo con `corregido` (distinto de la propuesta); el Observatorio ordena por fecha y filtra «importados desde». Claude lee ese JSON, propone la clasificación que él habría hecho y se comparan los desacuerdos para mejorar reglas, frases semilla (`clasificador.SEMILLAS`) o pesos. **Materias web:** para libros y artículos, `importar._materias_web` consulta Open Library por el título (timeout de 6 s; si falla una vez, no se reintenta en la sesión) y el género de esas materias suma `PESO_WEB` en `clasificador.decidir` (o decide si todo lo demás da «otro»). No se hace scraping de páginas: solo APIs de metadatos. Las pruebas desactivan la red con `clasificador.WEB = False`. Tests: `tests/test_revisar.py`.

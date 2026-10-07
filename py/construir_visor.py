@@ -535,6 +535,7 @@ def ramas_biblioteca() -> list[dict]:
     Notas: una rama por subtema con un punto por documento. Código, Conceptos, Demos y Finanzas: una rama «Documentos importados». Sin datos: lista vacía."""
     try:
         from conocimiento.importar import GENEROS, GALAXIAS, carpeta_datos, leer_metadatos, titulo_corto
+        from conocimiento import taxonomia
     except Exception:
         return []
     carpeta = carpeta_datos()
@@ -567,7 +568,7 @@ def ramas_biblioteca() -> list[dict]:
             items = [_hoja_bib(f"lib_{g}_{i}_{j}", c["titulo"][:90], "capitulo", f"{libro}" + (f" — p. {c['pagina']}" if c.get("pagina") else ""), str(base / rel), rel,
                                pagina=c.get("pagina") or 0, libro=libro, subtema=m.get("subtema", ""), genero=g, paginas=m.get("paginas", 0), etiquetas=m.get("etiquetas", ""),
                                fecha=m.get("fecha", "")[:10], titulo_largo=m.get("titulo", ""), portada=m.get("portada", ""), lineas=8 + min(12, 2 * len(c["titulo"]) // 10)) for j, c in enumerate(caps)]
-            modulos.append({"id": f"lib_{g}_{i}", "nombre": libro, "desc": f"{m.get('subtema', '')} · {m.get('paginas') or '?'} págs. · {len(caps)} capítulos", "archivo": "biblioteca/" + rel, "items": items})
+            modulos.append({"id": f"lib_{g}_{i}", "nombre": libro, "desc": f"{taxonomia.nombre_sub(g, m.get('subgenero', ''), carpeta) or m.get('subtema', '')} · {m.get('paginas') or '?'} págs. · {len(caps)} capítulos", "archivo": "biblioteca/" + rel, "items": items})
         ramas.append({"id": f"gen_{g}", "nombre": GENEROS.get(g, g), "desc": f"{len(lista)} libro{'s' if len(lista) != 1 else ''} de {GENEROS.get(g, g).lower()}",
                       "modulos": modulos, "galaxia": "libros", "biblioteca": True, "color": color()})
 
@@ -592,6 +593,11 @@ def ensamblar(datos: dict) -> str:
     agujero_js = (CODIGO / "visor" / "agujero.js").read_text(encoding="utf-8").replace("</", "<\\/")
     eclipses_js = (CODIGO / "visor" / "eclipses.js").read_text(encoding="utf-8").replace("</", "<\\/")
     js = json.dumps(datos, ensure_ascii=False).replace("</", "<\\/")
+    try:
+        from conocimiento.importar import GENEROS as _G
+    except Exception:
+        _G = {"otro": "Otros"}
+    plantilla = plantilla.replace("/*__GENEROS_NOM__*/{}", json.dumps(_G, ensure_ascii=False))
     return (plantilla.replace("/*__DEMOS_JS__*/", demos_js).replace("/*__MAPA3D_JS__*/", mapa_js).replace("/*__CEREBRO_JS__*/", cerebro_js).replace("/*__AGUJERO_JS__*/", agujero_js).replace("/*__ECLIPSES_JS__*/", eclipses_js)
             .replace("__ICONO__", icono).replace("__DATOS__", js))
 

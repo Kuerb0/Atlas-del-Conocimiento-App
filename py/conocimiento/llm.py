@@ -90,8 +90,9 @@ EJEMPLOS = [("Orgullo y prejuicio", "Una joven inglesa y un rico caballero super
 
 
 def _prompt(titulo: str, capitulos: list, vista: str, materias: list, generos: dict) -> str:
-    from .clasificador import SEMILLAS
-    lista = "\n".join(f"- {g}: {SEMILLAS[g][0] if g in SEMILLAS else 'no encaja en ninguno de los demás'}" for g in generos)
+    from .clasificador import semillas_todas
+    S = semillas_todas()
+    lista = "\n".join(f"- {g}: {S[g][0] if g in S else 'no encaja en ninguno de los demás'}" for g in generos)
     ej = "\n".join(f'Libro: «{t}». Sinopsis: {s}\n{{"genero": "{g}", "motivo": "…"}}' for t, s, g in EJEMPLOS)
     caps = "; ".join((c["titulo"] if isinstance(c, dict) else str(c)) for c in capitulos[:8]) or "(sin índice)"
     return (f"Eres bibliotecario. Elige el género que mejor describe el LIBRO (no solo las palabras de su título).\nGéneros:\n{lista}\n\nEjemplos resueltos:\n{ej}\n\n"

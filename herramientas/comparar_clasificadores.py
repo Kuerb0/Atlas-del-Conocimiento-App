@@ -1,4 +1,4 @@
-"""Compara modelos de embeddings para clasificar el género de un libro, con 66 libros de prueba (título + una frase).
+"""Compara modelos de embeddings para clasificar el género (y el subgénero) de un libro, con 84 libros de prueba (título + una frase).
 
     python herramientas/comparar_clasificadores.py                 # los tres modelos de la lista MODELOS
     python herramientas/comparar_clasificadores.py minishlab/potion-multilingual-128M
@@ -90,6 +90,50 @@ ORO = {
              ("El cine como arte", "Directores, montaje, géneros y lenguaje cinematográfico.")],
 }
 
+ORO.update({
+    "cocina": [("Carbonara con guanciale: recetas romanas", "Recetas de pasta, ingredientes, guanciale, yemas y pecorino paso a paso."),
+               ("On Food and Cooking", "The science and lore of the kitchen: techniques, ingredients and why recipes work.")],
+    "derecho": [("Manual de derecho civil", "Contratos, propiedad, obligaciones y sociedades mercantiles explicados para estudiantes."),
+                ("Derecho penal: parte general", "Delitos, penas, culpabilidad y procesos judiciales en el sistema penal.")],
+    "salud": [("Anatomía de Gray", "Anatomía humana, órganos, sistemas, fisiología y diagnóstico por imagen."),
+              ("Epidemias y salud pública", "Vacunas, pandemias, epidemiología y cómo se organizan los sistemas sanitarios.")],
+    "viajes": [("Lonely Planet Italia", "Guía de viaje con itinerarios, ciudades, alojamiento y consejos para visitar el país."),
+               ("A Walk in the Woods", "A travel memoir about hiking the Appalachian Trail and the people met along the way.")],
+    "idiomas": [("English Grammar in Use", "Grammar explanations and exercises for learners of English: tenses, vocabulary and practice."),
+                ("Etimologías del español", "Origen de las palabras, historia de la lengua y lingüística histórica.")],
+    "educacion": [("Técnicas de estudio para oposiciones", "Cómo memorizar, planificar el temario y preparar exámenes y oposiciones."),
+                  ("Pedagogía del oprimido", "Educación, enseñanza, docentes, alumnos y práctica pedagógica liberadora.")],
+    "religion": [("La Biblia comentada", "Antiguo y Nuevo Testamento, teología cristiana, Jesús y la iglesia primitiva."),
+                 ("El Corán y el islam", "Introducción al islam, sus textos sagrados, el judaísmo, el budismo y otras religiones.")],
+    "deporte": [("Entrenamiento de fuerza para corredores", "Planes de entrenamiento, running, carga, recuperación y rendimiento deportivo."),
+                ("Ajedrez: aperturas y táctica", "Aperturas de ajedrez, finales, táctica y partidas comentadas de grandes maestros.")],
+    "hogar": [("Manual de carpintería para principiantes", "Herramientas, uniones de madera, reparaciones y proyectos de bricolaje en casa."),
+              ("El huerto en casa", "Cómo plantar, regar y cuidar un huerto y un jardín: semillas, hortalizas y compost.")],
+})
+
+# Subgénero esperado de cada libro (para medir el segundo nivel)
+SUB = {
+    "SPQR: A History of Ancient Rome": "antigua", "La caída de Constantinopla": "medieval", "Guns, Germs, and Steel": "arqueologia", "Los Reyes Católicos": "espana",
+    "The Guns of August": "guerras_mundiales", "Breve historia de la Revolución francesa": "revoluciones",
+    "The Wealth of Nations": "historia_eco", "El capital en el siglo XXI": "desarrollo", "A Random Walk Down Wall Street": "inversion", "Principios de economía": "macro",
+    "Poor Economics": "desarrollo", "Manual de valoración de empresas": "finanzas",
+    "Meditaciones": "antigua", "Thus Spoke Zarathustra": "existencialismo", "Ensayos": "ensayo_lit", "The Myth of Sisyphus": "existencialismo", "Crítica de la razón pura": "moderna", "On Liberty": "politica_fil",
+    "An Introduction to Statistical Learning": "ml_est", "Inferencia estadística": "inferencia", "Bayesian Data Analysis": "bayes", "Probabilidad y procesos estocásticos": "probabilidad",
+    "Linear Algebra Done Right": "algebra", "Análisis de supervivencia": "supervivencia",
+    "A Brief History of Time": "cosmos", "El gen egoísta": "biologia", "Cosmos": "cosmos", "Silent Spring": "ecologia", "Química orgánica básica": "quimica", "Fundamentos de física cuántica": "fisica",
+    "Cien años de soledad": "contemporanea", "The Great Gatsby": "clasicos", "El nombre de la rosa": "historica", "The Hobbit": "fantasia", "Crimen y castigo": "clasicos", "Murder on the Orient Express": "negra",
+    "Steve Jobs": "empresarios", "Memorias de Adriano": "politicos", "The Autobiography of Benjamin Franklin": "memorias", "Long Walk to Freedom": "politicos", "Vida de Beethoven": "artistas", "Einstein: His Life and Universe": "cientificos",
+    "The Prince": "persuasion", "La democracia en América": "instituciones", "The Origins of Totalitarianism": "nacionalismo", "Geopolítica de las crisis": "internacional", "Imagined Communities": "nacionalismo", "Manual de campañas electorales": "instituciones",
+    "Clean Code": "programacion", "Python para análisis de datos": "datos", "The Pragmatic Programmer": "ingenieria_sw", "Redes de computadores": "redes", "Deep Learning": "ia", "Sistemas operativos": "redes",
+    "Thinking, Fast and Slow": "cognitiva", "El hombre en busca de sentido": "sentido", "Cognitive Behavioral Therapy": "clinica", "Inteligencia emocional": "emocional", "Why We Sleep": "sueno", "Manual de psicopatología": "clinica",
+    "The Story of Art": "visuales", "Historia de la música occidental": "musica", "Ways of Seeing": "ver", "Poesía completa": "poesia", "Arquitectura moderna": "arquitectura", "El cine como arte": "cine",
+    "Carbonara con guanciale: recetas romanas": "recetas", "On Food and Cooking": "tecnica", "Manual de derecho civil": "civil", "Derecho penal: parte general": "penal",
+    "Anatomía de Gray": "medicina", "Epidemias y salud pública": "epidemiologia", "Lonely Planet Italia": "guias", "A Walk in the Woods": "relatos",
+    "English Grammar in Use": "aprendizaje", "Etimologías del español": "linguistica", "Técnicas de estudio para oposiciones": "estudio", "Pedagogía del oprimido": "pedagogia",
+    "La Biblia comentada": "cristianismo", "El Corán y el islam": "otras", "Entrenamiento de fuerza para corredores": "deportes", "Ajedrez: aperturas y táctica": "juegos",
+    "Manual de carpintería para principiantes": "bricolaje", "El huerto en casa": "jardin",
+}
+
 
 def evaluar(modelo: str) -> dict:
     from conocimiento import clasificador as c
@@ -98,7 +142,7 @@ def evaluar(modelo: str) -> dict:
     c._cache.clear()
     vacia = Path(tempfile.mkdtemp())                       # biblioteca vacía: solo cuentan las semillas
     c.CARPETA = RAIZ / "conocimiento"                      # los modelos se guardan siempre en la carpeta de datos del proyecto
-    res = {"reglas": 0, "parecido": 0, "hibrido": 0, "n": 0, "seg": 0.0, "fallos": []}
+    res = {"reglas": 0, "parecido": 0, "hibrido": 0, "n": 0, "seg": 0.0, "fallos": [], "sub": 0, "sub_dado_genero": 0, "sub_fallos": []}
     for g, libros in ORO.items():
         for titulo, frase in libros:
             f = vacia / f"{titulo.replace(':', '')}.txt"
@@ -113,6 +157,13 @@ def evaluar(modelo: str) -> dict:
             res["parecido"] += bool(s) and s["genero"] == g
             h = im.clasificar(f, vacia)
             res["hibrido"] += h["genero"] == g
+            esperado = SUB.get(titulo)
+            if esperado:
+                sg = c.subgenero(c.texto_libro(titulo, [], frase), g, RAIZ / "conocimiento")           # subgénero dado el género correcto
+                res["sub_dado_genero"] += bool(sg) and sg["id"] == esperado
+                res["sub"] += h["genero"] == g and h.get("subgenero") == esperado                       # de principio a fin
+                if not (sg and sg["id"] == esperado):
+                    res["sub_fallos"].append(f"{titulo}: {sg['id'] if sg else '—'} (era {esperado})")
             if h["genero"] != g:
                 res["fallos"].append(f"{titulo}: {h['genero']} (era {g}, {h['metodo']})")
     return res
@@ -177,8 +228,9 @@ def main() -> None:
             print(f"{m:62} no disponible: {type(e).__name__}: {str(e)[:80]}")
             continue
         n = r["n"]
-        print(f"{m:62} {r['reglas'] / n:7.0%} {r['parecido'] / n:9.0%} {r['hibrido'] / n:8.0%} {r['seg'] / n:8.2f}")
+        print(f"{m:62} {r['reglas'] / n:7.0%} {r['parecido'] / n:9.0%} {r['hibrido'] / n:8.0%} {r['seg'] / n:8.2f}   subgénero: {r['sub_dado_genero'] / n:4.0%} (dado el género) · {r['sub'] / n:4.0%} (de principio a fin)")
         detalle[m] = r["fallos"]
+        detalle[m + " [subgénero]"] = r["sub_fallos"]
     for m, fl in detalle.items():
         print(f"\nFallos del híbrido con {m.split('/')[-1]} ({len(fl)}):")
         for x in fl:

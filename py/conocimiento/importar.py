@@ -23,13 +23,14 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from . import CARPETA, CODIGO_EXT, DATOS_EXT, DB, EXT_IMPORTABLE, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, indexar, llm
+from . import CARPETA, CODIGO_EXT, DATOS_EXT, DB, EXT_IMPORTABLE, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, indexar, llm, taxonomia
 
 GALAXIAS = {"codigo": "Código", "conceptos": "Conceptos", "demos": "Demos y guías", "finanzas": "Finanzas", "libros": "Libros", "notas": "Notas y enlaces"}
 TIPOS = {"libro": "Libro", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "codigo": "Código", "datos": "Datos", "otro": "Otro"}
-GENEROS = {"historia": "Historia", "economia": "Economía y finanzas", "ensayo": "Ensayo y filosofía", "estadistica": "Estadística y matemáticas", "ciencia": "Ciencia y divulgación",
-           "novela": "Novela y ficción", "biografia": "Biografía y memorias", "politica": "Política y sociedad", "tecnologia": "Tecnología e informática",
-           "psicologia": "Psicología y salud", "arte": "Arte, música y cultura", "otro": "Otros"}
+_GENEROS_BASE = {"historia": "Historia", "economia": "Economía y finanzas", "ensayo": "Ensayo y filosofía", "estadistica": "Estadística y matemáticas", "ciencia": "Ciencia y divulgación",
+                 "novela": "Novela y ficción", "biografia": "Biografía y memorias", "politica": "Política y sociedad", "tecnologia": "Tecnología e informática",
+                 "psicologia": "Psicología y salud", "arte": "Arte, música y cultura"}
+GENEROS = {**_GENEROS_BASE, **taxonomia.cargar(CARPETA)[0], "otro": "Otros"}          # los 11 de siempre + los nuevos (derecho, cocina, salud…) + los tuyos de conocimiento/taxonomia.json
 _GEN_PALABRAS = {
     "historia": r"history|historia|empire|imperio|war|guerra|century|siglo|ancient|antigu|medieval|revolution|revolucion|dynasty|dinastia|republic|republica|romans?|romanos?|civilization|civilizacion|kingdom|reino|conquest|conquista",
     "economia": r"economics|economy|economia|economist|market|mercado|capitalism|capitalismo|trade|comercio|inflation|inflacion|monetary|monetaria|fiscal|growth|crecimiento|bank|banco|poverty|pobreza|wealth|riqueza|gdp|pib|labor|empresa|business|inversion|invest|finanzas|finance",
@@ -154,7 +155,9 @@ def titulo_corto(nombre: str, n: int = 60) -> str:
 
 
 _COLOR_GENERO = {"historia": (150, 90, 50), "economia": (40, 120, 80), "ensayo": (110, 80, 150), "estadistica": (40, 90, 170), "ciencia": (30, 130, 150), "novela": (160, 60, 90),
-                 "biografia": (140, 110, 40), "politica": (150, 60, 50), "tecnologia": (60, 70, 90), "psicologia": (130, 70, 130), "arte": (170, 90, 120), "otro": (80, 90, 110)}
+                 "biografia": (140, 110, 40), "politica": (150, 60, 50), "tecnologia": (60, 70, 90), "psicologia": (130, 70, 130), "arte": (170, 90, 120), "otro": (80, 90, 110),
+                 "derecho": (90, 90, 120), "cocina": (190, 110, 50), "salud": (50, 140, 110), "viajes": (60, 130, 170), "idiomas": (120, 100, 60), "educacion": (100, 120, 160),
+                 "religion": (120, 90, 70), "deporte": (60, 150, 80), "hogar": (130, 100, 80)}
 
 
 def _imagen_epub(f: Path) -> bytes | None:
@@ -317,6 +320,7 @@ def opciones() -> dict:
     ramas = sorted(p.name for p in (RAIZ / "py" / "arbol_estadistica").iterdir() if p.is_dir() and not p.name.startswith("_")) if (RAIZ / "py" / "arbol_estadistica").is_dir() else []
     temas = [t["nombre"] for t in _catalogo()["temas"]]
     return {"generos": [{"id": k, "nombre": v} for k, v in GENEROS.items()],
+            "subgeneros": {g: [{"id": s[0], "nombre": s[1]} for s in subs] for g, subs in taxonomia.cargar(CARPETA)[1].items()},
             "galaxias": [{"id": k, "nombre": v} for k, v in GALAXIAS.items()], "tipos": [{"id": k, "nombre": v} for k, v in TIPOS.items()],
             "subtemas": {"codigo": ramas + ["General"], "conceptos": temas + ["General"], "demos": ["Demos", "Guías", "General"],
                          "finanzas": ["Carteras y riesgo", "Renta fija", "Derivados", "Actuarial y seguros", "General"] + [t for t in temas if "inanz" in t],
@@ -455,11 +459,16 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
             motivo += f"; el LLM propone «{GENEROS[genero]}»: {r['motivo']}"
     if materias and metodo not in ("reglas", "llm"):
         motivo += f"; materias web: {', '.join(materias[:4])}"
+    sg = clasificador.subgenero(clasificador.texto_libro(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500])), genero, carpeta)
+    if sg:
+        motivo += f"; subgénero «{sg['nombre']}»"
     palabras = re.findall(r"[a-z]+", t[:20000])
     es, en = sum(w in _ES for w in palabras), sum(w in _EN for w in palabras)
     h = _sha1(f)
     dup = next((rel for rel, m in leer_metadatos(carpeta).items() if m.get("hash") == h), "")
     return {"galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "titulo": titulo_corto(f.stem), "titulo_largo": f.stem, "motivo": motivo, "metodo": metodo, "materias_web": materias[:8], "paginas": paginas,
+            "subgenero": sg["id"] if sg else "", "subgenero_nombre": sg["nombre"] if sg else "",
+            "subgeneros": [{"id": k, "nombre": taxonomia.nombre_sub(genero, k, carpeta), "puntos": v} for k, v in sg["puntos"].items()] if sg else [],
             "tamano": f.stat().st_size, "extension": ext.lstrip("."), "idioma": "es" if es > en else "en" if en else "", "duplicado": dup,
             "vista_previa": re.sub(r"\s+", " ", texto[:1500]).strip()[:380],
             "temas": [{"tema": nombre_t, "puntos": pt} for (_, nombre_t), pt in sorted(puntos.items(), key=lambda kv: -kv[1])[:4] if pt >= 3] if genero in GENEROS_CON_TEMA else [],
@@ -529,7 +538,11 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
             tipo = d.get("tipo") if d.get("tipo") in TIPOS else auto["tipo"]
             genero = d.get("genero") if d.get("genero") in GENEROS else auto["genero"]
             titulo = (d.get("titulo") or "").strip() or auto["titulo"]
-            destino = base / galaxia / _slug(GENEROS[genero] if galaxia == "libros" else subtema)      # Libros: una carpeta por género
+            validos = {s[0]: s[1] for s in taxonomia.subgeneros(genero, carpeta)}
+            subgenero = d.get("subgenero") if d.get("subgenero") in validos else (auto["subgenero"] if auto["genero"] == genero else "")
+            destino = base / galaxia / _slug(GENEROS[genero] if galaxia == "libros" else subtema)      # Libros: una carpeta por género…
+            if galaxia == "libros" and subgenero:
+                destino = destino / _slug(validos[subgenero])                                          # …y dentro, una por subgénero
             destino.mkdir(parents=True, exist_ok=True)
             nombre = _slug(titulo)[:80] or "documento"                          # nombre corto: evita rutas larguísimas (límite de Windows) y es legible
             fin, n = destino / f"{nombre}{f.suffix}", 1
@@ -542,7 +555,7 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
             meta[rel] = {"capitulos": caps, "paginas": pags, "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "etiquetas": (d.get("etiquetas") or "").strip(), "origen": str(f), "hash": h,
                          "fecha": datetime.now().isoformat(timespec="seconds"), "automatico": not (d.get("galaxia") or d.get("subtema") or d.get("tipo") or d.get("genero")) and (d.get("titulo") or auto["titulo"]).strip() == auto["titulo"],
                          "metodo": auto["metodo"], "motivo": auto["motivo"], "materias_web": auto.get("materias_web", []),
-                         "propuesta": {"galaxia": auto["galaxia"], "subtema": auto["subtema"], "genero": auto["genero"], "tipo": auto["tipo"]}}
+                         "propuesta": {"galaxia": auto["galaxia"], "subtema": auto["subtema"], "genero": auto["genero"], "tipo": auto["tipo"], "subgenero": auto["subgenero"]}, "subgenero": subgenero}
             hashes[h] = rel
             if tipo == "libro":
                 nom = "portadas/" + h[:10] + ".jpg"
@@ -555,7 +568,8 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
                     movido = True
                 except OSError:
                     pass
-            salida.append({**r, "movido": movido, "estado": "ok", "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "destino": str(fin), "mensaje": auto["motivo"]})
+            salida.append({**r, "movido": movido, "estado": "ok", "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "destino": str(fin), "mensaje": auto["motivo"],
+                           "subgenero": subgenero, "subgenero_nombre": validos.get(subgenero, "")})
         except Exception as e:
             salida.append({**r, "estado": "error", "mensaje": str(e)})
     if any(s["estado"] == "ok" for s in salida):
@@ -611,7 +625,7 @@ def reclasificar(carpeta: Path | None = None) -> list[tuple]:
 
 
 # ---------- gestionar lo importado (pestaña «Observatorio») ----------
-CAMPOS = ("titulo", "galaxia", "genero", "subtema", "tipo", "etiquetas")
+CAMPOS = ("titulo", "galaxia", "genero", "subgenero", "subtema", "tipo", "etiquetas")
 
 
 def _guardar(carpeta: Path, meta: dict) -> None:
@@ -626,7 +640,8 @@ def _guardar(carpeta: Path, meta: dict) -> None:
 def _ficha(carpeta: Path, rel: str, m: dict, con_portada: bool = True) -> dict:
     f = Path(carpeta) / "biblioteca" / rel
     return {"rel": rel, "existe": f.is_file(), "titulo": m.get("titulo", ""), "titulo_largo": Path(m.get("origen", "")).stem or m.get("titulo", ""), "galaxia": m.get("galaxia", ""),
-            "genero": m.get("genero", "otro"), "subtema": m.get("subtema", ""), "tipo": m.get("tipo", ""), "etiquetas": m.get("etiquetas", ""), "paginas": m.get("paginas", 0),
+            "genero": m.get("genero", "otro"), "subgenero": m.get("subgenero", ""), "subgenero_nombre": taxonomia.nombre_sub(m.get("genero", ""), m.get("subgenero", ""), carpeta),
+            "subtema": m.get("subtema", ""), "tipo": m.get("tipo", ""), "etiquetas": m.get("etiquetas", ""), "paginas": m.get("paginas", 0),
             "capitulos": len(m.get("capitulos", [])), "fecha": m.get("fecha", "")[:10], "automatico": bool(m.get("automatico")), "fecha_hora": m.get("fecha", ""), "metodo": m.get("metodo", ""), "motivo": m.get("motivo", ""), "extension": f.suffix.lstrip(".").lower(),
             "tamano": f.stat().st_size if f.is_file() else 0, "ruta": str(f), "portada": portada_datauri(carpeta, m.get("portada", "")) if con_portada else ""}
 
@@ -659,7 +674,11 @@ def editar(rel: str, cambios: dict, carpeta: Path | None = None, db: Path | None
             raise ValueError(f"valor no válido para {k}: {v}")
         if k == "titulo" and not v:
             continue
+        if k == "subgenero" and v and v not in {s[0] for s in taxonomia.subgeneros(cambios.get("genero") or m.get("genero", ""), carpeta)}:
+            raise ValueError(f"ese subgénero no es de {GENEROS.get(cambios.get('genero') or m.get('genero'), '?')}")
         m[k] = v
+        if k == "genero" and "subgenero" not in cambios and m.get("subgenero") not in {s[0] for s in taxonomia.subgeneros(v, carpeta)}:
+            m["subgenero"] = ""                                       # al cambiar de género, el subgénero antiguo ya no vale
     m["automatico"] = False
     _guardar(carpeta, meta)
     if m.get("galaxia") != antes:
@@ -678,9 +697,9 @@ def revisar(desde: str = "", hasta: str = "", carpeta: Path | None = None) -> li
         if (desde and f < desde) or (hasta and f > hasta):
             continue
         prop = m.get("propuesta") or {}
-        filas.append({"rel": rel, "fecha": m.get("fecha", ""), "titulo": m.get("titulo", ""), "galaxia": m.get("galaxia"), "genero": m.get("genero"), "subtema": m.get("subtema"), "tipo": m.get("tipo"),
+        filas.append({"rel": rel, "fecha": m.get("fecha", ""), "titulo": m.get("titulo", ""), "galaxia": m.get("galaxia"), "genero": m.get("genero"), "subgenero": m.get("subgenero", ""), "subtema": m.get("subtema"), "tipo": m.get("tipo"),
                       "metodo": m.get("metodo", ""), "motivo": m.get("motivo", ""), "materias_web": m.get("materias_web", []), "propuesta": prop,
-                      "corregido": bool(prop) and any(prop.get(k) != m.get(k) for k in ("galaxia", "genero", "subtema", "tipo"))})
+                      "corregido": bool(prop) and any(prop.get(k) != m.get(k) for k in ("galaxia", "genero", "subtema", "tipo", "subgenero") if k in prop)})
     return sorted(filas, key=lambda x: x["fecha"], reverse=True)
 
 
@@ -690,7 +709,7 @@ def reclasificar_uno(rel: str, carpeta: Path | None = None, db: Path | None = No
     m, f = meta[rel], carpeta / "biblioteca" / rel
     c = clasificar(f, carpeta)
     antes = m.get("galaxia")
-    m["galaxia"], m["genero"], m["subtema"], m["automatico"] = c["galaxia"], c["genero"], c["subtema"], True
+    m["galaxia"], m["genero"], m["subtema"], m["automatico"], m["subgenero"] = c["galaxia"], c["genero"], c["subtema"], True, c["subgenero"]
     _guardar(carpeta, meta)
     if m["galaxia"] != antes:
         _galaxia_en_indice(db or carpeta / "indice.db", str(f), m["galaxia"])

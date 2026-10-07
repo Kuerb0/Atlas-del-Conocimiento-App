@@ -13,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import CARPETA
+from . import CARPETA, _norm
 
 MODELO = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 ACTIVO = True            # False: solo reglas (los tests y el script de comparación lo usan)
@@ -49,6 +49,16 @@ SEMILLAS = {
     "arte": ["Arte, música, pintura, cine, arquitectura, poesía y literatura", "Art history and culture: painters, composers, film, theatre, poems and design",
              "Historia del arte y la música: movimientos, estilos, artistas y obras"],
 }
+
+
+def semillas_todas(carpeta: Path | str | None = None) -> dict:
+    """SEMILLAS de los 12 géneros de siempre + las de los géneros nuevos, sacadas de las frases de sus subgéneros (3 semillas por género)."""
+    from . import taxonomia
+    s = {g: list(v) for g, v in SEMILLAS.items()}
+    for g, subs in taxonomia.cargar(carpeta or CARPETA)[1].items():
+        if g not in s and subs:
+            s[g] = ["; ".join(x[2] for x in subs[:2]), "; ".join(x[3] for x in subs[:2]), "; ".join(x[2] for x in subs[2:4]) or subs[0][2]]
+    return s
 
 
 def modelo(carpeta: Path | str = CARPETA) -> str:
@@ -94,7 +104,7 @@ def texto_libro(titulo: str, capitulos: list, vista: str = "") -> str:
 
 def _ejemplos(carpeta: Path | str) -> list[tuple[str, str, float]]:
     """(texto, género, peso): las semillas (peso 1) y lo importado (1,5; 2,5 si lo corregiste a mano)."""
-    ej = [(t, g, 1.0) for g, ts in SEMILLAS.items() for t in ts]
+    ej = [(t, g, 1.0) for g, ts in semillas_todas(carpeta).items() for t in ts]
     try:
         from .importar import GENEROS, leer_metadatos
         for m in leer_metadatos(Path(carpeta)).values():
@@ -125,6 +135,53 @@ def sugerir(texto: str, carpeta: Path | str | None = None) -> dict | None:
         puntos[g] = float(np.mean(v))
     orden = sorted(puntos, key=puntos.get, reverse=True)
     return {"genero": orden[0], "confianza": puntos[orden[0]] - puntos[orden[1]], "puntos": {g: round(puntos[g], 3) for g in orden}}
+
+
+_PARADA = set("para como pero sobre entre desde hasta este esta estos estas the and for with from that this their about which sus los las del una por con".split())
+
+
+def _palabras(t: str) -> set:
+    return {w for w in __import__("re").findall(r"[a-z]{4,}", _norm(t)) if w not in _PARADA}
+
+
+def subgenero(texto: str, genero: str, carpeta: Path | str | None = None) -> dict | None:
+    """Subgénero (de la taxonomía del género) que mejor describe el texto: {'id','nombre','confianza','puntos': {id: 0-100}} o None si el género no tiene subgéneros.
+    Con modelo de embeddings compara con las frases del subgénero y con lo que ya tienes en esa categoría; sin modelo, por palabras en común."""
+    from . import taxonomia
+    carpeta = Path(carpeta or CARPETA)
+    subs = taxonomia.subgeneros(genero, carpeta)
+    if not subs:
+        return None
+    puntos = None
+    if ACTIVO and not _cache.get("fallo"):
+        try:
+            emb = _embedder(modelo(carpeta), carpeta)
+            ej = [(s[2], s[0], 1.0) for s in subs] + [(s[3], s[0], 1.0) for s in subs]
+            try:
+                from .importar import leer_metadatos
+                ids = {s[0] for s in subs}
+                for m in leer_metadatos(carpeta).values():
+                    if m.get("genero") == genero and m.get("subgenero") in ids:
+                        ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), m.get("etiquetas", "")), m["subgenero"], 1.5 if m.get("automatico") else 2.5))
+            except Exception:
+                pass
+            sims = emb([e[0] for e in ej]) @ emb([texto])[0]
+            puntos = {}
+            for sid in ids:
+                v = sorted((s + .04 * (e[2] - 1) for s, e in zip(sims, ej) if e[1] == sid), reverse=True)[:2]
+                puntos[sid] = float(np.mean(v))
+        except Exception:
+            _cache["fallo"] = True
+            puntos = None
+    if puntos is None:                                                   # sin modelo: palabras en común con las frases del subgénero
+        pt = _palabras(texto)
+        puntos = {s[0]: len(pt & _palabras(s[2] + " " + s[3])) / (len(_palabras(s[2] + " " + s[3])) ** .5 or 1) for s in subs}
+        if not any(puntos.values()):
+            return None
+    orden = sorted(puntos, key=puntos.get, reverse=True)
+    segundo = puntos[orden[1]] if len(orden) > 1 else 0.0
+    return {"id": orden[0], "nombre": taxonomia.nombre_sub(genero, orden[0], carpeta), "confianza": puntos[orden[0]] - segundo,
+            "puntos": {sid: round(100 * puntos[sid], 1) for sid in orden[:4]}}
 
 
 def decidir(reglas: dict, genero_reglas: str, parecido: dict, web: str | None = None) -> tuple[str, bool]:

@@ -38,6 +38,7 @@ def test_disponible_y_respuesta(ollama_falso, tmp_path):
 
 def test_sin_ollama_o_sin_modelo_no_pasa_nada(monkeypatch, tmp_path):
     monkeypatch.setattr(llm, "ACTIVO", True); llm._estado.clear()
+    monkeypatch.setattr(llm, "_arrancar", lambda: None)                                     # que el test no encienda un Ollama de verdad
     monkeypatch.setattr(llm, "_http", lambda *a, **k: (_ for _ in ()).throw(OSError("conexión rechazada")))
     assert llm.disponible(tmp_path) is False and llm.clasificar("t", [], "", [], im.GENEROS, tmp_path) is None
     llm._estado.clear()

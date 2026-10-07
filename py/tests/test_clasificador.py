@@ -31,7 +31,7 @@ def _con_modelo_falso(monkeypatch):
 def test_sugiere_por_semillas_y_por_tu_biblioteca(monkeypatch, tmp_path):
     _con_modelo_falso(monkeypatch)
     s = c.sugerir("Historia de imperios, guerras, reyes y civilizaciones antiguas", tmp_path)
-    assert s["genero"] == "historia" and s["confianza"] > 0 and set(s["puntos"]) == set(c.SEMILLAS)
+    assert s["genero"] == "historia" and s["confianza"] > 0 and set(s["puntos"]) == set(c.semillas_todas(tmp_path))
     # un libro tuyo con una palabra rara arrastra a los parecidos hacia el género que fijaste
     b = tmp_path / "biblioteca"; b.mkdir()
     (b / "metadatos.json").write_text(json.dumps({"libros/x/a.pdf": {"titulo": "Zorrotz quimbaya tuxtla", "genero": "arte", "automatico": False}}), encoding="utf-8")
