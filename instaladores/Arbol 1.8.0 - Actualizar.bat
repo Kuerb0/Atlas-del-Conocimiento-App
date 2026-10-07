@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.7.1 - Instalador
+title Arbol de la estadistica 1.8.0 - Actualizar
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=1.7.1"
+set "ARBOL_MODO=actualizar"
+set "ARBOL_VERSION=1.8.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -494,7 +494,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.7.1
+1.8.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -2779,7 +2779,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.7.1"
+version = "1.8.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3459,7 +3459,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.7.1"
+__version__ = "1.8.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -14378,6 +14378,7 @@ MODELO = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 ACTIVO = True            # False: solo reglas (los tests y el script de comparación lo usan)
 WEB = True               # consultar Open Library por el título para sacar las materias de la obra (False: sin red)
 PESO_WEB = 0.15          # lo que suma al género que dicen las materias web
+MARGEN_DUDA = 0.05       # si el mejor género saca menos que esto al segundo, el caso es dudoso (y se pregunta al LLM si hay uno)
 PESO_REGLAS = 1.0        # cuánto pesa lo que opinan las reglas (parte de los puntos que se llevaría cada género) frente al parecido
 SATURA = 20              # con tantos puntos las reglas ya se consideran seguras
 MIN_PARECIDO = 0.25      # por debajo, el libro no se parece a ningún género: se queda como lo dejaron las reglas (p. ej. «otro»)
@@ -14483,10 +14484,26 @@ def decidir(reglas: dict, genero_reglas: str, parecido: dict, web: str | None = 
     p = parecido["puntos"]
     if max(p.values()) < MIN_PARECIDO:
         return genero_reglas, False
-    tot, fuerza = sum(reglas.values()) or 1, max(reglas.values(), default=0)
-    sc = {g: p[g] + PESO_REGLAS * reglas.get(g, 0) / tot * min(1, fuerza / SATURA) + (PESO_WEB if g == web else 0) for g in p}
+    sc = puntuar(reglas, parecido, web)
     g = max(sc, key=sc.get)
     return g, g != genero_reglas
+
+
+def puntuar(reglas: dict, parecido: dict, web: str | None = None) -> dict:
+    """Puntos finales por género: parecido + peso · cuota de las reglas · su seguridad (+ voto web)."""
+    p = parecido["puntos"]
+    tot, fuerza = sum(reglas.values()) or 1, max(reglas.values(), default=0)
+    return {g: p[g] + PESO_REGLAS * reglas.get(g, 0) / tot * min(1, fuerza / SATURA) + (PESO_WEB if g == web else 0) for g in p}
+
+
+def dudoso(reglas: dict, parecido: dict | None, web: str | None = None) -> bool:
+    """¿Está poco claro el género? Sin parecido: reglas flojas. Con parecido: nada se le parece (MIN_PARECIDO) o el mejor apenas gana al segundo (MARGEN_DUDA)."""
+    if not parecido:
+        return max(reglas.values(), default=0) < 10
+    if max(parecido["puntos"].values()) < MIN_PARECIDO:
+        return True
+    v = sorted(puntuar(reglas, parecido, web).values(), reverse=True)
+    return v[0] - v[1] < MARGEN_DUDA
 :::END
 :::BEGIN py/conocimiento/fuentes.ejemplo.json|text
 {
@@ -14521,7 +14538,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from . import CARPETA, CODIGO_EXT, DATOS_EXT, DB, EXT_IMPORTABLE, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, indexar
+from . import CARPETA, CODIGO_EXT, DATOS_EXT, DB, EXT_IMPORTABLE, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, indexar, llm
 
 GALAXIAS = {"codigo": "Código", "conceptos": "Conceptos", "demos": "Demos y guías", "finanzas": "Finanzas", "libros": "Libros", "notas": "Notas y enlaces"}
 TIPOS = {"libro": "Libro", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "codigo": "Código", "datos": "Datos", "otro": "Otro"}
@@ -14904,7 +14921,7 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
         genero, subtema = corr["genero"] or genero, corr["subtema"] or subtema
         motivo += f"; como «{corr['titulo'][:30]}», que corregiste"
     caps, _ = capitulos(f)
-    metodo, materias = "reglas", []
+    metodo, materias, s = "reglas", [], None
     web = None
     if not corr and tipo in ("libro", "articulo") and clasificador.WEB and len(f.stem.split()) >= 2:    # materias reales de la obra según Open Library (si hay red)
         materias = _materias_web(titulo_corto(f.stem))
@@ -14921,7 +14938,13 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
             genero, metodo = web, "web"
     elif web and genero == "otro" and not corr:
         genero, metodo = web, "web"
-    if materias and metodo != "reglas":
+    if not corr and tipo != "codigo" and llm.ACTIVO and clasificador.dudoso(gp, s, web) and llm.disponible(carpeta):      # caso dudoso: se pregunta al LLM local (Ollama)
+        r = llm.clasificar(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500]), materias, {k: v for k, v in GENEROS.items()}, carpeta)
+        if r:
+            genero, metodo = r["genero"], "llm"
+            subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
+            motivo += f"; el LLM propone «{GENEROS[genero]}»: {r['motivo']}"
+    if materias and metodo not in ("reglas", "llm"):
         motivo += f"; materias web: {', '.join(materias[:4])}"
     palabras = re.findall(r"[a-z]+", t[:20000])
     es, en = sum(w in _ES for w in palabras), sum(w in _EN for w in palabras)
@@ -15185,6 +15208,94 @@ def borrar(rel: str, carpeta: Path | None = None, db: Path | None = None) -> boo
     con.execute("delete from ficheros where ruta = ?", (str(f),))
     con.commit(); con.close()
     return True
+:::END
+:::BEGIN py/conocimiento/llm.py|text
+"""LLM local (Ollama) para los casos dudosos de la clasificación. Opcional: sin Ollama o sin el modelo, `clasificar` devuelve None y todo sigue como antes.
+
+Solo se le pregunta el género (de la lista cerrada de GENEROS) cuando las reglas y el parecido no se ponen de acuerdo. Todo en local: nada sale del ordenador.
+Ajustes: variable ARBOL_LLM (nombre del modelo, o «no» para apagarlo) o `conocimiento/ajustes.json` {"llm": {"modelo": "qwen2.5:3b", "url": "http://localhost:11434"}}.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import time
+import urllib.request
+from pathlib import Path
+
+from . import CARPETA
+
+MODELO = "qwen2.5:3b"            # ~1,9 GB; rápido en CPU y obedece bien al formato JSON. En un PC potente: qwen2.5:7b
+URL = "http://localhost:11434"
+ACTIVO = True                    # False: nunca se consulta (los tests lo apagan)
+ESPERA = 180                     # segundos por consulta: en CPU un modelo de 3B tarda 10-40 s por libro
+_estado: dict = {}               # "ok": ¿Ollama responde y tiene el modelo?; "t": cuándo se miró. Si estaba apagado se vuelve a mirar cada minuto (por si se abre después que la app)
+
+
+def ajustes(carpeta: Path | str = CARPETA) -> dict:
+    a = {"modelo": MODELO, "url": URL}
+    try:
+        a.update(json.loads((Path(carpeta) / "ajustes.json").read_text(encoding="utf-8")).get("llm", {}))
+    except (OSError, ValueError):
+        pass
+    if os.environ.get("ARBOL_LLM"):
+        a["modelo"] = os.environ["ARBOL_LLM"]
+    return a
+
+
+def _http(url: str, datos: dict | None = None, espera: float = ESPERA) -> dict:
+    if not url.startswith(("http://localhost", "http://127.0.0.1")):
+        raise ValueError("el LLM solo se consulta en este ordenador (localhost)")
+    req = urllib.request.Request(url, data=json.dumps(datos).encode() if datos is not None else None, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=espera) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def disponible(carpeta: Path | str = CARPETA) -> bool:
+    """¿Ollama está corriendo y tiene el modelo? Si sí, se mira una sola vez por sesión; si no, cada minuto (la consulta tarda 2 s como mucho)."""
+    if not ACTIVO or os.environ.get("ARBOL_LLM", "").lower() in ("no", "0", "off"):
+        return False
+    if "ok" not in _estado or (not _estado["ok"] and time.time() - _estado["t"] > 60):
+        a = ajustes(carpeta)
+        try:
+            nombres = [m["name"] for m in _http(a["url"] + "/api/tags", espera=2).get("models", [])]
+            _estado["ok"] = any(n == a["modelo"] or n.split(":")[0] == a["modelo"] for n in nombres) or any(n.startswith(a["modelo"]) for n in nombres)
+        except Exception:
+            _estado["ok"] = False
+        _estado["t"] = time.time()
+    return _estado["ok"]
+
+
+EJEMPLOS = [("Orgullo y prejuicio", "Una joven inglesa y un rico caballero superan sus prejuicios y se enamoran.", "novela"),
+            ("Breve historia de Roma", "Desde la fundación de la ciudad hasta la caída del Imperio de Occidente.", "historia"),
+            ("Estadística para ingenieros", "Probabilidad, estimación e intervalos de confianza con ejemplos.", "estadistica"),
+            ("Clean Architecture", "Principios de diseño de software para sistemas mantenibles.", "tecnologia")]      # ejemplos resueltos: con ellos el modelo de 3B pasó del 61 % al 76 % en las pruebas
+
+
+def _prompt(titulo: str, capitulos: list, vista: str, materias: list, generos: dict) -> str:
+    from .clasificador import SEMILLAS
+    lista = "\n".join(f"- {g}: {SEMILLAS[g][0] if g in SEMILLAS else 'no encaja en ninguno de los demás'}" for g in generos)
+    ej = "\n".join(f'Libro: «{t}». Sinopsis: {s}\n{{"genero": "{g}", "motivo": "…"}}' for t, s, g in EJEMPLOS)
+    caps = "; ".join((c["titulo"] if isinstance(c, dict) else str(c)) for c in capitulos[:8]) or "(sin índice)"
+    return (f"Eres bibliotecario. Elige el género que mejor describe el LIBRO (no solo las palabras de su título).\nGéneros:\n{lista}\n\nEjemplos resueltos:\n{ej}\n\n"
+            f"Ahora este:\nLibro: «{titulo}». Capítulos o partes: {caps}. Materias según Open Library: {', '.join(materias[:6]) or '(no hay)'}. Principio del texto: {vista[:600]}\n\n"
+            'Responde solo con JSON: {"genero": "<id>", "motivo": "<una frase corta>"}.')
+
+
+def clasificar(titulo: str, capitulos: list, vista: str, materias: list, generos: dict, carpeta: Path | str = CARPETA) -> dict | None:
+    """{'genero': id, 'motivo': str} según el LLM, o None si no está disponible o responde algo inválido."""
+    if not disponible(carpeta):
+        return None
+    a = ajustes(carpeta)
+    esquema = {"type": "object", "properties": {"genero": {"type": "string", "enum": list(generos)}, "motivo": {"type": "string"}}, "required": ["genero", "motivo"]}
+    try:
+        r = _http(a["url"] + "/api/chat", {"model": a["modelo"], "stream": False, "format": esquema, "options": {"temperature": 0, "num_predict": 80, "num_ctx": 2048},
+                                           "messages": [{"role": "user", "content": _prompt(titulo, capitulos, vista, materias, generos)}]})
+        j = json.loads(re.sub(r"^```(?:json)?|```$", "", r["message"]["content"].strip()))
+        return {"genero": j["genero"], "motivo": str(j.get("motivo", ""))[:160]} if j.get("genero") in generos else None
+    except Exception:
+        return None
 :::END
 :::BEGIN py/conocimiento/telescopio.py|text
 """Telescopio: busca obras de acceso abierto o dominio público, las trae a la biblioteca y las clasifica con los metadatos reales (materias).
@@ -31223,6 +31334,8 @@ def _sin_modelo_de_embeddings(monkeypatch):
     from conocimiento import clasificador
     monkeypatch.setattr(clasificador, "ACTIVO", False)
     monkeypatch.setattr(clasificador, "WEB", False)
+    from conocimiento import llm
+    monkeypatch.setattr(llm, "ACTIVO", False)
 :::END
 :::BEGIN py/tests/demos_stub.js|text
 // Prueba sin navegador de las demos del visor: carga visor/demos.js con un DOM mínimo, ejecuta cada demo,
@@ -33470,6 +33583,81 @@ def test_el_actualizador_abre_lo_mismo_que_el_acceso_directo():
     assert motor.count("Start-Process -FilePath (Ruta $dest 'abrir_arbol.bat')") == 1               # abrir_arbol.bat solo como último recurso (sin acceso directo)
     bat = (RAIZ / "abrir_arbol.bat").read_text(encoding="utf-8", errors="replace")
     assert 'find /i "pythonw"' in bat                                                                # pythonw no se lanza minimizado: igual que el acceso directo
+:::END
+:::BEGIN py/tests/test_llm.py|text
+"""LLM local (Ollama) para los casos dudosos, con un Ollama falso: se prueba cuándo se pregunta y cómo se usa la respuesta."""
+import json
+import sys
+import zipfile
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conocimiento import clasificador as c
+from conocimiento import importar as im
+from conocimiento import llm
+
+
+@pytest.fixture
+def ollama_falso(monkeypatch):
+    llamadas = []
+
+    def http(url, datos=None, espera=0):
+        llamadas.append(url)
+        if url.endswith("/api/tags"):
+            return {"models": [{"name": "qwen2.5:3b"}]}
+        return {"message": {"content": json.dumps({"genero": "novela", "motivo": "narra una historia con personajes"})}}
+    monkeypatch.setattr(llm, "_http", http)
+    monkeypatch.setattr(llm, "ACTIVO", True)
+    monkeypatch.delenv("ARBOL_LLM", raising=False)
+    llm._estado.clear()
+    yield llamadas
+    llm._estado.clear()
+
+
+def test_disponible_y_respuesta(ollama_falso, tmp_path):
+    assert llm.disponible(tmp_path) and llm.disponible(tmp_path)
+    assert ollama_falso.count("http://localhost:11434/api/tags") == 1                       # si está disponible, se comprueba una sola vez por sesión
+    r = llm.clasificar("Titulo", [{"titulo": "Cap 1"}], "texto", ["Fiction"], im.GENEROS, tmp_path)
+    assert r["genero"] == "novela" and "personajes" in r["motivo"]
+
+
+def test_sin_ollama_o_sin_modelo_no_pasa_nada(monkeypatch, tmp_path):
+    monkeypatch.setattr(llm, "ACTIVO", True); llm._estado.clear()
+    monkeypatch.setattr(llm, "_http", lambda *a, **k: (_ for _ in ()).throw(OSError("conexión rechazada")))
+    assert llm.disponible(tmp_path) is False and llm.clasificar("t", [], "", [], im.GENEROS, tmp_path) is None
+    llm._estado.clear()
+    monkeypatch.setattr(llm, "_http", lambda *a, **k: {"models": [{"name": "otro:7b"}]})
+    assert llm.disponible(tmp_path) is False                                                # Ollama responde pero no tiene el modelo
+    llm._estado.clear()
+    monkeypatch.setenv("ARBOL_LLM", "no")
+    assert llm.disponible(tmp_path) is False
+
+
+def test_respuesta_invalida_y_solo_localhost(monkeypatch, ollama_falso, tmp_path):
+    monkeypatch.setattr(llm, "_http", lambda url, datos=None, espera=0: ({"models": [{"name": "qwen2.5:3b"}]} if url.endswith("tags") else {"message": {"content": '{"genero": "inventado"}'}}))
+    assert llm.clasificar("t", [], "", [], im.GENEROS, tmp_path) is None                    # género fuera de la lista: se ignora
+    monkeypatch.undo()
+    with pytest.raises(ValueError):
+        llm._http("https://api.ejemplo.com/chat", {})
+
+
+def test_dudoso():
+    claro = {"puntos": {"historia": .60, "ciencia": .30}}
+    justo = {"puntos": {"historia": .40, "ciencia": .38}}
+    assert not c.dudoso({"historia": 25}, claro) and c.dudoso({}, justo) and c.dudoso({}, {"puntos": {"historia": .1}})
+    assert c.dudoso({"historia": 3}, None) and not c.dudoso({"historia": 30}, None)
+
+
+def test_clasificar_pregunta_al_llm_solo_si_es_dudoso(ollama_falso, monkeypatch, tmp_path):
+    f = tmp_path / "Zorrotz Quimbaya.epub"
+    with zipfile.ZipFile(f, "w") as z:
+        z.writestr("mimetype", "application/epub+zip"); z.writestr("c.xhtml", "<p>" + "texto generico sin pistas " * 300 + "</p>")
+    r = im.clasificar(f, tmp_path)                                                           # reglas flojas, sin parecido: dudoso -> LLM
+    assert r["genero"] == "novela" and r["metodo"] == "llm" and "LLM" in r["motivo"]
+    monkeypatch.setattr(c, "dudoso", lambda *a, **k: False)
+    assert im.clasificar(f, tmp_path)["metodo"] == "reglas"                                  # si no es dudoso no se pregunta
 :::END
 :::BEGIN py/tests/test_ml.py|text
 """Rama ML (0.9): salida común, los modelos flexibles captan lo no lineal y la explicabilidad funciona."""
@@ -39760,6 +39948,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 5m. **Referencias que viajan:** los PDF/EPUB no suben a GitHub, pero `conocimiento/biblioteca/referencias.json` (los metadatos sin rutas del equipo: título, galaxia, género, capítulos, hash) y `biblioteca/portadas/` sí (`.gitignore`; `importar._guardar` los escribe junto a `metadatos.json`, que sigue siendo local). `leer_metadatos` fusiona ambos, así que en otro equipo el mapa y el Observatorio muestran los libros como referencias vacías («sin el archivo en este equipo»); al importar un archivo con el mismo hash se restaura en su sitio.
 5k. **Telescopio:** pestaña «📡 Telescopio» (`py/conocimiento/telescopio.py`, API `Api.telescopio_buscar/traer`, consola `python -m conocimiento telescopio <consulta> [--traer N]`). Busca **solo fuentes legales**: Project Gutenberg (catálogo OPDS oficial, dominio público; Gutendex se descartó por lento), Google Books y Open Library (catálogo: ficha y enlace; descarga solo si es dominio público o lectura abierta; Google necesita clave en `GOOGLE_BOOKS_KEY` o `conocimiento/google_books.key` porque la cuota anónima diaria suele estar agotada), arXiv, OpenAlex (solo con PDF abierto) e Internet Archive (solo licencia CC/dominio público o publicado ≤ 1929). **No se añaden fuentes piratas (Anna's Archive, Z-Library, LibGen…) ni descargadores de ellas.** `traer` descarga (https, ≤ 200 MB, comprueba que es PDF/EPUB de verdad) y pasa por `importar.importar` con el género sacado de las materias de la obra (`genero_desde_materias`); `materias_de` consulta Open Library para clasificar un título que ya tienes. Tests sin red (`_get` se sustituye): `tests/test_telescopio.py`.
 5p. **Importar cualquier archivo:** además de libros, el importador acepta código (`CODIGO_EXT`: .py .ipynb .r .sas .sql .js …), datos (`DATOS_EXT`: .csv .xlsx .json .yaml …) y apuntes (`APUNTES_EXT`: .pptx .tex .html .rst) — todo en `EXT_IMPORTABLE` (`conocimiento/__init__.py`). El código va a la galaxia Código (tipo `codigo`, género tecnología); los datos al tipo `datos` (solo se indexa la cabecera); los cuadernos se indexan por celdas y su «índice» son los títulos markdown. Las carpetas de `fuentes.json` siguen leyendo solo `EXT` (documentos), para no indexar todo un disco. Otros formatos (imágenes, .zip, .exe) se rechazan con un mensaje claro. Se filtran en el buscador con prefijos como `py:`, `ipynb:`, `csv:`, `sql:`, `pptx:` (`conocimiento.buscar(formato=)`). Test: `tests/test_importar_formatos.py`.
+5r. **LLM local (Ollama) para los casos dudosos:** `py/conocimiento/llm.py`. Ollama 0.40 instalado en `%LOCALAPPDATA%\Programs\Ollama` con el modelo `qwen2.5:3b` (1,9 GB; CPU, ~6 s por consulta). Solo se le pregunta el género cuando `clasificador.dudoso` (el mejor género saca menos de `MARGEN_DUDA` al segundo, nada se parece, o reglas flojas sin parecido); responde JSON con enum cerrado de GENEROS y su respuesta cuenta como `metodo = llm`. Todo en localhost (`_http` rechaza otras URLs). Si Ollama no está o no tiene el modelo, se ignora sin error y se vuelve a mirar cada minuto. Ajustes: `ARBOL_LLM` (modelo, o `no`) o `conocimiento/ajustes.json` {"llm": {"modelo": "qwen2.5:7b"}}. **Medido** (`python herramientas/comparar_clasificadores.py --llm qwen2.5:3b`, 66 libros): reglas + parecido 86 %; LLM solo 82 % (con el prompt de descripciones + 4 ejemplos resueltos; con el prompt simple era 50 %: los modelos pequeños necesitan ejemplos); híbrido 88 %. En un PC potente probar `qwen2.5:7b`. Tests: `tests/test_llm.py` (Ollama falso; la suite lo apaga con `llm.ACTIVO = False`).
 5q. **Importar en masa y revisar por fecha:** la casilla «Importar sin revisar (clasifica solo)» de la pestaña Importar clasifica e importa todo lo que sueltes sin pasar por las tarjetas (se recuerda en el navegador). Cada archivo guarda en `metadatos.json` cuándo se importó (`fecha`, con hora), cómo se clasificó (`metodo`: `reglas` | `parecido` | `web`, `motivo`, `materias_web`) y la `propuesta` automática original; así se ve qué corregiste a mano. **Para revisar con Claude:** `python -m conocimiento revisar [--desde AAAA-MM-DD] [--hasta …] [--json]` lista lo importado de más reciente a más antiguo con `corregido` (distinto de la propuesta); el Observatorio ordena por fecha y filtra «importados desde». Claude lee ese JSON, propone la clasificación que él habría hecho y se comparan los desacuerdos para mejorar reglas, frases semilla (`clasificador.SEMILLAS`) o pesos. **Materias web:** para libros y artículos, `importar._materias_web` consulta Open Library por el título (timeout de 6 s; si falla una vez, no se reintenta en la sesión) y el género de esas materias suma `PESO_WEB` en `clasificador.decidir` (o decide si todo lo demás da «otro»). No se hace scraping de páginas: solo APIs de metadatos. Las pruebas desactivan la red con `clasificador.WEB = False`. Tests: `tests/test_revisar.py`.
 5n. **Búsqueda por tipo de archivo y por título/autor:** en el buscador principal los prefijos `pdf:`, `epub:`, `docx:`, `md:`, `txt:` filtran lo que sale de tu conocimiento por formato (`conocimiento.buscar(..., formato=)`; con un prefijo de formato no se listan nodos del mapa). En el Telescopio, «Qué buscamos» (Todo / Un libro / Un artículo) muestra casillas de **Título** y **Autor** (el autor se comprueba en cada resultado), el selector de tipo elige las fuentes (libro: Google Books, Open Library, Gutenberg, Internet Archive; artículo: arXiv, OpenAlex) y «Solo PDF / Solo EPUB» filtra por formato descargable. Consola: `python -m conocimiento telescopio -T título -a autor --tipo libro --formato pdf`.
 5o. **Clasificador por parecido (embeddings locales):** `py/conocimiento/clasificador.py`. El importador mezcla las reglas de palabras clave con el parecido del libro (título + capítulos + principio) a unas frases semilla por género y a lo que ya hay en tu biblioteca (lo que corregiste a mano pesa más); `decidir` suma parecido + cuota de las reglas × su seguridad, y si nada se parece (`MIN_PARECIDO`) respeta a las reglas. Corre en local con `fastembed` (ONNX, sin PyTorch; **opcional**: `pip install fastembed`; sin él o sin el modelo todo sigue con las reglas). Los modelos se guardan en `conocimiento/modelos/` (no se publican). Modelo por defecto `paraphrase-multilingual-MiniLM-L12-v2` (0,2 GB; sirve en un portátil de 8 GB); para otro, `conocimiento/ajustes.json` {"modelo_embeddings": "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"} o la variable ARBOL_MODELO. **Medido con `python herramientas/comparar_clasificadores.py`** (66 libros de prueba): reglas solas 42 %; con MiniLM 86 %, con mpnet 89 % (1 GB, algo más lento), con potion-multilingual-128M 82 %; ~0,1 s por libro una vez cargado el modelo. Al añadir géneros o frases semilla, vuelve a medir. El resultado de `clasificar` trae `metodo` (`reglas` | `parecido`) y el motivo lo explica. Tests: `tests/test_clasificador.py` (con un modelo falso; la suite desactiva el real).

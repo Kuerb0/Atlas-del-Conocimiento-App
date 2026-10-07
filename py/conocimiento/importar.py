@@ -23,7 +23,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from . import CARPETA, CODIGO_EXT, DATOS_EXT, DB, EXT_IMPORTABLE, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, indexar
+from . import CARPETA, CODIGO_EXT, DATOS_EXT, DB, EXT_IMPORTABLE, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, indexar, llm
 
 GALAXIAS = {"codigo": "Código", "conceptos": "Conceptos", "demos": "Demos y guías", "finanzas": "Finanzas", "libros": "Libros", "notas": "Notas y enlaces"}
 TIPOS = {"libro": "Libro", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "codigo": "Código", "datos": "Datos", "otro": "Otro"}
@@ -406,7 +406,7 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
         genero, subtema = corr["genero"] or genero, corr["subtema"] or subtema
         motivo += f"; como «{corr['titulo'][:30]}», que corregiste"
     caps, _ = capitulos(f)
-    metodo, materias = "reglas", []
+    metodo, materias, s = "reglas", [], None
     web = None
     if not corr and tipo in ("libro", "articulo") and clasificador.WEB and len(f.stem.split()) >= 2:    # materias reales de la obra según Open Library (si hay red)
         materias = _materias_web(titulo_corto(f.stem))
@@ -423,7 +423,13 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
             genero, metodo = web, "web"
     elif web and genero == "otro" and not corr:
         genero, metodo = web, "web"
-    if materias and metodo != "reglas":
+    if not corr and tipo != "codigo" and llm.ACTIVO and clasificador.dudoso(gp, s, web) and llm.disponible(carpeta):      # caso dudoso: se pregunta al LLM local (Ollama)
+        r = llm.clasificar(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500]), materias, {k: v for k, v in GENEROS.items()}, carpeta)
+        if r:
+            genero, metodo = r["genero"], "llm"
+            subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
+            motivo += f"; el LLM propone «{GENEROS[genero]}»: {r['motivo']}"
+    if materias and metodo not in ("reglas", "llm"):
         motivo += f"; materias web: {', '.join(materias[:4])}"
     palabras = re.findall(r"[a-z]+", t[:20000])
     es, en = sum(w in _ES for w in palabras), sum(w in _EN for w in palabras)

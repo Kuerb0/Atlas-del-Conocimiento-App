@@ -46,3 +46,5 @@ def _sin_modelo_de_embeddings(monkeypatch):
     from conocimiento import clasificador
     monkeypatch.setattr(clasificador, "ACTIVO", False)
     monkeypatch.setattr(clasificador, "WEB", False)
+    from conocimiento import llm
+    monkeypatch.setattr(llm, "ACTIVO", False)

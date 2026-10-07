@@ -2,6 +2,7 @@
 
     python herramientas/comparar_clasificadores.py                 # los tres modelos de la lista MODELOS
     python herramientas/comparar_clasificadores.py minishlab/potion-multilingual-128M
+    python herramientas/comparar_clasificadores.py --llm qwen2.5:3b       # mide el LLM local (Ollama): solo, y en el híbrido (solo se le pregunta lo dudoso)
 
 Muestra, por modelo: acierto de las reglas solas, del parecido solo (sin biblioteca, solo las semillas) y del híbrido (lo que hace el importador),
 el tiempo por libro y los fallos del híbrido. La primera vez descarga cada modelo (0,2-1 GB) a conocimiento/modelos/.
@@ -117,7 +118,55 @@ def evaluar(modelo: str) -> dict:
     return res
 
 
+def evaluar_llm(modelo_llm: str) -> None:
+    from conocimiento import clasificador as c
+    from conocimiento import importar as im
+    from conocimiento import llm
+    os.environ["ARBOL_LLM"] = modelo_llm
+    os.environ["ARBOL_MODELO"] = MODELOS[0]
+    c._cache.clear(); llm._estado.clear()
+    c.CARPETA = RAIZ / "conocimiento"; c.ACTIVO = True; c.WEB = False
+    vacia = Path(tempfile.mkdtemp())
+    n = base_ok = llm_ok = hib_ok = dudosos = dudosos_base_ok = dudosos_llm_ok = 0
+    seg, fallos = 0.0, []
+    for g, libros in ORO.items():
+        for titulo, frase in libros:
+            f = vacia / f"{titulo.replace(':', '')}.txt"
+            f.write_text(frase, encoding="utf-8")
+            llm.ACTIVO = False
+            b = im.clasificar(f, vacia)                                  # reglas + parecido
+            gp = {x["id"]: x["puntos"] for x in b["generos"]}
+            dud = c.dudoso(gp, c.sugerir(c.texto_libro(titulo, [], frase), RAIZ / "conocimiento"))
+            llm.ACTIVO = True
+            t0 = time.time()
+            r = llm.clasificar(titulo, [], frase, [], im.GENEROS, vacia)
+            seg += time.time() - t0
+            if r is None:
+                print("El LLM no responde: ¿está Ollama en marcha y bajado el modelo?", modelo_llm)
+                return
+            n += 1
+            base_ok += b["genero"] == g
+            llm_ok += r["genero"] == g
+            hib = r["genero"] if dud else b["genero"]
+            hib_ok += hib == g
+            dudosos += dud
+            dudosos_base_ok += dud and b["genero"] == g
+            dudosos_llm_ok += dud and r["genero"] == g
+            if r["genero"] != g:
+                fallos.append(f"{titulo}: LLM {r['genero']} (era {g}) {'[dudoso]' if dud else ''}")
+    print(f"Modelo {modelo_llm} sobre {n} libros:")
+    print(f"  reglas + parecido         {base_ok / n:4.0%}")
+    print(f"  LLM solo                  {llm_ok / n:4.0%}   ({seg / n:.1f} s por consulta)")
+    print(f"  híbrido (LLM si dudoso)   {hib_ok / n:4.0%}   (pregunta al LLM en {dudosos} de {n}: ahí base acierta {dudosos_base_ok}, LLM {dudosos_llm_ok})")
+    for x in fallos:
+        print("  -", x)
+
+
 def main() -> None:
+    if "--llm" in sys.argv:
+        i = sys.argv.index("--llm")
+        evaluar_llm(sys.argv[i + 1] if len(sys.argv) > i + 1 else "qwen2.5:3b")
+        return
     modelos = sys.argv[1:] or MODELOS
     print(f"{'modelo':62} {'reglas':>7} {'parecido':>9} {'híbrido':>8} {'s/libro':>8}")
     detalle = {}

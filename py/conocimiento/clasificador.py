@@ -19,6 +19,7 @@ MODELO = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 ACTIVO = True            # False: solo reglas (los tests y el script de comparación lo usan)
 WEB = True               # consultar Open Library por el título para sacar las materias de la obra (False: sin red)
 PESO_WEB = 0.15          # lo que suma al género que dicen las materias web
+MARGEN_DUDA = 0.05       # si el mejor género saca menos que esto al segundo, el caso es dudoso (y se pregunta al LLM si hay uno)
 PESO_REGLAS = 1.0        # cuánto pesa lo que opinan las reglas (parte de los puntos que se llevaría cada género) frente al parecido
 SATURA = 20              # con tantos puntos las reglas ya se consideran seguras
 MIN_PARECIDO = 0.25      # por debajo, el libro no se parece a ningún género: se queda como lo dejaron las reglas (p. ej. «otro»)
@@ -124,7 +125,23 @@ def decidir(reglas: dict, genero_reglas: str, parecido: dict, web: str | None = 
     p = parecido["puntos"]
     if max(p.values()) < MIN_PARECIDO:
         return genero_reglas, False
-    tot, fuerza = sum(reglas.values()) or 1, max(reglas.values(), default=0)
-    sc = {g: p[g] + PESO_REGLAS * reglas.get(g, 0) / tot * min(1, fuerza / SATURA) + (PESO_WEB if g == web else 0) for g in p}
+    sc = puntuar(reglas, parecido, web)
     g = max(sc, key=sc.get)
     return g, g != genero_reglas
+
+
+def puntuar(reglas: dict, parecido: dict, web: str | None = None) -> dict:
+    """Puntos finales por género: parecido + peso · cuota de las reglas · su seguridad (+ voto web)."""
+    p = parecido["puntos"]
+    tot, fuerza = sum(reglas.values()) or 1, max(reglas.values(), default=0)
+    return {g: p[g] + PESO_REGLAS * reglas.get(g, 0) / tot * min(1, fuerza / SATURA) + (PESO_WEB if g == web else 0) for g in p}
+
+
+def dudoso(reglas: dict, parecido: dict | None, web: str | None = None) -> bool:
+    """¿Está poco claro el género? Sin parecido: reglas flojas. Con parecido: nada se le parece (MIN_PARECIDO) o el mejor apenas gana al segundo (MARGEN_DUDA)."""
+    if not parecido:
+        return max(reglas.values(), default=0) < 10
+    if max(parecido["puntos"].values()) < MIN_PARECIDO:
+        return True
+    v = sorted(puntuar(reglas, parecido, web).values(), reverse=True)
+    return v[0] - v[1] < MARGEN_DUDA
