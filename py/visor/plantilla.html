@@ -330,6 +330,22 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 .importar[hidden]{display:none}
 .app.modo-importar .cuerpo{display:none}
 .imp-cabeza{text-align:center;max-width:720px} .imp-cabeza h2{margin:6px 0 2px;font-size:18px} .imp-cabeza p{margin:0;color:#9fb0cc;font-size:13px}
+.sala{width:100%;max-width:980px;margin:6px 0 4px;display:flex;flex-direction:column;gap:8px}
+.sala-ficha{border:1px solid #1c2646;border-radius:12px;background:linear-gradient(180deg,#0b1224,#080d1b);padding:10px 14px}
+.sala-ficha.activa{border-color:#4a6bd8;box-shadow:0 0 0 1px #4a6bd855,0 0 24px #4a6bd822}
+.sala-cab{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap} .sala-cab b{font-size:14px;color:#e6ecfa} .sala-cab span{color:#8ea0c0;font-size:12.5px}
+.sala-etapas{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0}
+.sala-et{font-size:11.5px;padding:3px 9px;border-radius:999px;border:1px solid #26335c;color:#7f90b5;background:#0a1020;transition:all .3s}
+.sala-et.run{color:#fff;border-color:#6d8cff;background:#243a8a;animation:sala-pulso 1s ease-in-out infinite}
+.sala-et.ok{color:#9be8ad;border-color:#2f7a45;background:#0e2417} .sala-et.omit{color:#6f7d9c;border-style:dashed}
+@keyframes sala-pulso{0%,100%{box-shadow:0 0 0 0 #6d8cff66}50%{box-shadow:0 0 0 5px #6d8cff00}}
+.sala-barras{display:grid;grid-template-columns:150px 1fr 36px;gap:3px 10px;align-items:center;font-size:12.5px;margin-top:2px}
+.sala-barras .n{color:#b9c6e4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .sala-barras .n.lider{color:#fff;font-weight:600}
+.sala-barras .p{height:9px;border-radius:5px;background:#101a33;overflow:hidden} .sala-barras .p i{display:block;height:100%;width:0;border-radius:5px;background:#42527f;transition:width .6s cubic-bezier(.2,.8,.2,1),background .4s}
+.sala-barras .p i.lider{background:linear-gradient(90deg,#4f7bff,#8fb0ff)} .sala-barras em{font-style:normal;color:#8ea0c0;text-align:right}
+.sala-nota{color:#9fb0d0;font-size:12.5px;margin-top:6px;min-height:1.3em}
+.sala-final{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px} .sala-final span{padding:3px 10px;border-radius:999px;background:#12204a;color:#dfe8ff;font-size:12.5px;border:1px solid #2a3c7a}
+.sala-mini{display:flex;gap:10px;align-items:center;font-size:12.5px;color:#9fb0d0;padding:4px 14px} .sala-mini b{color:#dfe8ff}
 .imp-auto{display:flex;gap:8px;align-items:center;color:#cfe0ff;font-size:13px;margin:4px 0}
 .imp-agujero{width:100%;max-width:980px;height:min(46vh,430px);min-height:240px;flex:none}
 #agujero{width:100%;height:100%;display:block;outline:none;border-radius:12px} #agujero:focus-visible{outline:2px solid var(--accent)}
@@ -416,6 +432,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
     <label class="imp-auto" title="Los archivos que sueltes se clasifican y se importan sin pasar por las tarjetas; luego los revisas por fecha en el Observatorio"><input type="checkbox" id="impAuto"> Importar sin revisar (clasifica solo)</label>
     <div class="imp-agujero"><canvas id="agujero" tabindex="0" role="button" aria-label="Agujero negro: haz clic para añadir archivos"></canvas></div>
     <p class="imp-msg" id="impMsg" aria-live="polite"></p>
+    <div class="sala" id="impSala" hidden aria-live="polite"></div>
     <div class="imp-panel" id="impPanel" hidden></div>
     <details class="imp-ayuda"><summary>¿Cómo funciona la importación?</summary><div>
       <ol>
@@ -1261,20 +1278,71 @@ async function impElegir() {
   if (rs && rs.error) { impAviso(rs.error); return; }
   if (rs && rs.length) await impAnadir(rs);
 }
+var SALA_ETAPAS = [['leer', 'Leer'], ['reglas', 'Reglas'], ['web', 'Web'], ['parecido', 'Parecido'], ['llm', 'LLM'], ['subgenero', 'Subgénero'], ['decision', 'Decisión']];
+var sala = {estado: null};
+function salaBarras(b, lider) {
+  return '<div class="sala-barras">' + (b || []).map(function (x, k) {
+    var es = x.id === lider || (!lider && k === 0);
+    return '<span class="n' + (es ? ' lider' : '') + '">' + esc(x.nombre) + '</span><span class="p"><i class="' + (es ? 'lider' : '') + '" style="width:' + x.valor + '%"></i></span><em>' + x.valor + '</em>';
+  }).join('') + '</div>';
+}
+function salaFicha(a, activa) {
+  var e = a.etapas || {}, barras = null, lider = '', nota = '', titulo = a.nombre;
+  SALA_ETAPAS.forEach(function (p) { var d = e[p[0]]; if (d && d.estado === 'fin') { if (d.barras && d.barras.length && p[0] !== 'subgenero') { barras = d.barras; lider = d.forma || d.genero || ''; } } });
+  var sub = e.subgenero && e.subgenero.estado === 'fin' && e.subgenero.barras ? e.subgenero : null;
+  var pills = SALA_ETAPAS.map(function (p) {
+    var d = e[p[0]], cl = !d ? '' : d.estado === 'inicio' ? 'run' : d.omitido ? 'omit' : 'ok', ic = !d ? '○' : d.estado === 'inicio' ? '⏳' : d.omitido ? '—' : '✓';
+    return '<span class="sala-et ' + cl + '" title="' + esc(d && d.omitido ? 'Omitido: ' + d.omitido : p[1]) + '">' + ic + ' ' + p[1] + '</span>';
+  }).join('');
+  if (e.leer && e.leer.estado === 'fin') nota = e.leer.tipo_nombre + ' · ' + (e.leer.paginas ? e.leer.paginas + ' págs. · ' : '') + e.leer.capitulos + ' capítulos';
+  if (e.web && e.web.materias && e.web.materias.length) nota += ' · Open Library: ' + e.web.materias.slice(0, 3).join(', ');
+  if (e.llm && e.llm.razon) nota += ' · LLM: «' + e.llm.razon + '»';
+  var h = '<div class="sala-ficha' + (activa ? ' activa' : '') + '"><div class="sala-cab"><b>' + esc(recorta(titulo, 70)) + '</b>' + (a.estado === 'error' ? '<span style="color:#ff8a73">✗ ' + esc(a.error) + '</span>' : '') + '</div>' +
+    '<div class="sala-etapas">' + pills + '</div>' + (barras ? salaBarras(barras, lider) : '') + (sub ? '<div style="margin-top:8px;color:#8ea0c0;font-size:12px">Subgénero</div>' + salaBarras(sub.barras, sub.id) : '') +
+    '<div class="sala-nota">' + esc(nota) + '</div>';
+  var d = e.decision;
+  if (d && d.estado === 'fin') {
+    var col = GAL[d.galaxia] ? 'rgb(' + GAL[d.galaxia].color.join(',') + ')' : '#9fb0cc';
+    h += '<div class="sala-final"><span style="border-color:' + col + ';color:' + col + '">' + esc(impNom(imp.opciones ? imp.opciones.galaxias : GALAXIAS, d.galaxia)) + '</span><span>' + esc(d.genero_nombre) + '</span>' +
+      (d.subgenero_nombre ? '<span>' + esc(d.subgenero_nombre) + '</span>' : '') + '<span>' + esc(d.tipo) + '</span><span title="' + esc(d.motivo) + '">por ' + esc(d.metodo) + '</span></div>';
+  }
+  return h + '</div>';
+}
+function salaRender(v) {
+  var el = $('#impSala'); if (!v || !v.archivos.length) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  var h = '';
+  v.archivos.forEach(function (a, k) {
+    if (a.estado === 'listo' && k !== v.actual && v.fase !== 'fin') {          /* los ya clasificados se resumen en una línea */
+      var d = (a.etapas || {}).decision || {};
+      h += '<div class="sala-mini"><span>✓</span><b>' + esc(recorta(a.nombre, 50)) + '</b><span>→ ' + esc(d.genero_nombre || '') + (d.subgenero_nombre ? ' › ' + esc(d.subgenero_nombre) : '') + '</span></div>';
+    } else if (a.estado === 'trabajando' || (a.estado === 'listo' && k === v.actual) || a.estado === 'error') h += salaFicha(a, a.estado === 'trabajando');
+    else if (a.estado === 'espera') h += '<div class="sala-mini"><span>○</span><span>' + esc(recorta(a.nombre, 60)) + ' · en cola</span></div>';
+  });
+  el.innerHTML = h;
+}
 async function impAnadir(rutas) {
   rutas = rutas.filter(function (r) { return !imp.archivos.some(function (a) { return a.ruta === r; }); });
   if (!rutas.length) return;
   agujero.ocupado(true); imp.resultados = null;
-  for (var i = 0; i < rutas.length; i++) {                    /* de uno en uno: así se ve el avance y un PDF enorme no bloquea a los demás */
-    impAviso('Analizando ' + (i + 1) + ' de ' + rutas.length + ': ' + recorta(rutas[i].split(/[\\/]/).pop(), 50) + '…');
-    var cl = await impApi().clasificar_archivos([rutas[i]]);
-    if (cl.error) { impAviso(cl.error); continue; }
-    var c = cl[0];
-    imp.archivos.push({ruta: c.ruta, nombre: c.ruta.split(/[\\/]/).pop(), auto: c, titulo: c.titulo, galaxia: 'auto', genero: 'auto', subtema: '', tipo: 'auto', etiquetas: '',
-      subgenero: 'auto', incluir: !c.duplicado, abierto: imp.archivos.length === 0, estado: '', res: null});
-    impRender();
-  }
+  var api = impApi(), ini = await api.clasificar_en_vivo(rutas);
+  if (ini && ini.error) { impAviso(ini.error); agujero.ocupado(false); return; }
+  var hechos = 0, st;
+  do {                                                          /* cada 0,3 s: se pinta cómo va la clasificación y, según acaba cada archivo, aparece su tarjeta */
+    await espera(300); st = await api.estado_clasificacion(); sala.estado = st;
+    salaRender(st);
+    impAviso('Clasificando ' + Math.min(st.actual + 1, st.archivos.length) + ' de ' + st.archivos.length + ': ' + recorta((st.archivos[st.actual] || {}).nombre || '', 50) + '…');
+    while (hechos < st.archivos.length && ['listo', 'error'].indexOf(st.archivos[hechos].estado) >= 0) {
+      var a0 = st.archivos[hechos++];
+      if (a0.estado === 'error' || !a0.resultado) { impAviso(a0.error || 'No se pudo clasificar ' + a0.nombre); continue; }
+      var c = a0.resultado;
+      imp.archivos.push({ruta: c.ruta, nombre: c.ruta.split(/[\\/]/).pop(), auto: c, titulo: c.titulo, galaxia: 'auto', genero: 'auto', subtema: '', tipo: 'auto', etiquetas: '',
+        subgenero: 'auto', incluir: !c.duplicado, abierto: imp.archivos.length === 0, estado: '', res: null});
+    }
+  } while (st.fase !== 'fin' || hechos < st.archivos.length);
   agujero.ocupado(false); impAviso('');
+  if (imp.archivos.length && !$('#impAuto').checked) setTimeout(function () { if (!imp.ocupado) { sala.estado = null; salaRender(null); } }, 4000);        /* la sala se queda a la vista unos segundos y deja paso a las tarjetas */
+  impRender();
   if ($('#impAuto').checked && imp.archivos.some(function (a) { return a.incluir; })) impImportar();
 }
 function impOpt(lista, val, autoTxt) {

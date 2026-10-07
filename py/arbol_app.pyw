@@ -48,6 +48,7 @@ class Api:
     def __init__(self) -> None:
         self._cuaderno = None
         self._job = {"fase": "", "texto": "", "frac": 0.0, "resultado": None}      # la importación en curso (se consulta con estado_trabajo)
+        self._vivo = {}                                                              # la clasificación en vivo (se consulta con estado_clasificacion)
 
     def _c(self):
         if self._cuaderno is None:
@@ -83,6 +84,36 @@ class Api:
             return [str(x) for x in (r or [])]
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}
+
+    def clasificar_en_vivo(self, rutas):
+        """Clasifica los archivos uno a uno en segundo plano; el visor consulta estado_clasificacion() cada 0,3 s para animar las etapas."""
+        import threading
+        if self._vivo.get("fase") == "trabajando":
+            return {"error": "ya hay una clasificación en curso"}
+        rutas = [str(r) for r in rutas]
+        self._vivo = {"fase": "trabajando", "actual": 0, "archivos": [{"ruta": r, "nombre": Path(r).name, "estado": "espera", "etapas": {}, "resultado": None, "error": ""} for r in rutas]}
+
+        def correr():
+            from conocimiento import importar
+            for i, a in enumerate(self._vivo["archivos"]):
+                self._vivo["actual"] = i
+                a["estado"] = "trabajando"
+
+                def etapa(nombre, datos, a=a):
+                    a["etapas"][nombre] = datos
+                try:
+                    a["resultado"] = {"ruta": a["ruta"], **importar.clasificar(a["ruta"], etapa=etapa)}
+                    a["estado"] = "listo"
+                except Exception as e:
+                    a["estado"], a["error"] = "error", f"{type(e).__name__}: {e}"
+            self._vivo["fase"] = "fin"
+        threading.Thread(target=correr, daemon=True).start()
+        return {"ok": True}
+
+    def estado_clasificacion(self):
+        """Estado de la clasificación en vivo: {fase, actual, archivos: [{nombre, estado, etapas, resultado}]}."""
+        v = self._vivo
+        return {"fase": v.get("fase", "fin"), "actual": v.get("actual", 0), "archivos": [dict(a) for a in v.get("archivos", [])]}
 
     def clasificar_archivos(self, rutas):
         try:

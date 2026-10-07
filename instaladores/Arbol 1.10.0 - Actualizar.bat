@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.9.0 - Instalador
+title Arbol de la estadistica 1.10.0 - Actualizar
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=1.9.0"
+set "ARBOL_MODO=actualizar"
+set "ARBOL_VERSION=1.10.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -680,7 +680,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.9.0
+1.10.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -733,6 +733,7 @@ class Api:
     def __init__(self) -> None:
         self._cuaderno = None
         self._job = {"fase": "", "texto": "", "frac": 0.0, "resultado": None}      # la importación en curso (se consulta con estado_trabajo)
+        self._vivo = {}                                                              # la clasificación en vivo (se consulta con estado_clasificacion)
 
     def _c(self):
         if self._cuaderno is None:
@@ -768,6 +769,36 @@ class Api:
             return [str(x) for x in (r or [])]
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}
+
+    def clasificar_en_vivo(self, rutas):
+        """Clasifica los archivos uno a uno en segundo plano; el visor consulta estado_clasificacion() cada 0,3 s para animar las etapas."""
+        import threading
+        if self._vivo.get("fase") == "trabajando":
+            return {"error": "ya hay una clasificación en curso"}
+        rutas = [str(r) for r in rutas]
+        self._vivo = {"fase": "trabajando", "actual": 0, "archivos": [{"ruta": r, "nombre": Path(r).name, "estado": "espera", "etapas": {}, "resultado": None, "error": ""} for r in rutas]}
+
+        def correr():
+            from conocimiento import importar
+            for i, a in enumerate(self._vivo["archivos"]):
+                self._vivo["actual"] = i
+                a["estado"] = "trabajando"
+
+                def etapa(nombre, datos, a=a):
+                    a["etapas"][nombre] = datos
+                try:
+                    a["resultado"] = {"ruta": a["ruta"], **importar.clasificar(a["ruta"], etapa=etapa)}
+                    a["estado"] = "listo"
+                except Exception as e:
+                    a["estado"], a["error"] = "error", f"{type(e).__name__}: {e}"
+            self._vivo["fase"] = "fin"
+        threading.Thread(target=correr, daemon=True).start()
+        return {"ok": True}
+
+    def estado_clasificacion(self):
+        """Estado de la clasificación en vivo: {fase, actual, archivos: [{nombre, estado, etapas, resultado}]}."""
+        v = self._vivo
+        return {"fase": v.get("fase", "fin"), "actual": v.get("actual", 0), "archivos": [dict(a) for a in v.get("archivos", [])]}
 
     def clasificar_archivos(self, rutas):
         try:
@@ -2985,7 +3016,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.9.0"
+version = "1.10.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3665,7 +3696,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.9.0"
+__version__ = "1.10.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -15177,8 +15208,31 @@ def _forma_materias(materias: list[str]) -> str | None:
     return None
 
 
-def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
-    """Propone galaxia, subtema, tipo y título de un fichero, con el motivo. {'galaxia','subtema','tipo','titulo','motivo','paginas'}"""
+ETAPAS = ("leer", "reglas", "web", "parecido", "llm", "subgenero", "decision")
+
+
+def _barras(puntos: dict, forzar: str | None = None, n: int = 6) -> list[dict]:
+    """Las `n` puntuaciones más altas como barras 0-100 relativas a la mejor ([{id, nombre, valor}]); `forzar` pone ese género el primero (voto decisivo)."""
+    p = {g: v for g, v in puntos.items() if v and v > 0 and g in GENEROS}
+    if forzar:
+        p[forzar] = max(p.values(), default=1) * 1.05
+    m = max(p.values(), default=0)
+    if m <= 0:
+        return []
+    return [{"id": g, "nombre": GENEROS[g], "valor": round(100 * v / m)} for g, v in sorted(p.items(), key=lambda kv: -kv[1])[:n]]
+
+
+def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dict:
+    """Propone galaxia, subtema, tipo y título de un fichero, con el motivo. {'galaxia','subtema','tipo','titulo','motivo','paginas'}
+    `etapa(nombre, datos)`, si se da, se llama al empezar y al acabar cada fase (ETAPAS) con `datos['estado']` = inicio | fin y, al acabar, las barras de género parciales:
+    es lo que enseña la «sala de clasificación» del visor."""
+    def ev(fase, estado, **d):                                             # (el primer parámetro no se llama «nombre»: choca con el dato nombre= del subgénero)
+        if etapa:
+            try:
+                etapa(fase, {"estado": estado, **d})
+            except Exception:
+                pass
+    ev("leer", "inicio")
     f = Path(ruta)
     carpeta = Path(carpeta or carpeta_datos())
     texto, paginas = _muestra(f)
@@ -15223,12 +15277,22 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
         genero, subtema = corr["genero"] or genero, corr["subtema"] or subtema
         motivo += f"; como «{corr['titulo'][:30]}», que corregiste"
     caps, _ = capitulos(f)
+    ev("leer", "fin", paginas=paginas, tipo=tipo, tipo_nombre=TIPOS.get(tipo, tipo), capitulos=len(caps), caracteres=len(texto), extension=ext.lstrip("."))
+    ev("reglas", "inicio")
+    ev("reglas", "fin", barras=_barras(gp), genero=genero if genero != "otro" else "", corregido=bool(corr), motivo=motivo)
     metodo, materias, s = "reglas", [], None
     web = None
+    forma = None
     if not corr and tipo in ("libro", "articulo") and clasificador.WEB and len(f.stem.split()) >= 2:    # materias reales de la obra según Open Library (si hay red)
+        ev("web", "inicio")
         materias = _materias_web(titulo_corto(f.stem))
         web = _genero_materias(materias)
+        forma = _forma_materias(materias)
+        ev("web", "fin", materias=materias[:5], voto=web or "", voto_nombre=GENEROS.get(web, ""), forma=forma or "", barras=_barras(gp, forma))
+    else:
+        ev("web", "fin", omitido="solo se consulta para libros y artículos con título" if not corr and clasificador.WEB else "desactivado" if not clasificador.WEB else "ya corregido por ti")
     if not corr and tipo != "codigo" and clasificador.ACTIVO:                                  # parecido con ejemplos (embeddings locales) mezclado con las reglas; sin modelo, solo reglas
+        ev("parecido", "inicio")
         s = clasificador.sugerir(clasificador.texto_libro(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500])), carpeta)
         if s:
             nuevo, cambia = clasificador.decidir(gp, genero, s, web)
@@ -15236,26 +15300,43 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
                 genero, metodo = nuevo, "parecido"
                 subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
                 motivo += f"; género «{GENEROS[genero]}» por parecido con ejemplos (margen {s['confianza']:.2f})"
-        elif web and genero == "otro":
+            ev("parecido", "fin", barras=_barras(clasificador.puntuar(gp, s, web)), genero=genero if genero != "otro" else "", confianza=round(s["confianza"], 3))
+        else:
+            ev("parecido", "fin", omitido="el modelo de parecido no está instalado")
+            if web and genero == "otro":
+                genero, metodo = web, "web"
+    else:
+        ev("parecido", "fin", omitido="no aplica a código" if tipo == "codigo" else "ya corregido por ti" if corr else "desactivado")
+        if web and genero == "otro" and not corr:
             genero, metodo = web, "web"
-    elif web and genero == "otro" and not corr:
-        genero, metodo = web, "web"
-    forma = _forma_materias(materias) if materias and not corr else None
     if forma and forma != genero:                                         # la forma de la obra manda sobre el tema
         genero, metodo = forma, "web"
         subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
         motivo += f"; Open Library la clasifica como {', '.join(m for m in materias if _norm(m).strip(' .') in _FORMA[forma])}"
-    if not corr and tipo != "codigo" and llm.ACTIVO and not forma and clasificador.dudoso(gp, s, web) and llm.disponible(carpeta):      # caso dudoso: se pregunta al LLM local (Ollama)
-        r = llm.clasificar(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500]), materias, {k: v for k, v in GENEROS.items()}, carpeta)
+    if corr or tipo == "codigo" or not llm.ACTIVO:
+        ev("llm", "fin", omitido="no aplica" if tipo == "codigo" or corr else "desactivado")
+    elif forma or not clasificador.dudoso(gp, s, web):
+        ev("llm", "fin", omitido="no hacía falta: el resultado era claro")
+    else:                                                                  # caso dudoso: se pregunta al LLM local (Ollama)
+        ev("llm", "inicio")
+        r = llm.clasificar(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500]), materias, {k: v for k, v in GENEROS.items()}, carpeta) if llm.disponible(carpeta) else None
         if r:
             genero, metodo = r["genero"], "llm"
             subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
             motivo += f"; el LLM propone «{GENEROS[genero]}»: {r['motivo']}"
+            ev("llm", "fin", genero=genero, genero_nombre=GENEROS[genero], razon=r["motivo"], barras=_barras(clasificador.puntuar(gp, s, web) if s else gp, genero))
+        else:
+            ev("llm", "fin", omitido="Ollama no está disponible")
     if materias and metodo not in ("reglas", "llm"):
         motivo += f"; materias web: {', '.join(materias[:4])}"
+    ev("subgenero", "inicio")
     sg = clasificador.subgenero(clasificador.texto_libro(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500])), genero, carpeta)
     if sg:
         motivo += f"; subgénero «{sg['nombre']}»"
+        ev("subgenero", "fin", id=sg["id"], nombre=sg["nombre"], barras=[{"id": k, "nombre": taxonomia.nombre_sub(genero, k, carpeta), "valor": round(100 * v / max(max(sg["puntos"].values()), 1e-9))} for k, v in sg["puntos"].items()])
+    else:
+        ev("subgenero", "fin", omitido="este género no tiene subgéneros" if not taxonomia.subgeneros(genero, carpeta) else "no hay pistas suficientes")
+    ev("decision", "fin", genero=genero, genero_nombre=GENEROS.get(genero, genero), galaxia=galaxia, tipo=tipo, subgenero_nombre=sg["nombre"] if sg else "", metodo=metodo, motivo=motivo)
     palabras = re.findall(r"[a-z]+", t[:20000])
     es, en = sum(w in _ES for w in palabras), sum(w in _EN for w in palabras)
     h = _sha1(f)
@@ -33769,7 +33850,7 @@ def test_opciones_para_los_desplegables():
 def test_el_visor_tiene_la_pestana_del_agujero_negro():
     import construir_visor as cv
     html = cv.ensamblar(cv.construir())
-    for pieza in ("window.crearAgujero", 'id="pestImportar"', 'id="impPanel"', "elegir_archivos", "clasificar_archivos", "importar_archivos", "modo-importar"):
+    for pieza in ("window.crearAgujero", 'id="pestImportar"', 'id="impPanel"', "elegir_archivos", "clasificar_en_vivo", "estado_clasificacion", "importar_archivos", "modo-importar"):
         assert pieza in html
     assert "/*__AGUJERO_JS__*/" not in html and 'id="pestUniverso"' in html
 
@@ -35781,6 +35862,71 @@ def test_recargar_modulos_en_orden_no_rompe_el_clasificador(tmp_path):
     from conocimiento import importar
     f = tmp_path / "apuntes.md"; f.write_text("# Notas\n\nregresion lineal y contrastes de hipotesis " * 20, encoding="utf-8")
     assert importar.clasificar(f, tmp_path)["galaxia"] in ("notas", "finanzas")
+:::END
+:::BEGIN py/tests/test_vivo.py|text
+"""Clasificación en vivo: clasificar() emite sus etapas con barras parciales y la app las publica mientras trabaja en segundo plano."""
+import importlib.machinery
+import importlib.util
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conocimiento import clasificador as c
+from conocimiento import importar as im
+
+ROMA = "# Roma\n\n" + "Roma antigua: Julio César, la república romana, las legiones, Augusto y el imperio. " * 8
+
+
+def test_clasificar_emite_todas_las_etapas_en_orden(tmp_path):
+    f = tmp_path / "apuntes_roma.md"; f.write_text(ROMA, encoding="utf-8")
+    eventos = []
+    r = im.clasificar(f, tmp_path, etapa=lambda n, d: eventos.append((n, d)))
+    nombres = [n for n, d in eventos]
+    assert nombres[0] == "leer" and nombres[-1] == "decision"
+    assert [n for n in dict.fromkeys(nombres)] == list(im.ETAPAS)                          # salen todas, siempre en el mismo orden
+    fin = {n: d for n, d in eventos if d["estado"] == "fin"}
+    assert set(fin) == set(im.ETAPAS)
+    b = fin["reglas"]["barras"]
+    assert b and b[0]["id"] == "historia" and b[0]["valor"] == 100 and all(0 < x["valor"] <= 100 for x in b)      # barras relativas a la mejor
+    assert fin["web"]["omitido"] and fin["llm"]["omitido"]                                  # en los tests no hay red ni LLM: se dice por qué
+    assert fin["subgenero"]["id"] == r["subgenero"] == "antigua" and fin["subgenero"]["barras"][0]["valor"] == 100
+    d = fin["decision"]
+    assert d["genero"] == r["genero"] and d["galaxia"] == r["galaxia"] and d["metodo"] == r["metodo"] and d["motivo"] == r["motivo"]
+    assert im.clasificar(f, tmp_path)["genero"] == r["genero"]                              # sin callback devuelve lo mismo
+
+
+def test_una_funcion_de_eventos_que_falla_no_rompe_la_clasificacion(tmp_path):
+    f = tmp_path / "apuntes_roma.md"; f.write_text(ROMA, encoding="utf-8")
+    def mala(n, d):
+        raise RuntimeError("fallo en la interfaz")
+    assert im.clasificar(f, tmp_path, etapa=mala)["genero"] == "historia"
+
+
+def test_barras_normalizadas_y_voto_decisivo():
+    b = im._barras({"historia": 10, "economia": 5, "arte": 0, "xxx": 3})
+    assert [x["id"] for x in b] == ["historia", "economia"] and b[0]["valor"] == 100 and b[1]["valor"] == 50      # sin ceros ni géneros que no existen
+    assert im._barras({"historia": 10, "economia": 5}, forzar="economia")[0]["id"] == "economia"
+    assert im._barras({}) == []
+
+
+def test_la_app_clasifica_en_segundo_plano_y_publica_el_estado(tmp_path, monkeypatch):
+    monkeypatch.setenv("ARBOL_CONOCIMIENTO", str(tmp_path / "k"))
+    (tmp_path / "a.md").write_text(ROMA, encoding="utf-8")
+    (tmp_path / "b.py").write_text("def f():\n    return 1\n", encoding="utf-8")
+    ruta = Path(__file__).resolve().parents[1] / "arbol_app.pyw"
+    spec = importlib.util.spec_from_loader("arbol_app_test", importlib.machinery.SourceFileLoader("arbol_app_test", str(ruta)))
+    app = importlib.util.module_from_spec(spec); spec.loader.exec_module(app)
+    api = app.Api()
+    assert api.estado_clasificacion()["fase"] == "fin"                                     # antes de empezar no hay nada en curso
+    assert api.clasificar_en_vivo([tmp_path / "a.md", tmp_path / "b.py"]) == {"ok": True}
+    t0 = time.time()
+    while api.estado_clasificacion()["fase"] != "fin" and time.time() - t0 < 60:
+        time.sleep(.1)
+    st = api.estado_clasificacion()
+    assert [a["estado"] for a in st["archivos"]] == ["listo", "listo"] and st["fase"] == "fin"
+    assert st["archivos"][0]["resultado"]["genero"] == "historia" and st["archivos"][1]["resultado"]["galaxia"] == "codigo"
+    assert "decision" in st["archivos"][0]["etapas"] and st["archivos"][0]["etapas"]["decision"]["estado"] == "fin"
 :::END
 :::BEGIN py/visor/agujero.js|text
 /* agujero.js — el agujero negro de la pestaña «Importar»: disco de acreción en órbita, anillo de luz y halo curvado por la gravedad (como en Interstellar).
@@ -38256,6 +38402,22 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 .importar[hidden]{display:none}
 .app.modo-importar .cuerpo{display:none}
 .imp-cabeza{text-align:center;max-width:720px} .imp-cabeza h2{margin:6px 0 2px;font-size:18px} .imp-cabeza p{margin:0;color:#9fb0cc;font-size:13px}
+.sala{width:100%;max-width:980px;margin:6px 0 4px;display:flex;flex-direction:column;gap:8px}
+.sala-ficha{border:1px solid #1c2646;border-radius:12px;background:linear-gradient(180deg,#0b1224,#080d1b);padding:10px 14px}
+.sala-ficha.activa{border-color:#4a6bd8;box-shadow:0 0 0 1px #4a6bd855,0 0 24px #4a6bd822}
+.sala-cab{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap} .sala-cab b{font-size:14px;color:#e6ecfa} .sala-cab span{color:#8ea0c0;font-size:12.5px}
+.sala-etapas{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0}
+.sala-et{font-size:11.5px;padding:3px 9px;border-radius:999px;border:1px solid #26335c;color:#7f90b5;background:#0a1020;transition:all .3s}
+.sala-et.run{color:#fff;border-color:#6d8cff;background:#243a8a;animation:sala-pulso 1s ease-in-out infinite}
+.sala-et.ok{color:#9be8ad;border-color:#2f7a45;background:#0e2417} .sala-et.omit{color:#6f7d9c;border-style:dashed}
+@keyframes sala-pulso{0%,100%{box-shadow:0 0 0 0 #6d8cff66}50%{box-shadow:0 0 0 5px #6d8cff00}}
+.sala-barras{display:grid;grid-template-columns:150px 1fr 36px;gap:3px 10px;align-items:center;font-size:12.5px;margin-top:2px}
+.sala-barras .n{color:#b9c6e4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .sala-barras .n.lider{color:#fff;font-weight:600}
+.sala-barras .p{height:9px;border-radius:5px;background:#101a33;overflow:hidden} .sala-barras .p i{display:block;height:100%;width:0;border-radius:5px;background:#42527f;transition:width .6s cubic-bezier(.2,.8,.2,1),background .4s}
+.sala-barras .p i.lider{background:linear-gradient(90deg,#4f7bff,#8fb0ff)} .sala-barras em{font-style:normal;color:#8ea0c0;text-align:right}
+.sala-nota{color:#9fb0d0;font-size:12.5px;margin-top:6px;min-height:1.3em}
+.sala-final{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px} .sala-final span{padding:3px 10px;border-radius:999px;background:#12204a;color:#dfe8ff;font-size:12.5px;border:1px solid #2a3c7a}
+.sala-mini{display:flex;gap:10px;align-items:center;font-size:12.5px;color:#9fb0d0;padding:4px 14px} .sala-mini b{color:#dfe8ff}
 .imp-auto{display:flex;gap:8px;align-items:center;color:#cfe0ff;font-size:13px;margin:4px 0}
 .imp-agujero{width:100%;max-width:980px;height:min(46vh,430px);min-height:240px;flex:none}
 #agujero{width:100%;height:100%;display:block;outline:none;border-radius:12px} #agujero:focus-visible{outline:2px solid var(--accent)}
@@ -38342,6 +38504,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
     <label class="imp-auto" title="Los archivos que sueltes se clasifican y se importan sin pasar por las tarjetas; luego los revisas por fecha en el Observatorio"><input type="checkbox" id="impAuto"> Importar sin revisar (clasifica solo)</label>
     <div class="imp-agujero"><canvas id="agujero" tabindex="0" role="button" aria-label="Agujero negro: haz clic para añadir archivos"></canvas></div>
     <p class="imp-msg" id="impMsg" aria-live="polite"></p>
+    <div class="sala" id="impSala" hidden aria-live="polite"></div>
     <div class="imp-panel" id="impPanel" hidden></div>
     <details class="imp-ayuda"><summary>¿Cómo funciona la importación?</summary><div>
       <ol>
@@ -39187,20 +39350,71 @@ async function impElegir() {
   if (rs && rs.error) { impAviso(rs.error); return; }
   if (rs && rs.length) await impAnadir(rs);
 }
+var SALA_ETAPAS = [['leer', 'Leer'], ['reglas', 'Reglas'], ['web', 'Web'], ['parecido', 'Parecido'], ['llm', 'LLM'], ['subgenero', 'Subgénero'], ['decision', 'Decisión']];
+var sala = {estado: null};
+function salaBarras(b, lider) {
+  return '<div class="sala-barras">' + (b || []).map(function (x, k) {
+    var es = x.id === lider || (!lider && k === 0);
+    return '<span class="n' + (es ? ' lider' : '') + '">' + esc(x.nombre) + '</span><span class="p"><i class="' + (es ? 'lider' : '') + '" style="width:' + x.valor + '%"></i></span><em>' + x.valor + '</em>';
+  }).join('') + '</div>';
+}
+function salaFicha(a, activa) {
+  var e = a.etapas || {}, barras = null, lider = '', nota = '', titulo = a.nombre;
+  SALA_ETAPAS.forEach(function (p) { var d = e[p[0]]; if (d && d.estado === 'fin') { if (d.barras && d.barras.length && p[0] !== 'subgenero') { barras = d.barras; lider = d.forma || d.genero || ''; } } });
+  var sub = e.subgenero && e.subgenero.estado === 'fin' && e.subgenero.barras ? e.subgenero : null;
+  var pills = SALA_ETAPAS.map(function (p) {
+    var d = e[p[0]], cl = !d ? '' : d.estado === 'inicio' ? 'run' : d.omitido ? 'omit' : 'ok', ic = !d ? '○' : d.estado === 'inicio' ? '⏳' : d.omitido ? '—' : '✓';
+    return '<span class="sala-et ' + cl + '" title="' + esc(d && d.omitido ? 'Omitido: ' + d.omitido : p[1]) + '">' + ic + ' ' + p[1] + '</span>';
+  }).join('');
+  if (e.leer && e.leer.estado === 'fin') nota = e.leer.tipo_nombre + ' · ' + (e.leer.paginas ? e.leer.paginas + ' págs. · ' : '') + e.leer.capitulos + ' capítulos';
+  if (e.web && e.web.materias && e.web.materias.length) nota += ' · Open Library: ' + e.web.materias.slice(0, 3).join(', ');
+  if (e.llm && e.llm.razon) nota += ' · LLM: «' + e.llm.razon + '»';
+  var h = '<div class="sala-ficha' + (activa ? ' activa' : '') + '"><div class="sala-cab"><b>' + esc(recorta(titulo, 70)) + '</b>' + (a.estado === 'error' ? '<span style="color:#ff8a73">✗ ' + esc(a.error) + '</span>' : '') + '</div>' +
+    '<div class="sala-etapas">' + pills + '</div>' + (barras ? salaBarras(barras, lider) : '') + (sub ? '<div style="margin-top:8px;color:#8ea0c0;font-size:12px">Subgénero</div>' + salaBarras(sub.barras, sub.id) : '') +
+    '<div class="sala-nota">' + esc(nota) + '</div>';
+  var d = e.decision;
+  if (d && d.estado === 'fin') {
+    var col = GAL[d.galaxia] ? 'rgb(' + GAL[d.galaxia].color.join(',') + ')' : '#9fb0cc';
+    h += '<div class="sala-final"><span style="border-color:' + col + ';color:' + col + '">' + esc(impNom(imp.opciones ? imp.opciones.galaxias : GALAXIAS, d.galaxia)) + '</span><span>' + esc(d.genero_nombre) + '</span>' +
+      (d.subgenero_nombre ? '<span>' + esc(d.subgenero_nombre) + '</span>' : '') + '<span>' + esc(d.tipo) + '</span><span title="' + esc(d.motivo) + '">por ' + esc(d.metodo) + '</span></div>';
+  }
+  return h + '</div>';
+}
+function salaRender(v) {
+  var el = $('#impSala'); if (!v || !v.archivos.length) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  var h = '';
+  v.archivos.forEach(function (a, k) {
+    if (a.estado === 'listo' && k !== v.actual && v.fase !== 'fin') {          /* los ya clasificados se resumen en una línea */
+      var d = (a.etapas || {}).decision || {};
+      h += '<div class="sala-mini"><span>✓</span><b>' + esc(recorta(a.nombre, 50)) + '</b><span>→ ' + esc(d.genero_nombre || '') + (d.subgenero_nombre ? ' › ' + esc(d.subgenero_nombre) : '') + '</span></div>';
+    } else if (a.estado === 'trabajando' || (a.estado === 'listo' && k === v.actual) || a.estado === 'error') h += salaFicha(a, a.estado === 'trabajando');
+    else if (a.estado === 'espera') h += '<div class="sala-mini"><span>○</span><span>' + esc(recorta(a.nombre, 60)) + ' · en cola</span></div>';
+  });
+  el.innerHTML = h;
+}
 async function impAnadir(rutas) {
   rutas = rutas.filter(function (r) { return !imp.archivos.some(function (a) { return a.ruta === r; }); });
   if (!rutas.length) return;
   agujero.ocupado(true); imp.resultados = null;
-  for (var i = 0; i < rutas.length; i++) {                    /* de uno en uno: así se ve el avance y un PDF enorme no bloquea a los demás */
-    impAviso('Analizando ' + (i + 1) + ' de ' + rutas.length + ': ' + recorta(rutas[i].split(/[\\/]/).pop(), 50) + '…');
-    var cl = await impApi().clasificar_archivos([rutas[i]]);
-    if (cl.error) { impAviso(cl.error); continue; }
-    var c = cl[0];
-    imp.archivos.push({ruta: c.ruta, nombre: c.ruta.split(/[\\/]/).pop(), auto: c, titulo: c.titulo, galaxia: 'auto', genero: 'auto', subtema: '', tipo: 'auto', etiquetas: '',
-      subgenero: 'auto', incluir: !c.duplicado, abierto: imp.archivos.length === 0, estado: '', res: null});
-    impRender();
-  }
+  var api = impApi(), ini = await api.clasificar_en_vivo(rutas);
+  if (ini && ini.error) { impAviso(ini.error); agujero.ocupado(false); return; }
+  var hechos = 0, st;
+  do {                                                          /* cada 0,3 s: se pinta cómo va la clasificación y, según acaba cada archivo, aparece su tarjeta */
+    await espera(300); st = await api.estado_clasificacion(); sala.estado = st;
+    salaRender(st);
+    impAviso('Clasificando ' + Math.min(st.actual + 1, st.archivos.length) + ' de ' + st.archivos.length + ': ' + recorta((st.archivos[st.actual] || {}).nombre || '', 50) + '…');
+    while (hechos < st.archivos.length && ['listo', 'error'].indexOf(st.archivos[hechos].estado) >= 0) {
+      var a0 = st.archivos[hechos++];
+      if (a0.estado === 'error' || !a0.resultado) { impAviso(a0.error || 'No se pudo clasificar ' + a0.nombre); continue; }
+      var c = a0.resultado;
+      imp.archivos.push({ruta: c.ruta, nombre: c.ruta.split(/[\\/]/).pop(), auto: c, titulo: c.titulo, galaxia: 'auto', genero: 'auto', subtema: '', tipo: 'auto', etiquetas: '',
+        subgenero: 'auto', incluir: !c.duplicado, abierto: imp.archivos.length === 0, estado: '', res: null});
+    }
+  } while (st.fase !== 'fin' || hechos < st.archivos.length);
   agujero.ocupado(false); impAviso('');
+  if (imp.archivos.length && !$('#impAuto').checked) setTimeout(function () { if (!imp.ocupado) { sala.estado = null; salaRender(null); } }, 4000);        /* la sala se queda a la vista unos segundos y deja paso a las tarjetas */
+  impRender();
   if ($('#impAuto').checked && imp.archivos.some(function (a) { return a.incluir; })) impImportar();
 }
 function impOpt(lista, val, autoTxt) {
@@ -40682,6 +40896,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 5m. **Referencias que viajan:** los PDF/EPUB no suben a GitHub, pero `conocimiento/biblioteca/referencias.json` (los metadatos sin rutas del equipo: título, galaxia, género, capítulos, hash) y `biblioteca/portadas/` sí (`.gitignore`; `importar._guardar` los escribe junto a `metadatos.json`, que sigue siendo local). `leer_metadatos` fusiona ambos, así que en otro equipo el mapa y el Observatorio muestran los libros como referencias vacías («sin el archivo en este equipo»); al importar un archivo con el mismo hash se restaura en su sitio.
 5k. **Telescopio:** pestaña «📡 Telescopio» (`py/conocimiento/telescopio.py`, API `Api.telescopio_buscar/traer`, consola `python -m conocimiento telescopio <consulta> [--traer N]`). Busca **solo fuentes legales**: Project Gutenberg (catálogo OPDS oficial, dominio público; Gutendex se descartó por lento), Google Books y Open Library (catálogo: ficha y enlace; descarga solo si es dominio público o lectura abierta; Google necesita clave en `GOOGLE_BOOKS_KEY` o `conocimiento/google_books.key` porque la cuota anónima diaria suele estar agotada), arXiv, OpenAlex (solo con PDF abierto) e Internet Archive (solo licencia CC/dominio público o publicado ≤ 1929). **No se añaden fuentes piratas (Anna's Archive, Z-Library, LibGen…) ni descargadores de ellas.** `traer` descarga (https, ≤ 200 MB, comprueba que es PDF/EPUB de verdad) y pasa por `importar.importar` con el género sacado de las materias de la obra (`genero_desde_materias`); `materias_de` consulta Open Library para clasificar un título que ya tienes. Tests sin red (`_get` se sustituye): `tests/test_telescopio.py`.
 5p. **Importar cualquier archivo:** además de libros, el importador acepta código (`CODIGO_EXT`: .py .ipynb .r .sas .sql .js …), datos (`DATOS_EXT`: .csv .xlsx .json .yaml …) y apuntes (`APUNTES_EXT`: .pptx .tex .html .rst) — todo en `EXT_IMPORTABLE` (`conocimiento/__init__.py`). El código va a la galaxia Código (tipo `codigo`, género tecnología); los datos al tipo `datos` (solo se indexa la cabecera); los cuadernos se indexan por celdas y su «índice» son los títulos markdown. Las carpetas de `fuentes.json` siguen leyendo solo `EXT` (documentos), para no indexar todo un disco. Otros formatos (imágenes, .zip, .exe) se rechazan con un mensaje claro. Se filtran en el buscador con prefijos como `py:`, `ipynb:`, `csv:`, `sql:`, `pptx:` (`conocimiento.buscar(formato=)`). Test: `tests/test_importar_formatos.py`.
+5u. **Clasificación en vivo (sala de clasificación):** `importar.clasificar(ruta, carpeta, etapa=callback)` llama a `etapa(fase, datos)` al empezar y al acabar cada fase de `ETAPAS` (leer, reglas, web, parecido, llm, subgenero, decision); `datos['estado']` es `inicio`|`fin`, y al acabar trae `barras` (`_barras`: las 6 mejores puntuaciones de género como 0-100 relativas a la mejor) o `omitido` con el motivo. Un callback que falla se ignora (la clasificación no se rompe). La app lo ejecuta en segundo plano (`Api.clasificar_en_vivo(rutas)` + `Api.estado_clasificacion()`, que el visor consulta cada 0,3 s) y la pestaña Importar lo pinta en `#impSala` (`salaFicha`/`salaRender` en plantilla.html): una ficha por archivo con las 7 etapas encendiéndose (○ pendiente · ⏳ en curso · ✓ hecha · — omitida), barras de género que se mueven etapa a etapa (transición CSS), barras de subgénero y la decisión final con el color de su galaxia. Al añadir una fase nueva a `clasificar`, añadirla a `ETAPAS` y a `SALA_ETAPAS`. Tests: `tests/test_vivo.py`.
 5t. **Taxonomía género › subgénero:** `py/conocimiento/taxonomia.py` (123 subgéneros en 20 géneros; los 11 de siempre + derecho, cocina, salud, viajes, idiomas, educación, religión, deporte y hogar; cada subgénero lleva una frase en español y otra en inglés). **Ampliable sin tocar código** con `conocimiento/taxonomia.json`: `{"generos": {"id": "Nombre"}, "sub": {"genero": [{"id": "x", "nombre": "…", "frases": ["es", "en"]}]}}` (mismo id = sustituye; recarga con el botón ⟳ Actualizar). `clasificador.subgenero(texto, genero)` elige el subgénero entre los de su género (embeddings con las frases y con lo que ya tienes en esa categoría; sin modelo, por palabras en común); los géneros nuevos no tienen reglas de palabras clave, solo parecido y LLM (sus semillas salen de las frases de sus subgéneros: `semillas_todas`). Se guarda en `metadatos.json` como `subgenero` (más `propuesta.subgenero`), los libros van a `biblioteca/libros/<Género>/<Subgénero>/`, hay selector en las tarjetas de importación y en el Observatorio (cambiar de género limpia el subgénero) y cada género es prefijo de búsqueda (`cocina:`, `derecho:`…). **Medido** (`python herramientas/comparar_clasificadores.py`, 84 libros, 20 géneros, MiniLM): género 89 % (reglas 83 %, parecido 88 %); subgénero 87 % dado el género correcto y 74 % de principio a fin. Al ampliar la taxonomía o cambiar las frases, volver a medir. Tests: `tests/test_taxonomia.py`.
 5s. **Instalador con IA local (compartir por GitHub):** el instalador/actualizador (`herramientas/plantillas/motor.ps1`, función `Preparar-IA`) comprueba y muestra con ✓/✗ qué hay: fastembed, modelo MiniLM (~240 MB, `python -m conocimiento modelos`), Ollama (~1,6 GB) y el modelo `qwen2.5:3b` (~1,9 GB); descarga solo lo que falta, con barra de progreso, velocidad y reanudación (`curl -C -`), verifica la firma digital «Ollama Inc.» antes de ejecutar `OllamaSetup.exe` y pregunta antes de bajar nada (`ARBOL_SIN_IA=1` o `ARBOL_SIN_RED=1` lo omiten). Nada de esto va en el repositorio (3,5 GB): se baja de las fuentes oficiales al instalar. Si ya tienes la misma versión, el actualizador solo comprueba componentes; si la app está abierta, la cierra antes de mover `py`. Trampas PowerShell ya vividas: `"$Version:"` en comillas dobles es una variable con ámbito (usar `${Version}:`); un parámetro `$ok` tapa a `$Ok` (no distingue mayúsculas); `ollama serve` oculto solo arranca con la salida redirigida; la primera llamada de PowerShell a `Invoke-RestMethod` tarda 2-3 s (timeouts ≥ 8 s). `tests/test_instaladores.py` valida la sintaxis de motor.ps1 con el analizador de PowerShell. Para repetir la comprobación: ejecutar de nuevo el `Actualizar.bat` (opción «comprobar componentes»).
 5r. **LLM local (Ollama) para los casos dudosos:** `py/conocimiento/llm.py`. Ollama 0.40 instalado en `%LOCALAPPDATA%\Programs\Ollama` con el modelo `qwen2.5:3b` (1,9 GB; CPU, ~6 s por consulta). Solo se le pregunta el género cuando `clasificador.dudoso` (el mejor género saca menos de `MARGEN_DUDA` al segundo, nada se parece, o reglas flojas sin parecido); responde JSON con enum cerrado de GENEROS y su respuesta cuenta como `metodo = llm`. Todo en localhost (`_http` rechaza otras URLs). Si Ollama no está o no tiene el modelo, se ignora sin error y se vuelve a mirar cada minuto. Ajustes: `ARBOL_LLM` (modelo, o `no`) o `conocimiento/ajustes.json` {"llm": {"modelo": "qwen2.5:7b"}}. **Medido** (`python herramientas/comparar_clasificadores.py --llm qwen2.5:3b`, 66 libros): reglas + parecido 86 %; LLM solo 82 % (con el prompt de descripciones + 4 ejemplos resueltos; con el prompt simple era 50 %: los modelos pequeños necesitan ejemplos); híbrido 88 %. En un PC potente probar `qwen2.5:7b`. Tests: `tests/test_llm.py` (Ollama falso; la suite lo apaga con `llm.ACTIVO = False`).

@@ -383,8 +383,31 @@ def _forma_materias(materias: list[str]) -> str | None:
     return None
 
 
-def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
-    """Propone galaxia, subtema, tipo y título de un fichero, con el motivo. {'galaxia','subtema','tipo','titulo','motivo','paginas'}"""
+ETAPAS = ("leer", "reglas", "web", "parecido", "llm", "subgenero", "decision")
+
+
+def _barras(puntos: dict, forzar: str | None = None, n: int = 6) -> list[dict]:
+    """Las `n` puntuaciones más altas como barras 0-100 relativas a la mejor ([{id, nombre, valor}]); `forzar` pone ese género el primero (voto decisivo)."""
+    p = {g: v for g, v in puntos.items() if v and v > 0 and g in GENEROS}
+    if forzar:
+        p[forzar] = max(p.values(), default=1) * 1.05
+    m = max(p.values(), default=0)
+    if m <= 0:
+        return []
+    return [{"id": g, "nombre": GENEROS[g], "valor": round(100 * v / m)} for g, v in sorted(p.items(), key=lambda kv: -kv[1])[:n]]
+
+
+def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dict:
+    """Propone galaxia, subtema, tipo y título de un fichero, con el motivo. {'galaxia','subtema','tipo','titulo','motivo','paginas'}
+    `etapa(nombre, datos)`, si se da, se llama al empezar y al acabar cada fase (ETAPAS) con `datos['estado']` = inicio | fin y, al acabar, las barras de género parciales:
+    es lo que enseña la «sala de clasificación» del visor."""
+    def ev(fase, estado, **d):                                             # (el primer parámetro no se llama «nombre»: choca con el dato nombre= del subgénero)
+        if etapa:
+            try:
+                etapa(fase, {"estado": estado, **d})
+            except Exception:
+                pass
+    ev("leer", "inicio")
     f = Path(ruta)
     carpeta = Path(carpeta or carpeta_datos())
     texto, paginas = _muestra(f)
@@ -429,12 +452,22 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
         genero, subtema = corr["genero"] or genero, corr["subtema"] or subtema
         motivo += f"; como «{corr['titulo'][:30]}», que corregiste"
     caps, _ = capitulos(f)
+    ev("leer", "fin", paginas=paginas, tipo=tipo, tipo_nombre=TIPOS.get(tipo, tipo), capitulos=len(caps), caracteres=len(texto), extension=ext.lstrip("."))
+    ev("reglas", "inicio")
+    ev("reglas", "fin", barras=_barras(gp), genero=genero if genero != "otro" else "", corregido=bool(corr), motivo=motivo)
     metodo, materias, s = "reglas", [], None
     web = None
+    forma = None
     if not corr and tipo in ("libro", "articulo") and clasificador.WEB and len(f.stem.split()) >= 2:    # materias reales de la obra según Open Library (si hay red)
+        ev("web", "inicio")
         materias = _materias_web(titulo_corto(f.stem))
         web = _genero_materias(materias)
+        forma = _forma_materias(materias)
+        ev("web", "fin", materias=materias[:5], voto=web or "", voto_nombre=GENEROS.get(web, ""), forma=forma or "", barras=_barras(gp, forma))
+    else:
+        ev("web", "fin", omitido="solo se consulta para libros y artículos con título" if not corr and clasificador.WEB else "desactivado" if not clasificador.WEB else "ya corregido por ti")
     if not corr and tipo != "codigo" and clasificador.ACTIVO:                                  # parecido con ejemplos (embeddings locales) mezclado con las reglas; sin modelo, solo reglas
+        ev("parecido", "inicio")
         s = clasificador.sugerir(clasificador.texto_libro(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500])), carpeta)
         if s:
             nuevo, cambia = clasificador.decidir(gp, genero, s, web)
@@ -442,26 +475,43 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None) -> dict:
                 genero, metodo = nuevo, "parecido"
                 subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
                 motivo += f"; género «{GENEROS[genero]}» por parecido con ejemplos (margen {s['confianza']:.2f})"
-        elif web and genero == "otro":
+            ev("parecido", "fin", barras=_barras(clasificador.puntuar(gp, s, web)), genero=genero if genero != "otro" else "", confianza=round(s["confianza"], 3))
+        else:
+            ev("parecido", "fin", omitido="el modelo de parecido no está instalado")
+            if web and genero == "otro":
+                genero, metodo = web, "web"
+    else:
+        ev("parecido", "fin", omitido="no aplica a código" if tipo == "codigo" else "ya corregido por ti" if corr else "desactivado")
+        if web and genero == "otro" and not corr:
             genero, metodo = web, "web"
-    elif web and genero == "otro" and not corr:
-        genero, metodo = web, "web"
-    forma = _forma_materias(materias) if materias and not corr else None
     if forma and forma != genero:                                         # la forma de la obra manda sobre el tema
         genero, metodo = forma, "web"
         subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
         motivo += f"; Open Library la clasifica como {', '.join(m for m in materias if _norm(m).strip(' .') in _FORMA[forma])}"
-    if not corr and tipo != "codigo" and llm.ACTIVO and not forma and clasificador.dudoso(gp, s, web) and llm.disponible(carpeta):      # caso dudoso: se pregunta al LLM local (Ollama)
-        r = llm.clasificar(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500]), materias, {k: v for k, v in GENEROS.items()}, carpeta)
+    if corr or tipo == "codigo" or not llm.ACTIVO:
+        ev("llm", "fin", omitido="no aplica" if tipo == "codigo" or corr else "desactivado")
+    elif forma or not clasificador.dudoso(gp, s, web):
+        ev("llm", "fin", omitido="no hacía falta: el resultado era claro")
+    else:                                                                  # caso dudoso: se pregunta al LLM local (Ollama)
+        ev("llm", "inicio")
+        r = llm.clasificar(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500]), materias, {k: v for k, v in GENEROS.items()}, carpeta) if llm.disponible(carpeta) else None
         if r:
             genero, metodo = r["genero"], "llm"
             subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
             motivo += f"; el LLM propone «{GENEROS[genero]}»: {r['motivo']}"
+            ev("llm", "fin", genero=genero, genero_nombre=GENEROS[genero], razon=r["motivo"], barras=_barras(clasificador.puntuar(gp, s, web) if s else gp, genero))
+        else:
+            ev("llm", "fin", omitido="Ollama no está disponible")
     if materias and metodo not in ("reglas", "llm"):
         motivo += f"; materias web: {', '.join(materias[:4])}"
+    ev("subgenero", "inicio")
     sg = clasificador.subgenero(clasificador.texto_libro(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500])), genero, carpeta)
     if sg:
         motivo += f"; subgénero «{sg['nombre']}»"
+        ev("subgenero", "fin", id=sg["id"], nombre=sg["nombre"], barras=[{"id": k, "nombre": taxonomia.nombre_sub(genero, k, carpeta), "valor": round(100 * v / max(max(sg["puntos"].values()), 1e-9))} for k, v in sg["puntos"].items()])
+    else:
+        ev("subgenero", "fin", omitido="este género no tiene subgéneros" if not taxonomia.subgeneros(genero, carpeta) else "no hay pistas suficientes")
+    ev("decision", "fin", genero=genero, genero_nombre=GENEROS.get(genero, genero), galaxia=galaxia, tipo=tipo, subgenero_nombre=sg["nombre"] if sg else "", metodo=metodo, motivo=motivo)
     palabras = re.findall(r"[a-z]+", t[:20000])
     es, en = sum(w in _ES for w in palabras), sum(w in _EN for w in palabras)
     h = _sha1(f)

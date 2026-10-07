@@ -58,7 +58,7 @@ def test_opciones_para_los_desplegables():
 def test_el_visor_tiene_la_pestana_del_agujero_negro():
     import construir_visor as cv
     html = cv.ensamblar(cv.construir())
-    for pieza in ("window.crearAgujero", 'id="pestImportar"', 'id="impPanel"', "elegir_archivos", "clasificar_archivos", "importar_archivos", "modo-importar"):
+    for pieza in ("window.crearAgujero", 'id="pestImportar"', 'id="impPanel"', "elegir_archivos", "clasificar_en_vivo", "estado_clasificacion", "importar_archivos", "modo-importar"):
         assert pieza in html
     assert "/*__AGUJERO_JS__*/" not in html and 'id="pestUniverso"' in html
 
