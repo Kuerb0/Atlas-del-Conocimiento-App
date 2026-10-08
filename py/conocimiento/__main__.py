@@ -26,6 +26,7 @@ r = sub.add_parser("revisar", help="lista lo importado por fecha con cómo se cl
 r.add_argument("--desde", default="", help="AAAA-MM-DD")
 r.add_argument("--hasta", default="", help="AAAA-MM-DD")
 r.add_argument("--json", action="store_true", help="salida en JSON (para que Claude la revise)")
+r.add_argument("--dudosos", action="store_true", help="solo lo que el clasificador no vio claro y aún no has mirado (cola de revisión), con el motivo")
 sub.add_parser("modelos", help="descarga el modelo de embeddings (lo usa el instalador)")
 b = sub.add_parser("buscar", help="busca en todas las colecciones")
 b.add_argument("consulta", nargs="+")
@@ -54,7 +55,11 @@ elif a.orden == "modelos":
         print(f"ERROR: {type(e).__name__}: {e}")
         sys.exit(1)
 elif a.orden == "revisar":
-    from .importar import revisar
+    from .importar import por_revisar, revisar
+    if a.dudosos:
+        for x in por_revisar():
+            print(f"⚠ {x['titulo'][:48]:48} → {x['genero']}/{x['subgenero'] or '-'}   {' · '.join(x['motivos'])}")
+        sys.exit(0)
     filas = revisar(a.desde, a.hasta)
     if a.json:
         import json

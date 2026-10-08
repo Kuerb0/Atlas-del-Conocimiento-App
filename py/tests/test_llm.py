@@ -73,11 +73,27 @@ def test_dudoso():
     assert c.dudoso({"historia": 3}, None) and not c.dudoso({"historia": 30}, None)
 
 
-def test_clasificar_pregunta_al_llm_solo_si_es_dudoso(ollama_falso, monkeypatch, tmp_path):
+def test_clasificar_pregunta_al_llm_siempre_o_solo_si_es_dudoso(ollama_falso, monkeypatch, tmp_path):
     f = tmp_path / "Zorrotz Quimbaya.epub"
     with zipfile.ZipFile(f, "w") as z:
         z.writestr("mimetype", "application/epub+zip"); z.writestr("c.xhtml", "<p>" + "texto generico sin pistas " * 300 + "</p>")
     r = im.clasificar(f, tmp_path)                                                           # reglas flojas, sin parecido: dudoso -> LLM
     assert r["genero"] == "novela" and r["metodo"] == "llm" and "LLM" in r["motivo"]
     monkeypatch.setattr(c, "dudoso", lambda *a, **k: False)
-    assert im.clasificar(f, tmp_path)["metodo"] == "reglas"                                  # si no es dudoso no se pregunta
+    assert im.clasificar(f, tmp_path)["metodo"] == "llm"                                     # por defecto («siempre») se pregunta aunque no sea dudoso
+    (tmp_path / "ajustes.json").write_text('{"llm": {"siempre": false}}', encoding="utf-8")
+    assert im.clasificar(f, tmp_path)["metodo"] == "reglas"                                  # con «siempre»: false, si no es dudoso no se pregunta
+
+
+def test_ajuste_siempre_y_subgenero_con_ollama_falso(tmp_path, monkeypatch):
+    import json
+    from conocimiento import llm
+    (tmp_path / "ajustes.json").write_text(json.dumps({"llm": {"siempre": True}}), encoding="utf-8")
+    assert llm.ajustes(tmp_path)["siempre"] is True
+    monkeypatch.setattr(llm, "ACTIVO", True)
+    monkeypatch.setattr(llm, "disponible", lambda carpeta=None: True)
+    monkeypatch.setattr(llm, "_http", lambda url, datos=None, espera=0: {"message": {"content": '{"subgenero": "fantasia", "motivo": "x"}'}})
+    subs = [("fantasia", "Fantasía", "magia", "magic"), ("negra", "Negra", "crimen", "crime")]
+    assert llm.subgenero("Mort", [], "", "Novela", subs, "terry pratchett", tmp_path) == "fantasia"
+    monkeypatch.setattr(llm, "_http", lambda url, datos=None, espera=0: {"message": {"content": '{"subgenero": "inventado", "motivo": "x"}'}})
+    assert llm.subgenero("Mort", [], "", "Novela", subs, "", tmp_path) is None

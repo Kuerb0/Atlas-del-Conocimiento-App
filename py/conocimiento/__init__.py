@@ -27,7 +27,8 @@ EXT = {".md", ".txt", ".pdf", ".epub", ".docx"}                          # lo qu
 CODIGO_EXT = {".py", ".ipynb", ".r", ".rmd", ".qmd", ".sas", ".sql", ".js", ".ts", ".sh", ".bat", ".ps1", ".c", ".cpp", ".h", ".java", ".jl", ".m"}
 DATOS_EXT = {".csv", ".tsv", ".xlsx", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".xml"}
 APUNTES_EXT = {".rst", ".tex", ".html", ".htm", ".pptx"}
-EXT_IMPORTABLE = EXT | CODIGO_EXT | DATOS_EXT | APUNTES_EXT                # lo que acepta el importador y se indexa dentro de biblioteca/
+ENLACE_EXT = {".url"}                                                    # accesos directos a vídeos (YouTube, Vimeo): enlaces.py
+EXT_IMPORTABLE = EXT | CODIGO_EXT | DATOS_EXT | APUNTES_EXT | ENLACE_EXT                # lo que acepta el importador y se indexa dentro de biblioteca/
 
 
 SIN_VENTANA = getattr(__import__("subprocess"), "CREATE_NO_WINDOW", 0)      # creationflags de los subprocess: en la app (pythonw) evita que parpadee una ventana de consola
@@ -198,6 +199,9 @@ def _extraer(col: str, f: Path):
     if col == "conceptos":
         return _conceptos(f)
     ext = f.suffix.lower()
+    if ext in ENLACE_EXT:
+        from . import enlaces
+        return _trocear(enlaces.texto(f), f.stem, "")
     if ext in CODIGO_EXT and ext != ".ipynb":
         return _codigo_texto(f)
     return {".pdf": _pdf, ".epub": _epub, ".docx": _docx, ".ipynb": _ipynb, ".csv": _datos, ".tsv": _datos, ".json": _datos, ".yaml": _datos, ".yml": _datos, ".toml": _datos,

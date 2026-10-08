@@ -357,7 +357,9 @@ function Abrir-App($dest) {
 
 # ---------------------------------------------------------------- IA local: embeddings (fastembed) + LLM (Ollama), con barras de progreso
 $Bloque = [string][char]0x2588; $Claro = [string][char]0x2591; $Ok = [string][char]0x2713; $No = [string][char]0x2717
-$ModeloLLM = 'qwen2.5:3b'
+$RamGB = try { [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB) } catch { 8 }          # si no se puede medir, se supone un equipo modesto
+$ModeloLLM = if ($RamGB -ge 12) { 'qwen2.5:7b' } else { 'qwen2.5:3b' }          # el que mejor rinde si el equipo lo aguanta (con menos de 12 GB de RAM, el pequeño)
+$TamLLM = if ($ModeloLLM -eq 'qwen2.5:7b') { '4,7 GB' } else { '1,9 GB' }
 $ModeloEmb = 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'
 
 function Barra($pct, $texto) {
@@ -480,7 +482,7 @@ function Preparar-IA($py, $dest) {
     Estado-Linea $tieneFE 'fastembed (embeddings locales)' $(if ($tieneFE) { 'ya instalado' } else { 'falta, ~60 MB' })
     Estado-Linea $tieneEmb 'modelo de parecido MiniLM' $(if ($tieneEmb) { 'ya descargado' } else { 'falta, ~240 MB' })
     Estado-Linea ([bool]$exe) 'Ollama' $(if ($exe) { $exe } else { 'falta, ~1,6 GB' })
-    Estado-Linea $tieneLLM "modelo $ModeloLLM" $(if ($tieneLLM) { 'ya descargado' } elseif ($exe -and -not $respondia) { 'Ollama no arranca: ábrelo y repite' } else { 'falta, ~1,9 GB' })
+    Estado-Linea $tieneLLM "modelo $ModeloLLM" $(if ($tieneLLM) { 'ya descargado' } elseif ($exe -and -not $respondia) { 'Ollama no arranca: ábrelo y repite' } else { "falta, ~${TamLLM}" })
     $faltaAlgo = (-not $tieneFE) -or (-not $tieneEmb) -or (-not $exe) -or ($exe -and -not $tieneLLM)
     if (-not $faltaAlgo) { Info 'Todo al día: no hay nada que descargar.'; return }
     if (-not $env:ARBOL_DESTINO) {
@@ -510,7 +512,7 @@ function Preparar-IA($py, $dest) {
     Paso '[IA local] Arrancando Ollama...'
     if (-not (Arrancar-Ollama $exe)) { Aviso 'Ollama no respondió. Ábrelo desde el menú Inicio y repite esto para bajar el modelo.'; return }
     if (-not (Tiene-Modelo-Ollama $ModeloLLM)) {
-        Paso "[IA local] Descargando el modelo $ModeloLLM (1,9 GB; Ollama muestra su propio progreso)..."
+        Paso "[IA local] Descargando el modelo $ModeloLLM (${TamLLM}; Ollama muestra su propio progreso)..."
         & $exe pull $ModeloLLM | Out-Host
         if (Tiene-Modelo-Ollama $ModeloLLM) { Estado-Linea $true "modelo $ModeloLLM" 'listo' } else { Aviso "El modelo $ModeloLLM no se descargó. Repite esto con conexión." }
     } else { Estado-Linea $true "modelo $ModeloLLM" 'ya descargado' }

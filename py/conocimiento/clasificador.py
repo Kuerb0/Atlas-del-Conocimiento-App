@@ -11,6 +11,8 @@ import json
 import os
 from pathlib import Path
 
+import threading
+
 import numpy as np
 
 from . import CARPETA, _norm
@@ -22,6 +24,16 @@ PESO_WEB = 0.15          # lo que suma al género que dicen las materias web
 MARGEN_DUDA = 0.05       # si el mejor género saca menos que esto al segundo, el caso es dudoso (y se pregunta al LLM si hay uno)
 PESO_REGLAS = 1.0        # cuánto pesa lo que opinan las reglas (parte de los puntos que se llevaría cada género) frente al parecido
 SATURA = 20              # con tantos puntos las reglas ya se consideran seguras
+PESO_AUTOR = 0.3         # lo que suma el género (o subgénero) que ya tienen los otros libros del mismo autor, según cuántos haya (n / (n + 1))
+PESO_CABEZA = 2.0        # lo que suma la probabilidad de un clasificador supervisado (regresión logística sobre los embeddings de TODOS los ejemplos); 0 = apagado. Validado: 53 → 68 % de acierto de género (evaluar_corpus.py)
+PESO_CABEZA_SUB = 2.0    # lo mismo para el subgénero (un clasificador por género, con las frases de la taxonomía y tus libros de ese género)
+LIBROS_CABEZA = (100, 400)   # la cabeza supervisada pesa 0 con 100 libros tuyos como ejemplos o menos y su peso completo con 400 o más: con pocos ejemplos EMPEORA (79 → 75 % con 73 obras), con cientos mejora 15 puntos
+LIBROS_CABEZA_SUB = (20, 120)   # lo mismo para el subgénero, contando solo los libros de ese género
+MARGEN_REVISAR = 0.15    # distancia entre el género ganador y el segundo, dividida entre la escala máxima de puntos (1 + PESO_CABEZA + PESO_REGLAS); por debajo se pide revisión manual.
+                         # Calibrado con 232 obras de validación y el LLM: marca ~44 % de las obras y recoge ~67 % de los errores de género (lo no marcado acierta ~85 %). Más alto = más avisos
+MARGEN_SUB_REVISAR = 0.03  # lo mismo para el subgénero (escala 1 + PESO_CABEZA_SUB)
+WIKI = "auto"            # Wikipedia/Wikidata (webinfo.py) por título y autor: "auto" = solo si el LLM no está disponible (con LLM no suma: 86/66 frente a 86/68 en 73 obras; sin él sube 75/49 → 79/56); True = siempre; False = nunca (sin red)
+PESO_WIKI = 0.6          # lo que suma el género que dice Wikidata de la obra (y 0,6 · el subgénero)
 MIN_PARECIDO = 0.25      # por debajo, el libro no se parece a ningún género: se queda como lo dejaron las reglas (p. ej. «otro»)
 _cache: dict = {}        # nombre del modelo -> función(textos) -> matriz normalizada; también guarda los vectores de las semillas
 
@@ -71,7 +83,15 @@ def modelo(carpeta: Path | str = CARPETA) -> str:
         return MODELO
 
 
+_candado = threading.RLock()        # cargar el modelo y entrenar la cabeza una sola vez aunque varios hilos clasifiquen a la vez (evaluar_corpus.py usa hilos)
+
+
 def _embedder(nombre: str, carpeta: Path | str = None):  # los modelos son de todos los proyectos: siempre en CARPETA/modelos
+    with _candado:
+        return _embedder_(nombre)
+
+
+def _embedder_(nombre: str):
     if nombre not in _cache:
         from fastembed import TextEmbedding
         m = TextEmbedding(model_name=nombre, cache_dir=str(Path(CARPETA) / "modelos"))
@@ -79,11 +99,12 @@ def _embedder(nombre: str, carpeta: Path | str = None):  # los modelos son de to
         memo: dict = {}                                          # texto -> vector: los ejemplos de la biblioteca no se vuelven a calcular en cada archivo
 
         def emb(textos):
-            nuevos = [t for t in dict.fromkeys(textos) if t not in memo]
-            if nuevos:
-                v = np.array(list(m.embed(nuevos)), dtype=float)
-                memo.update(zip(nuevos, v / np.linalg.norm(v, axis=1, keepdims=True)))
-            return np.array([memo[t] for t in textos])
+            with _candado:
+                nuevos = [t for t in dict.fromkeys(textos) if t not in memo]
+                if nuevos:
+                    v = np.array(list(m.embed(nuevos)), dtype=float)
+                    memo.update(zip(nuevos, v / np.linalg.norm(v, axis=1, keepdims=True)))
+                return np.array([memo[t] for t in textos])
         _cache[nombre] = emb
     return _cache[nombre]
 
@@ -96,10 +117,37 @@ def preparar(carpeta: Path | str | None = None) -> str:
     return f"modelo {nombre} listo ({v.shape[1]} dimensiones) en {Path(CARPETA) / 'modelos'}"
 
 
+_CAP_VACIO = __import__("re").compile(r"^\W*(?:chapter|cap[ií]tulo|cap\.?|part|parte|book|libro|section)?\W*(?:m{0,3}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})|\d+)?\W*$", __import__("re").I)
+
+
 def texto_libro(titulo: str, capitulos: list, vista: str = "") -> str:
     """Lo que se compara de un libro: título, los primeros capítulos y el principio del texto."""
-    caps = "; ".join((c["titulo"] if isinstance(c, dict) else str(c)) for c in capitulos[:8])
+    caps = "; ".join(x for x in ((c["titulo"] if isinstance(c, dict) else str(c)) for c in capitulos[:12]) if not _CAP_VACIO.match(x))[:400]       # «Chapter II.», «III» o «Parte 2» no dicen nada
     return f"{titulo}. {caps}. {vista[:700]}".strip()
+
+
+def autor_de(nombre: str) -> str:
+    """Autor según el nombre del archivo («Título - Autor»): el último tramo tras « - », normalizado; "" si no parece un nombre."""
+    partes = [x.strip() for x in str(nombre).split(" - ")]
+    a = _norm(partes[-1]).strip() if len(partes) > 1 else ""
+    return a if 1 <= len(a.split()) <= 5 and not any(c.isdigit() for c in a) else ""
+
+
+def _del_autor(autor: str, carpeta: Path | str) -> list[dict]:
+    """Metadatos de los libros de la biblioteca cuyo archivo original tenía ese autor."""
+    if not autor:
+        return []
+    try:
+        from .importar import leer_metadatos
+        return [m for m in leer_metadatos(Path(carpeta)).values() if autor_de(Path(m.get("origen", "")).stem or m.get("titulo", "")) == autor]
+    except Exception:
+        return []
+
+
+def _sesgo_autor(autor: str, clave: str, carpeta: Path | str, filtro=lambda m: True) -> dict:
+    """{valor de `clave`: bonus} según lo que ya tienen los otros libros de ese autor (los que cumplen `filtro`)."""
+    ms = [m for m in _del_autor(autor, carpeta) if filtro(m) and m.get(clave)]
+    return {v: PESO_AUTOR * sum(m[clave] == v for m in ms) / (len(ms) + 1) for v in {m[clave] for m in ms}}
 
 
 def _ejemplos(carpeta: Path | str) -> list[tuple[str, str, float]]:
@@ -109,13 +157,61 @@ def _ejemplos(carpeta: Path | str) -> list[tuple[str, str, float]]:
         from .importar import GENEROS, leer_metadatos
         for m in leer_metadatos(Path(carpeta)).values():
             if m.get("genero") in GENEROS and m.get("genero") != "otro":
-                ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), m.get("etiquetas", "")), m["genero"], 1.5 if m.get("automatico") else 2.5))
+                ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), m["genero"], 1.5 if m.get("automatico") else 2.5))
     except Exception:
         pass
     return ej
 
 
-def sugerir(texto: str, carpeta: Path | str | None = None) -> dict | None:
+def vecinos(texto: str, carpeta: Path | str, k: int = 6) -> list[dict]:
+    """Los k libros ya clasificados de tu biblioteca más parecidos al texto: [{'titulo','autor','genero','subgenero'}]. Son los ejemplos que se le enseñan al LLM."""
+    if not ACTIVO or _cache.get("fallo") or k <= 0:
+        return []
+    try:
+        from .importar import GENEROS, leer_metadatos
+        ms = [m for m in leer_metadatos(Path(carpeta)).values() if m.get("genero") in GENEROS and m["genero"] != "otro"]
+        if not ms:
+            return []
+        emb = _embedder(modelo(carpeta), carpeta)
+        X = emb([texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)) for m in ms])
+        orden = np.argsort(-(X @ emb([texto])[0]))[:k]
+        return [{"titulo": ms[i].get("titulo", ""), "autor": autor_de(Path(ms[i].get("origen", "")).stem), "genero": ms[i]["genero"], "subgenero": ms[i].get("subgenero", "")} for i in orden]
+    except Exception:
+        return []
+
+
+_cabezas: dict = {}
+
+
+def _cabeza(ej: list, X):
+    """Regresión logística multinomial entrenada con los ejemplos (semillas + biblioteca). Se guarda por contenido: con los mismos ejemplos no se vuelve a entrenar."""
+    clave = hash(tuple(e[0] for e in ej))
+    with _candado:
+        return _cabeza_(clave, ej, X)
+
+
+def _cabeza_(clave, ej, X):
+    if clave not in _cabezas:
+        from sklearn.linear_model import LogisticRegression
+        y = [e[1] for e in ej]
+        if len(set(y)) < 2:
+            _cabezas[clave] = None
+        else:
+            _cabezas[clave] = LogisticRegression(C=10.0, max_iter=500, class_weight="balanced").fit(X, y, sample_weight=[e[2] for e in ej])
+    return _cabezas[clave]
+
+
+def extra_ejemplo(m: dict) -> str:
+    """El texto que se suma al título y los capítulos de un libro de la biblioteca cuando hace de ejemplo: sus etiquetas y su descripción de Wikipedia (si la tuvo al importarse)."""
+    return " ".join(x for x in (m.get("web_resumen", ""), m.get("etiquetas", "")) if x).strip()
+
+
+def fuerza(n: int, rango: tuple) -> float:
+    """0 si hay `rango[0]` ejemplos o menos, 1 con `rango[1]` o más, lineal entre medias: cuánto fiarse de un clasificador supervisado según los ejemplos propios que tiene."""
+    return min(1.0, max(0.0, (n - rango[0]) / (rango[1] - rango[0])))
+
+
+def sugerir(texto: str, carpeta: Path | str | None = None, autor: str = "", pistas: dict | None = None) -> dict | None:
     """{'genero', 'confianza' (margen sobre el segundo), 'puntos': {género: parecido}} o None si no hay modelo."""
     if not ACTIVO or _cache.get("fallo"):
         return None
@@ -133,6 +229,19 @@ def sugerir(texto: str, carpeta: Path | str | None = None) -> dict | None:
     for g in {e[1] for e in ej}:
         v = sorted((s + .04 * (e[2] - 1) for s, e in zip(sims, ej) if e[1] == g), reverse=True)[:2]
         puntos[g] = float(np.mean(v))
+    peso = PESO_CABEZA * fuerza(sum(e[2] > 1 for e in ej), LIBROS_CABEZA)
+    if peso:
+        clf = _cabeza(ej, X)
+        if clf is not None:
+            for g, pr in zip(clf.classes_, clf.predict_proba(q.reshape(1, -1))[0]):
+                if g in puntos:
+                    puntos[g] += peso * float(pr)
+    for g, b in _sesgo_autor(autor, "genero", carpeta).items():
+        if g in puntos:
+            puntos[g] += b
+    for g, w in (pistas or {}).items():                                   # lo que dice Wikidata de la obra
+        if g in puntos:
+            puntos[g] += PESO_WIKI * w
     orden = sorted(puntos, key=puntos.get, reverse=True)
     return {"genero": orden[0], "confianza": puntos[orden[0]] - puntos[orden[1]], "puntos": {g: round(puntos[g], 3) for g in orden}}
 
@@ -144,7 +253,7 @@ def _palabras(t: str) -> set:
     return {w for w in __import__("re").findall(r"[a-z]{4,}", _norm(t)) if w not in _PARADA}
 
 
-def subgenero(texto: str, genero: str, carpeta: Path | str | None = None) -> dict | None:
+def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor: str = "", pistas: dict | None = None) -> dict | None:
     """Subgénero (de la taxonomía del género) que mejor describe el texto: {'id','nombre','confianza','puntos': {id: 0-100}} o None si el género no tiene subgéneros.
     Con modelo de embeddings compara con las frases del subgénero y con lo que ya tienes en esa categoría; sin modelo, por palabras en común."""
     from . import taxonomia
@@ -162,14 +271,28 @@ def subgenero(texto: str, genero: str, carpeta: Path | str | None = None) -> dic
                 ids = {s[0] for s in subs}
                 for m in leer_metadatos(carpeta).values():
                     if m.get("genero") == genero and m.get("subgenero") in ids:
-                        ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), m.get("etiquetas", "")), m["subgenero"], 1.5 if m.get("automatico") else 2.5))
+                        ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), m["subgenero"], 1.5 if m.get("automatico") else 2.5))
             except Exception:
                 pass
-            sims = emb([e[0] for e in ej]) @ emb([texto])[0]
+            X, q = emb([e[0] for e in ej]), emb([texto])[0]
+            sims = X @ q
             puntos = {}
             for sid in ids:
                 v = sorted((s + .04 * (e[2] - 1) for s, e in zip(sims, ej) if e[1] == sid), reverse=True)[:2]
                 puntos[sid] = float(np.mean(v))
+            peso = PESO_CABEZA_SUB * fuerza(sum(e[2] > 1 for e in ej), LIBROS_CABEZA_SUB)
+            if peso:
+                clf = _cabeza(ej, X)
+                if clf is not None:
+                    for sid, pr in zip(clf.classes_, clf.predict_proba(q.reshape(1, -1))[0]):
+                        if sid in puntos:
+                            puntos[sid] += peso * float(pr)
+            for sid, b in _sesgo_autor(autor, "subgenero", carpeta, lambda m: m.get("genero") == genero).items():
+                if sid in puntos:
+                    puntos[sid] += b
+            for sid, w in (pistas or {}).items():
+                if sid in puntos:
+                    puntos[sid] += PESO_WIKI * w
         except Exception:
             _cache["fallo"] = True
             puntos = None

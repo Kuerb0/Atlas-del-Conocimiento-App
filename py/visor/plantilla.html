@@ -306,7 +306,9 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 .bib-barra input{flex:1 1 280px} .bib-n{color:#8ea0c0;font-size:12.5px}
 .bib-lista{width:100%;max-width:1040px;display:grid;gap:8px}
 .bib-card{display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:6px 14px;align-items:start;padding:10px;border:1px solid #1d2742;border-radius:10px;background:rgba(14,20,38,.7)}
-.bib-card.nuevo{border-color:#2f6b3a} .bib-card.borrando{border-color:#8a3a2c}
+.bib-card.nuevo{border-color:#2f6b3a} .bib-card.borrando{border-color:#8a3a2c} .bib-card.dudoso{border-color:#b8860b;box-shadow:0 0 0 1px rgba(184,134,11,.35)}
+.bib-dudoso{grid-column:1/-1;display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:6px 10px;border-radius:8px;background:rgba(184,134,11,.14);color:#f3d58a;font-size:12.5px} .bib-dudoso b{color:#ffd978}
+.pest .insignia{display:inline-block;min-width:18px;margin-left:6px;padding:0 6px;border-radius:99px;background:#d99a1c;color:#1a1304;font:700 11px var(--mono);text-align:center}
 .bib-portada{width:62px;height:86px;border-radius:4px;overflow:hidden;background:#131c35;display:grid;place-items:center;box-shadow:0 1px 5px rgba(0,0,0,.5);font:700 11px var(--mono);color:#8ea0c0}
 .bib-portada img{width:100%;height:100%;object-fit:cover}
 .bib-campos{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
@@ -447,7 +449,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
   </section>
   <section class="biblioteca" id="biblioteca" hidden aria-label="Observatorio">
     <div class="imp-cabeza"><h2>Observatorio</h2><p>Todo lo que has importado. Cambia título, galaxia, género, subtema, tipo o etiquetas: se guarda al momento y el universo se actualiza al volver a él. Al borrar solo se quita la copia del observatorio; el original no se toca.</p></div>
-    <div class="bib-barra"><input id="bibQ" type="search" placeholder="Filtrar por título, género, subtema, etiqueta…" aria-label="Filtrar el observatorio"><select id="bibGal" aria-label="Galaxia"></select><select id="bibOrden" aria-label="Orden"><option value="fecha">Más recientes primero</option><option value="gal">Por galaxia y título</option></select><label class="bib-n" for="bibDesde">Importados desde</label><input id="bibDesde" type="date" aria-label="Importados desde esta fecha">
+    <div class="bib-barra"><input id="bibQ" type="search" placeholder="Filtrar por título, género, subtema, etiqueta…" aria-label="Filtrar el observatorio"><select id="bibGal" aria-label="Galaxia"></select><select id="bibOrden" aria-label="Orden"><option value="fecha">Más recientes primero</option><option value="gal">Por galaxia y título</option></select><label class="bib-n" for="bibDesde">Importados desde</label><input id="bibDesde" type="date" aria-label="Importados desde esta fecha"><label class="bib-n" for="bibRev" title="Lo que el clasificador no vio claro y aún no has mirado"><input id="bibRev" type="checkbox"> ⚠ Solo por revisar <span id="bibRevN"></span></label>
       <span id="bibN" class="bib-n"></span><button class="btn primario" id="bibAplicar" type="button" hidden>Actualizar el universo ahora</button></div>
     <div class="bib-lista" id="bibLista"></div>
   </section>
@@ -1453,7 +1455,9 @@ async function impImportar() {
   if (n) {
     impAviso('Actualizando el universo con lo nuevo…'); impRender();
     var v = await api.actualizar_visor();                          /* regenera visor_arbol.html (Libros: género › libro › capítulo) y se recarga */
-    var msg = n + ' de ' + hechos.length + ' importado' + (n === 1 ? '' : 's') + (imp.modo === 'mover' ? ' (los originales se han movido)' : '') + '. El universo ya incluye lo nuevo y se puede buscar.';
+    var dud = hechos.filter(function (x) { return x.estado === 'ok' && x.revisar; }).length;
+    var msg = n + ' de ' + hechos.length + ' importado' + (n === 1 ? '' : 's') + (imp.modo === 'mover' ? ' (los originales se han movido)' : '') + '. El universo ya incluye lo nuevo y se puede buscar.' +
+      (dud ? ' ⚠ ' + dud + ' ' + (dud === 1 ? 'no se ha clasificado con seguridad' : 'no se han clasificado con seguridad') + ': revísalos en 🔭 Observatorio (casilla «Solo por revisar»).' : '');
     if (!(v && v.error)) { try { sessionStorage.setItem('arbol-tras-importar', msg); } catch (e) {} setTimeout(function () { location.reload(); }, 1400); impAviso(msg); return; }
     impAviso(msg + ' (no se pudo regenerar el visor: ' + v.error + ')');
   } else impAviso('No se importó nada.');
@@ -1461,7 +1465,7 @@ async function impImportar() {
 }
 
 /* ---------- Observatorio (la pestaña; internamente «biblioteca»): editar, reclasificar o borrar lo importado ---------- */
-var bib = {lista: null, sucio: false, filtro: '', gal: '', borrando: null};
+var bib = {lista: null, sucio: false, filtro: '', gal: '', borrando: null, rev: false};
 /* ---------- telescopio: busca obras abiertas y las trae a la biblioteca (py/conocimiento/telescopio.py) ---------- */
 var tel = {lista: []};
 async function telBuscar() {
@@ -1525,13 +1529,14 @@ async function bibCargar() {
 function bibVista() {
   var f = norm(bib.filtro);
   return (bib.lista || []).filter(function (x) {
-    return (!bib.gal || x.galaxia === bib.gal) && (!bib.desde || (x.fecha_hora || '').slice(0, 10) >= bib.desde) && (!f || norm([x.titulo, x.titulo_largo, x.genero, GENEROS_NOM[x.genero], x.subgenero_nombre, x.subtema, x.etiquetas, x.tipo, x.galaxia].join(' ')).indexOf(f) >= 0);
+    return (!bib.gal || x.galaxia === bib.gal) && (!bib.rev || x.revisar) && (!bib.desde || (x.fecha_hora || '').slice(0, 10) >= bib.desde) && (!f || norm([x.titulo, x.titulo_largo, x.genero, GENEROS_NOM[x.genero], x.subgenero_nombre, x.subtema, x.etiquetas, x.tipo, x.galaxia].join(' ')).indexOf(f) >= 0);
   }).sort(function (a, b) { return bib.orden === 'gal' ? 0 : String(b.fecha_hora || '').localeCompare(String(a.fecha_hora || '')); });
 }
 function bibTarjeta(x) {
   var o = imp.opciones || {galaxias: GALAXIAS, generos: [], tipos: []}, nuevo = x.automatico ? '' : ' · ajustado por ti';
   function opts(lista, v) { return lista.map(function (g) { return '<option value="' + esc(g.id) + '"' + (g.id === v ? ' selected' : '') + '>' + esc(g.nombre) + '</option>'; }).join(''); }
-  return '<div class="bib-card' + (bib.borrando === x.rel ? ' borrando' : '') + '" data-rel="' + esc(x.rel) + '">' +
+  return '<div class="bib-card' + (bib.borrando === x.rel ? ' borrando' : '') + (x.revisar ? ' dudoso' : '') + '" data-rel="' + esc(x.rel) + '">' +
+    (x.revisar ? '<div class="bib-dudoso"><span>⚠ <b>Revísalo:</b> ' + esc((x.motivos_revisar || []).join(' · ') || 'el clasificador no estaba seguro') + '</span><button class="btn primario" data-a="confirmar" type="button" title="Das por buena esta clasificación; se recuerda como corrección tuya">✓ Está bien</button></div>' : '') +
     '<div class="bib-portada">' + (x.portada ? '<img alt="" src="' + x.portada + '">' : esc((x.extension || '').toUpperCase())) + '</div>' +
     '<div class="bib-campos"><label class="ancho">Título<input type="text" data-c="titulo" value="' + esc(x.titulo) + '" title="' + esc(x.titulo_largo) + '"></label>' +
     '<label>Galaxia<select data-c="galaxia">' + opts(o.galaxias, x.galaxia) + '</select></label><label>Género<select data-c="genero">' + opts(o.generos, x.genero) + '</select></label>' +
@@ -1547,17 +1552,27 @@ function bibTarjeta(x) {
 function bibRender() {
   var v = bibVista(), cont = $('#bibLista');
   var sel = $('#bibGal'); if (!sel.options.length) sel.innerHTML = '<option value="">Todas las galaxias</option>' + ((imp.opciones && imp.opciones.galaxias) || GALAXIAS).map(function (g) { return '<option value="' + esc(g.id) + '">' + esc(g.nombre) + '</option>'; }).join('');
+  var nRev = (bib.lista || []).filter(function (x) { return x.revisar; }).length; $('#bibRevN').textContent = nRev ? '(' + nRev + ')' : ''; insigniaRevisar(nRev);
   $('#bibN').textContent = v.length + ' de ' + (bib.lista || []).length + ' documentos';
   $('#bibAplicar').hidden = !bib.sucio;
   var subs = {}; Object.keys((imp.opciones || {subtemas: {}}).subtemas).forEach(function (g) { imp.opciones.subtemas[g].forEach(function (s) { subs[s] = 1; }); });
   cont.innerHTML = '<datalist id="impSub">' + Object.keys(subs).map(function (s) { return '<option value="' + esc(s) + '">'; }).join('') + '</datalist>' +
     (v.length ? v.map(bibTarjeta).join('') : '<p class="imp-msg">' + ((bib.lista || []).length ? 'Nada coincide con el filtro.' : 'Todavía no has importado nada: usa la pestaña ⚫ Importar.') + '</p>');
 }
+function insigniaRevisar(n) {                                    /* el número de documentos por revisar, en la pestaña 🔭 */
+  var b = $('#pestBiblioteca'), i = b.querySelector('.insignia');
+  if (!n) { if (i) i.remove(); return; }
+  if (!i) { i = document.createElement('span'); i.className = 'insignia'; b.appendChild(i); }
+  i.textContent = n; i.title = n + ' documento' + (n === 1 ? '' : 's') + ' por revisar: el clasificador no estaba seguro';
+}
+async function revisarInsignia() { var a = impApi(); if (a && a.biblioteca_por_revisar) { try { var r = await a.biblioteca_por_revisar(); if (r && r.n) insigniaRevisar(r.n); } catch (e) {} } }
+revisarInsignia(); window.addEventListener('pywebviewready', revisarInsignia);       /* la API de la app puede tardar un momento en estar lista */
 function bibFicha(rel) { return (bib.lista || []).filter(function (x) { return x.rel === rel; })[0]; }
 function bibMarca(card, txt) { var s = card && card.querySelector('.bib-ok'); if (s) { s.textContent = txt; setTimeout(function () { if (s) s.textContent = ''; }, 2200); } }
 $('#bibQ').addEventListener('input', function () { bib.filtro = this.value; bibRender(); });
 $('#bibGal').addEventListener('change', function () { bib.gal = this.value; bibRender(); });
 $('#bibOrden').addEventListener('change', function () { bib.orden = this.value; bibRender(); });
+$('#bibRev').addEventListener('change', function () { bib.rev = this.checked; bibRender(); });
 $('#bibDesde').addEventListener('change', function () { bib.desde = this.value; bibRender(); });
 $('#biblioteca').addEventListener('change', async function (ev) {
   var card = ev.target.closest('.bib-card'), c = ev.target.dataset.c; if (!card || !c) return;
@@ -1572,6 +1587,7 @@ $('#biblioteca').addEventListener('click', async function (ev) {
   var b = ev.target.closest('button[data-a]'), card = ev.target.closest('.bib-card'); if (!b || !card) return;
   var rel = card.dataset.rel, x = bibFicha(rel), a = impApi();
   if (b.dataset.a === 'abrir') a.abrir_fuente(x.ruta, '');
+  else if (b.dataset.a === 'confirmar') { var rc = await a.biblioteca_confirmar(rel); if (rc.error) bibMarca(card, '✗ ' + rc.error); else { bib.lista[bib.lista.indexOf(x)] = rc; bibRender(); } }
   else if (b.dataset.a === 'recl') { var r = await a.biblioteca_reclasificar(rel); if (r.error) bibMarca(card, '✗ ' + r.error); else { bib.lista[bib.lista.indexOf(x)] = r; bib.sucio = true; bibRender(); } }
   else if (b.dataset.a === 'borrar') {
     if (bib.borrando !== rel) { bib.borrando = rel; bibRender(); return; }                 /* hace falta pulsar dos veces */

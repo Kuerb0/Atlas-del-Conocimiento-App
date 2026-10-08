@@ -23,10 +23,10 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from . import CARPETA, CODIGO_EXT, DATOS_EXT, DB, EXT_IMPORTABLE, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, indexar, llm, taxonomia
+from . import CARPETA, CODIGO_EXT, DATOS_EXT, DB, EXT_IMPORTABLE, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, enlaces, indexar, llm, taxonomia, webinfo
 
 GALAXIAS = {"codigo": "Código", "conceptos": "Conceptos", "demos": "Demos y guías", "finanzas": "Finanzas", "libros": "Libros", "notas": "Notas y enlaces"}
-TIPOS = {"libro": "Libro", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "codigo": "Código", "datos": "Datos", "otro": "Otro"}
+TIPOS = {"libro": "Libro", "video": "Vídeo", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "codigo": "Código", "datos": "Datos", "otro": "Otro"}
 _GENEROS_BASE = {"historia": "Historia", "economia": "Economía y finanzas", "ensayo": "Ensayo y filosofía", "estadistica": "Estadística y matemáticas", "ciencia": "Ciencia y divulgación",
                  "novela": "Novela y ficción", "biografia": "Biografía y memorias", "politica": "Política y sociedad", "tecnologia": "Tecnología e informática",
                  "psicologia": "Psicología y salud", "arte": "Arte, música y cultura"}
@@ -397,6 +397,51 @@ def _barras(puntos: dict, forzar: str | None = None, n: int = 6) -> list[dict]:
     return [{"id": g, "nombre": GENEROS[g], "valor": round(100 * v / m)} for g, v in sorted(p.items(), key=lambda kv: -kv[1])[:n]]
 
 
+def _seguridad(gp: dict, s: dict | None, web, genero: str, sg: dict | None, sg0: str | None, texto: str, tipo: str, corr: bool) -> tuple[float | None, float | None, list[str]]:
+    """(margen del género, margen del subgénero, motivos por los que conviene que lo revises tú). Sin motivos = el sistema está seguro.
+    El margen es la distancia de puntos entre la primera y la segunda opción (la misma escala que decide el género); los umbrales están en clasificador.MARGEN_*."""
+    motivos, margen, margen_sub = [], None, None
+    if len(texto.strip()) < 300 and tipo not in ("codigo", "datos", "video"):
+        motivos.append("casi no hay texto que leer (¿PDF escaneado o protegido?)")
+    if corr or tipo in ("codigo", "datos"):                                  # algo parecido que ya corregiste, o un fichero cuyo «género» no es lo importante
+        return margen, margen_sub, motivos
+    if s:
+        sc = clasificador.puntuar(gp, s, web)
+    else:
+        tot = sum(gp.values()) or 1
+        sc = {g: v / tot for g, v in gp.items()}
+        if max(gp.values(), default=0) < 10:
+            motivos.append("pocas pistas: ni palabras clave claras ni modelo de parecido")
+    orden = sorted(sc, key=sc.get, reverse=True)
+    if genero == "otro":
+        motivos.append("no encaja en ningún género")
+    if len(orden) > 1:
+        margen = sc[orden[0]] - sc[orden[1]]
+        if margen / (1 + clasificador.PESO_CABEZA + clasificador.PESO_REGLAS if s else 1) < (clasificador.MARGEN_REVISAR if s else 0.25):
+            motivos.append(f"género poco claro: «{GENEROS.get(orden[0], orden[0])}» y «{GENEROS.get(orden[1], orden[1])}» casi empatan")
+        if genero != orden[0] and genero in sc:
+            motivos.append(f"el género elegido («{GENEROS.get(genero, genero)}») no es el que más puntúa («{GENEROS.get(orden[0], orden[0])}»)")
+    if sg:
+        margen_sub = sg.get("confianza")
+        seguro = margen_sub is not None and margen_sub / (1 + clasificador.PESO_CABEZA_SUB) >= clasificador.MARGEN_SUB_REVISAR
+        if sg0 and sg["id"] != sg0:                                           # el LLM cambió lo que decía el parecido: solo es un aviso si el parecido estaba seguro (si dudaba, manda el LLM)
+            if seguro:
+                motivos.append("el LLM y el parecido no coinciden en el subgénero")
+        elif not seguro and margen_sub is not None:
+            ps = sorted(sg["puntos"], key=sg["puntos"].get, reverse=True)
+            motivos.append("subgénero poco claro" + (f": «{taxonomia.nombre_sub(genero, ps[0])}» y «{taxonomia.nombre_sub(genero, ps[1])}» casi empatan" if len(ps) > 1 else ""))
+    return margen, margen_sub, motivos
+
+
+_INICIO_LICENCIA = re.compile(r"\*\*\* ?START OF (?:THE|THIS) PROJECT GUTENBERG[^\n*]*\*\*\*", re.I)
+
+
+def sin_licencia(texto: str) -> str:
+    """Quita la cabecera de licencia de Project Gutenberg (lo primero del EPUB), que no dice nada de la obra y confunde al clasificador."""
+    m = _INICIO_LICENCIA.search(texto)
+    return texto[m.end():] if m else texto
+
+
 def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dict:
     """Propone galaxia, subtema, tipo y título de un fichero, con el motivo. {'galaxia','subtema','tipo','titulo','motivo','paginas'}
     `etapa(nombre, datos)`, si se da, se llama al empezar y al acabar cada fase (ETAPAS) con `datos['estado']` = inicio | fin y, al acabar, las barras de género parciales:
@@ -410,14 +455,18 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
     ev("leer", "inicio")
     f = Path(ruta)
     carpeta = Path(carpeta or carpeta_datos())
+    inf_v = enlaces.info(f) if f.suffix.lower() == ".url" else None        # un vídeo: su título y su canal salen del oEmbed de la plataforma
     texto, paginas = _muestra(f)
+    texto = sin_licencia(texto)
     t = " " + _norm(texto[:40000]) + " "
-    nombre = _norm(re.sub(r"[_\-.]+", " ", f.stem))
+    nombre = _norm(re.sub(r"[_\-.]+", " ", (inf_v or {}).get("titulo") or f.stem))
     puntos = _puntos_temas(t, nombre)
     (tid, tnombre), p = max(puntos.items(), key=lambda kv: kv[1]) if puntos else ((None, "General"), 0)
     fin = len(FINANZAS.findall(t)) + 4 * len(FINANZAS.findall(nombre))
     ext = f.suffix.lower()
-    if ext in CODIGO_EXT:
+    if ext == ".url":
+        tipo = "video"
+    elif ext in CODIGO_EXT:
         tipo = "codigo"
     elif ext in DATOS_EXT:
         tipo = "datos"
@@ -429,6 +478,8 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
         tipo = "apuntes"
     else:
         tipo = "nota"
+    tit = titulo_corto((inf_v or {}).get("titulo") or f.stem)             # (en los vídeos, el título real y no el nombre del acceso directo)
+    aut = "" if tipo == "video" else clasificador.autor_de(f.stem)
     gp = {g: len(r.findall(t)) + 6 * len(r.findall(nombre)) for g, r in _GEN_RE.items()}
     if p >= 6:
         gp["economia" if tid == "t_fin" else "estadistica"] += p        # lo que casa con los temas de estadística/finanzas también cuenta como ese género
@@ -439,6 +490,8 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
     subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
     if tipo == "codigo":
         galaxia, motivo = "codigo", f"archivo de código ({ext})"
+    elif tipo == "video":
+        galaxia, motivo = "libros", f"vídeo de {inf_v['plataforma'].capitalize()}" if inf_v else "enlace a un vídeo"
     elif tipo == "libro":                                                # un libro va a Libros, sea de lo que sea; Finanzas y Notas son para documentos más cortos
         galaxia, motivo = "libros", f"{'EPUB' if ext == '.epub' else str(paginas) + ' páginas'}"
     elif fin >= 8 or (tid == "t_fin" and p >= 6):
@@ -458,9 +511,18 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
     metodo, materias, s = "reglas", [], None
     web = None
     forma = None
-    if not corr and tipo in ("libro", "articulo") and clasificador.WEB and len(titulo_corto(f.stem).split()) >= 2:    # materias reales de la obra según Open Library (si hay red)
+    info, pistas, pistas_sub, vista = None, None, None, re.sub(r"\s+", " ", texto[:1500])
+    if not corr and tipo in ("libro", "articulo", "video") and (clasificador.WIKI is True or (clasificador.WIKI == "auto" and not (llm.ACTIVO and llm.disponible(carpeta)))):                    # Wikipedia/Wikidata por título y autor: descripción, tipo y género de la obra
+        pal = re.findall(r"[a-z]+", t[:20000])
+        info = webinfo.buscar(tit, aut, ("es", "en") if sum(w in _ES for w in pal) > sum(w in _EN for w in pal) else ("en", "es"), carpeta)
+        if info:
+            vista = (info["resumen"] + " " + vista)[:1500]
+            materias = materias + info["tipos"] + info["generos"]
+            pistas = {info["genero"]: 1.0} if info.get("genero") in GENEROS else None
+            pistas_sub = {info["subgenero"]: 1.0} if info.get("subgenero") and info.get("genero") == "novela" else None
+    if not corr and tipo in ("libro", "articulo") and clasificador.WEB and len(tit.split()) >= 2:    # materias reales de la obra según Open Library (si hay red)
         ev("web", "inicio")
-        materias = _materias_web(titulo_corto(f.stem))
+        materias = materias + _materias_web(tit)
         web = _genero_materias(materias)
         forma = _forma_materias(materias)
         ev("web", "fin", materias=materias[:5], voto=web or "", voto_nombre=GENEROS.get(web, ""), forma=forma or "", barras=_barras(gp, forma))
@@ -468,7 +530,7 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
         ev("web", "fin", omitido="solo se consulta para libros y artículos con título" if not corr and clasificador.WEB else "desactivado" if not clasificador.WEB else "ya corregido por ti")
     if not corr and tipo != "codigo" and clasificador.ACTIVO:                                  # parecido con ejemplos (embeddings locales) mezclado con las reglas; sin modelo, solo reglas
         ev("parecido", "inicio")
-        s = clasificador.sugerir(clasificador.texto_libro(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500])), carpeta)
+        s = clasificador.sugerir(clasificador.texto_libro(tit, caps, vista), carpeta, aut, pistas)
         if s:
             nuevo, cambia = clasificador.decidir(gp, genero, s, web)
             if cambia:
@@ -488,13 +550,14 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
         genero, metodo = forma, "web"
         subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
         motivo += f"; Open Library la clasifica como {', '.join(m for m in materias if _norm(m).strip(' .') in _FORMA[forma])}"
+    vec = clasificador.vecinos(clasificador.texto_libro(tit, caps, vista), carpeta, llm.VECINOS) if llm.VECINOS and llm.ACTIVO and not corr else None
     if corr or tipo == "codigo" or not llm.ACTIVO:
         ev("llm", "fin", omitido="no aplica" if tipo == "codigo" or corr else "desactivado")
-    elif forma or not clasificador.dudoso(gp, s, web):
+    elif forma or not (clasificador.dudoso(gp, s, web) or llm.ajustes(carpeta).get("siempre")):       # «siempre»: en ajustes.json se puede pedir que el LLM opine de todos los libros (+2 puntos de acierto, ~10 s más por libro)
         ev("llm", "fin", omitido="no hacía falta: el resultado era claro")
     else:                                                                  # caso dudoso: se pregunta al LLM local (Ollama)
         ev("llm", "inicio")
-        r = llm.clasificar(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500]), materias, {k: v for k, v in GENEROS.items()}, carpeta) if llm.disponible(carpeta) else None
+        r = llm.clasificar(tit, caps, vista, materias, {k: v for k, v in GENEROS.items()}, carpeta, aut, vec) if llm.disponible(carpeta) else None
         marcador = clasificador.puntuar(gp, s, web) if s else gp
         top3 = [g for g, v in sorted(marcador.items(), key=lambda kv: -kv[1])[:3] if v > 0]
         if r and top3 and r["genero"] not in top3:                          # un modelo pequeño a veces se inventa un género: si no está entre los 3 más probables, se ignora
@@ -509,25 +572,33 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
     if materias and metodo not in ("reglas", "llm"):
         motivo += f"; materias web: {', '.join(materias[:4])}"
     ev("subgenero", "inicio")
-    sg = None if tipo == "datos" else clasificador.subgenero(clasificador.texto_libro(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500])), genero, carpeta)       # una tabla de números no tiene tema
+    sg = None if tipo == "datos" else clasificador.subgenero(clasificador.texto_libro(tit, caps, vista), genero, carpeta, aut, pistas_sub if genero == "novela" else None)       # una tabla de números no tiene tema
+    sg0 = sg["id"] if sg else None                                                 # lo que decía el parecido, por si el LLM lo cambia (es una discrepancia que se avisa)
+    if sg and not corr and llm.ACTIVO and llm.disponible(carpeta):          # el LLM conoce las obras: elige entre los subgéneros de su género (las novelas sin pistas en el texto son lo que peor sale por parecido)
+        elegido = llm.subgenero(tit, caps, vista, GENEROS[genero], taxonomia.subgeneros(genero, carpeta), aut, carpeta, vec)
+        if elegido and elegido != sg["id"]:
+            motivo += f"; subgénero por el LLM (el parecido decía «{sg['nombre']}»)"
+            sg = {**sg, "id": elegido, "nombre": taxonomia.nombre_sub(genero, elegido, carpeta)}
     if sg:
         motivo += f"; subgénero «{sg['nombre']}»"
         ev("subgenero", "fin", id=sg["id"], nombre=sg["nombre"], barras=[{"id": k, "nombre": taxonomia.nombre_sub(genero, k, carpeta), "valor": round(100 * v / max(max(sg["puntos"].values()), 1e-9))} for k, v in sg["puntos"].items()])
     else:
         ev("subgenero", "fin", omitido="los datos numéricos no tienen un tema que clasificar" if tipo == "datos" else "este género no tiene subgéneros" if not taxonomia.subgeneros(genero, carpeta) else "no hay pistas suficientes")
-    ev("decision", "fin", genero=genero, genero_nombre=GENEROS.get(genero, genero), galaxia=galaxia, tipo=tipo, subgenero_nombre=sg["nombre"] if sg else "", metodo=metodo, motivo=motivo)
+    margen, margen_sub, motivos_rev = _seguridad(gp, s, web, genero, sg, sg0, texto, tipo, bool(corr))
+    ev("decision", "fin", revisar=bool(motivos_rev), motivos_revisar=motivos_rev, genero=genero, genero_nombre=GENEROS.get(genero, genero), galaxia=galaxia, tipo=tipo, subgenero_nombre=sg["nombre"] if sg else "", metodo=metodo, motivo=motivo)
     palabras = re.findall(r"[a-z]+", t[:20000])
     es, en = sum(w in _ES for w in palabras), sum(w in _EN for w in palabras)
     h = _sha1(f)
     dup = next((rel for rel, m in leer_metadatos(carpeta).items() if m.get("hash") == h), "")
-    return {"galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "titulo": titulo_corto(f.stem), "titulo_largo": f.stem, "motivo": motivo, "metodo": metodo, "materias_web": materias[:8], "paginas": paginas,
+    return {"galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "titulo": tit, "titulo_largo": (inf_v or {}).get("titulo") or f.stem, "url": (inf_v or {}).get("url", ""), "motivo": motivo, "metodo": metodo, "materias_web": materias[:8], "paginas": paginas,
             "subgenero": sg["id"] if sg else "", "subgenero_nombre": sg["nombre"] if sg else "",
             "subgeneros": [{"id": k, "nombre": taxonomia.nombre_sub(genero, k, carpeta), "puntos": v} for k, v in sg["puntos"].items()] if sg else [],
             "tamano": f.stat().st_size, "extension": ext.lstrip("."), "idioma": "es" if es > en else "en" if en else "", "duplicado": dup,
             "vista_previa": re.sub(r"\s+", " ", texto[:1500]).strip()[:380],
             "temas": [{"tema": nombre_t, "puntos": pt} for (_, nombre_t), pt in sorted(puntos.items(), key=lambda kv: -kv[1])[:4] if pt >= 3] if genero in GENEROS_CON_TEMA else [],
             "generos": [{"id": g, "nombre": GENEROS[g], "puntos": pt} for g, pt in sorted(gp.items(), key=lambda kv: -kv[1])[:4] if pt],
-            "n_capitulos": len(caps), "capitulos": [c["titulo"] for c in caps[:6]]}
+            "confianza": round(s["confianza"], 3) if s else None, "margen": None if margen is None else round(margen, 3), "margen_sub": None if margen_sub is None else round(margen_sub, 3),
+            "revisar": bool(motivos_rev), "motivos_revisar": motivos_rev, "web_resumen": (info or {}).get("resumen", "")[:300], "web_generos": (info or {}).get("generos", []), "web_pagina": (info or {}).get("pagina", ""), "n_capitulos": len(caps), "capitulos": [c["titulo"] for c in caps[:6]]}
 
 
 def _slug(s: str) -> str:
@@ -609,11 +680,21 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
             meta[rel] = {"capitulos": caps, "paginas": pags, "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "etiquetas": (d.get("etiquetas") or "").strip(), "origen": str(f), "hash": h,
                          "fecha": datetime.now().isoformat(timespec="seconds"), "automatico": not (d.get("galaxia") or d.get("subtema") or d.get("tipo") or d.get("genero")) and (d.get("titulo") or auto["titulo"]).strip() == auto["titulo"],
                          "metodo": auto["metodo"], "motivo": auto["motivo"], "materias_web": auto.get("materias_web", []),
-                         "propuesta": {"galaxia": auto["galaxia"], "subtema": auto["subtema"], "genero": auto["genero"], "tipo": auto["tipo"], "subgenero": auto["subgenero"]}, "subgenero": subgenero}
+                         "propuesta": {"galaxia": auto["galaxia"], "subtema": auto["subtema"], "genero": auto["genero"], "tipo": auto["tipo"], "subgenero": auto["subgenero"]}, "subgenero": subgenero,
+                         "revisar": bool(auto["revisar"]) and not (d.get("genero") or d.get("subgenero")), "motivos_revisar": auto["motivos_revisar"], "margen": auto["margen"],
+                         "web_resumen": auto["web_resumen"], "web_generos": auto["web_generos"]}      # si lo fijaste tú al importar, no hay nada que revisar
             hashes[h] = rel
             if tipo == "libro":
                 nom = "portadas/" + h[:10] + ".jpg"
                 if portada(fin, base / nom, titulo, genero):
+                    meta[rel]["portada"] = nom
+            elif tipo == "video" and auto.get("url"):
+                meta[rel]["url"] = auto["url"]
+                img = enlaces.miniatura((enlaces.info(auto["url"]) or {}).get("miniatura", ""))      # la portada del vídeo es su miniatura
+                if img:
+                    nom = "portadas/" + h[:10] + ".jpg"
+                    (base / "portadas").mkdir(parents=True, exist_ok=True)
+                    (base / nom).write_bytes(img)
                     meta[rel]["portada"] = nom
             movido = False
             if d.get("modo") == "mover" and fin.stat().st_size == f.stat().st_size:     # «mover»: el original desaparece de su carpeta (la copia queda en la biblioteca)
@@ -623,12 +704,13 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
                 except OSError:
                     pass
             salida.append({**r, "movido": movido, "estado": "ok", "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "destino": str(fin), "mensaje": auto["motivo"],
-                           "subgenero": subgenero, "subgenero_nombre": validos.get(subgenero, "")})
+                           "subgenero": subgenero, "subgenero_nombre": validos.get(subgenero, ""), "revisar": meta[rel]["revisar"], "motivos_revisar": meta[rel]["motivos_revisar"]})
         except Exception as e:
             salida.append({**r, "estado": "error", "mensaje": str(e)})
     if any(s["estado"] == "ok" for s in salida):
         base.mkdir(parents=True, exist_ok=True)
         _guardar(carpeta, meta)
+        webinfo.guardar(carpeta)                                   # lo que se preguntó a Wikipedia no se vuelve a preguntar
         if indexar_ahora:
             _prog("Indexando el texto…", .1)
             ind = indexar(db or carpeta / "indice.db", {}, carpeta=carpeta)
@@ -696,7 +778,7 @@ def _ficha(carpeta: Path, rel: str, m: dict, con_portada: bool = True) -> dict:
     return {"rel": rel, "existe": f.is_file(), "titulo": m.get("titulo", ""), "titulo_largo": Path(m.get("origen", "")).stem or m.get("titulo", ""), "galaxia": m.get("galaxia", ""),
             "genero": m.get("genero", "otro"), "subgenero": m.get("subgenero", ""), "subgenero_nombre": taxonomia.nombre_sub(m.get("genero", ""), m.get("subgenero", ""), carpeta),
             "subtema": m.get("subtema", ""), "tipo": m.get("tipo", ""), "etiquetas": m.get("etiquetas", ""), "paginas": m.get("paginas", 0),
-            "capitulos": len(m.get("capitulos", [])), "fecha": m.get("fecha", "")[:10], "automatico": bool(m.get("automatico")), "fecha_hora": m.get("fecha", ""), "metodo": m.get("metodo", ""), "motivo": m.get("motivo", ""), "extension": f.suffix.lstrip(".").lower(),
+            "capitulos": len(m.get("capitulos", [])), "fecha": m.get("fecha", "")[:10], "automatico": bool(m.get("automatico")), "fecha_hora": m.get("fecha", ""), "revisar": bool(m.get("revisar")), "motivos_revisar": m.get("motivos_revisar", []), "metodo": m.get("metodo", ""), "motivo": m.get("motivo", ""), "extension": f.suffix.lstrip(".").lower(),
             "tamano": f.stat().st_size if f.is_file() else 0, "ruta": str(f), "portada": portada_datauri(carpeta, m.get("portada", "")) if con_portada else ""}
 
 
@@ -733,12 +815,32 @@ def editar(rel: str, cambios: dict, carpeta: Path | None = None, db: Path | None
         m[k] = v
         if k == "genero" and "subgenero" not in cambios and m.get("subgenero") not in {s[0] for s in taxonomia.subgeneros(v, carpeta)}:
             m["subgenero"] = ""                                       # al cambiar de género, el subgénero antiguo ya no vale
-    m["automatico"] = False
+    m["automatico"], m["revisar"] = False, False                  # lo has tocado tú: ya está revisado
     _guardar(carpeta, meta)
     if m.get("galaxia") != antes:
         _galaxia_en_indice(db or carpeta / "indice.db", str(carpeta / "biblioteca" / rel), m["galaxia"])
     if {"genero", "subtema"} & set(cambios):
         recordar_correccion(m, carpeta)
+    return _ficha(carpeta, rel, m)
+
+
+def por_revisar(carpeta: Path | None = None) -> list[dict]:
+    """Lo importado en lo que el clasificador no estaba seguro y que aún no has mirado: [{rel, titulo, genero, subgenero, motivos, margen}], lo menos claro primero."""
+    carpeta = Path(carpeta or carpeta_datos())
+    filas = [{"rel": rel, "titulo": m.get("titulo", ""), "genero": m.get("genero"), "subgenero": m.get("subgenero", ""), "motivos": m.get("motivos_revisar", []), "margen": m.get("margen")}
+             for rel, m in leer_metadatos(carpeta).items() if m.get("revisar")]
+    return sorted(filas, key=lambda x: (x["margen"] is None, x["margen"] if x["margen"] is not None else 0))
+
+
+def confirmar(rel: str, carpeta: Path | None = None) -> dict:
+    """«Está bien»: das por buena la clasificación actual. Deja de aparecer como pendiente y se recuerda como corrección tuya (lo parecido que importes se clasificará igual). Devuelve la ficha."""
+    carpeta = Path(carpeta or carpeta_datos()); meta = leer_metadatos(carpeta)
+    if rel not in meta:
+        raise KeyError(f"no está en el observatorio: {rel}")
+    m = meta[rel]
+    m["revisar"], m["automatico"] = False, False
+    _guardar(carpeta, meta)
+    recordar_correccion(m, carpeta)
     return _ficha(carpeta, rel, m)
 
 
@@ -764,6 +866,7 @@ def reclasificar_uno(rel: str, carpeta: Path | None = None, db: Path | None = No
     c = clasificar(f, carpeta)
     antes = m.get("galaxia")
     m["galaxia"], m["genero"], m["subtema"], m["automatico"], m["subgenero"] = c["galaxia"], c["genero"], c["subtema"], True, c["subgenero"]
+    m["revisar"], m["motivos_revisar"], m["margen"] = c["revisar"], c["motivos_revisar"], c["margen"]
     _guardar(carpeta, meta)
     if m["galaxia"] != antes:
         _galaxia_en_indice(db or carpeta / "indice.db", str(f), m["galaxia"])

@@ -65,3 +65,22 @@ def test_clasificar_usa_el_parecido_cuando_las_reglas_no_saben(monkeypatch, tmp_
     monkeypatch.setattr(c, "ACTIVO", True)
     r = im.clasificar(f, tmp_path)
     assert r["genero"] == "historia" and r["metodo"] in ("reglas", "parecido") and solo_reglas["metodo"] == "reglas"
+
+
+def test_autor_de_y_sesgo_por_autor(tmp_path):
+    from conocimiento import clasificador as c
+    assert c.autor_de("Niebla - Jose Ortega") == "jose ortega"
+    assert c.autor_de("Pratchett, Terry - Good Omens - Terry Pratchett") == "terry pratchett"
+    assert c.autor_de("regresion_logistica") == "" and c.autor_de("Informe - 2024") == ""
+    import json
+    b = tmp_path / "biblioteca"; b.mkdir()
+    (b / "metadatos.json").write_text(json.dumps({f"l/{i}.epub": {"origen": f"x/Libro {i} - Terry Pratchett.epub", "genero": "novela", "subgenero": "fantasia", "titulo": f"Libro {i}"} for i in range(3)}), encoding="utf-8")
+    s = c._sesgo_autor("terry pratchett", "subgenero", tmp_path)
+    assert abs(s["fantasia"] - c.PESO_AUTOR * 3 / 4) < 1e-9 and c._sesgo_autor("otro autor", "subgenero", tmp_path) == {}
+
+
+def test_la_cabeza_supervisada_se_fia_segun_los_ejemplos_propios():
+    from conocimiento import clasificador as c
+    ini, pleno = c.LIBROS_CABEZA
+    assert c.fuerza(0, c.LIBROS_CABEZA) == 0 and c.fuerza(ini, c.LIBROS_CABEZA) == 0 and c.fuerza(pleno, c.LIBROS_CABEZA) == 1 and c.fuerza(10 * pleno, c.LIBROS_CABEZA) == 1
+    assert 0 < c.fuerza((ini + pleno) // 2, c.LIBROS_CABEZA) < 1
