@@ -32,7 +32,7 @@ LIBROS_CABEZA_SUB = (20, 120)   # lo mismo para el subgénero, contando solo los
 MARGEN_REVISAR = 0.15    # distancia entre el género ganador y el segundo, dividida entre la escala máxima de puntos (1 + PESO_CABEZA + PESO_REGLAS); por debajo se pide revisión manual.
                          # Calibrado con 232 obras de validación y el LLM: marca ~44 % de las obras y recoge ~67 % de los errores de género (lo no marcado acierta ~85 %). Más alto = más avisos
 MARGEN_SUB_REVISAR = 0.03  # lo mismo para el subgénero (escala 1 + PESO_CABEZA_SUB)
-WIKI = True              # consultar Wikipedia/Wikidata (webinfo.py) por título y autor: su descripción y su género ayudan a clasificar. False: sin red
+WIKI = "auto"            # Wikipedia/Wikidata (webinfo.py) por título y autor: "auto" = solo si el LLM no está disponible (con LLM no suma: 86/66 frente a 86/68 en 73 obras; sin él sube 75/49 → 79/56); True = siempre; False = nunca (sin red)
 PESO_WIKI = 0.6          # lo que suma el género que dice Wikidata de la obra (y 0,6 · el subgénero)
 MIN_PARECIDO = 0.25      # por debajo, el libro no se parece a ningún género: se queda como lo dejaron las reglas (p. ej. «otro»)
 _cache: dict = {}        # nombre del modelo -> función(textos) -> matriz normalizada; también guarda los vectores de las semillas

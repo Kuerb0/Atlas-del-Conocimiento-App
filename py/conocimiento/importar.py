@@ -512,7 +512,7 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
     web = None
     forma = None
     info, pistas, pistas_sub, vista = None, None, None, re.sub(r"\s+", " ", texto[:1500])
-    if not corr and tipo in ("libro", "articulo", "video") and clasificador.WIKI:                    # Wikipedia/Wikidata por título y autor: descripción, tipo y género de la obra
+    if not corr and tipo in ("libro", "articulo", "video") and (clasificador.WIKI is True or (clasificador.WIKI == "auto" and not (llm.ACTIVO and llm.disponible(carpeta)))):                    # Wikipedia/Wikidata por título y autor: descripción, tipo y género de la obra
         pal = re.findall(r"[a-z]+", t[:20000])
         info = webinfo.buscar(tit, aut, ("es", "en") if sum(w in _ES for w in pal) > sum(w in _EN for w in pal) else ("en", "es"), carpeta)
         if info:
