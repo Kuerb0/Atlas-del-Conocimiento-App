@@ -161,6 +161,14 @@ class Api:
     def biblioteca_editar(self, rel, cambios):
         return self._bib("editar", str(rel), dict(cambios))
 
+    def biblioteca_confirmar(self, rel):
+        return self._bib("confirmar", str(rel))
+
+    def biblioteca_por_revisar(self):
+        """Cuántos documentos importados esperan que los revises (el visor pone la cifra en la pestaña del Observatorio)."""
+        r = self._bib("por_revisar")
+        return r if isinstance(r, dict) else {"n": len(r), "lista": r[:50]}
+
     def biblioteca_reclasificar(self, rel):
         return self._bib("reclasificar_uno", str(rel))
 
