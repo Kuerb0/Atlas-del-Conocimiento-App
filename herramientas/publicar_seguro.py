@@ -17,6 +17,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")        # la consola de Windows (cp1252) no sabe imprimir todo lo que dice publicar.py
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 if not args or "--rama" not in sys.argv:
     print(__doc__)
