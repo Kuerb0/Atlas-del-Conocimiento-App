@@ -357,7 +357,7 @@ function Abrir-App($dest) {
 
 # ---------------------------------------------------------------- IA local: embeddings (fastembed) + LLM (Ollama), con barras de progreso
 $Bloque = [string][char]0x2588; $Claro = [string][char]0x2591; $Ok = [string][char]0x2713; $No = [string][char]0x2717
-$RamGB = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
+$RamGB = try { [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB) } catch { 8 }          # si no se puede medir, se supone un equipo modesto
 $ModeloLLM = if ($RamGB -ge 12) { 'qwen2.5:7b' } else { 'qwen2.5:3b' }          # el que mejor rinde si el equipo lo aguanta (con menos de 12 GB de RAM, el pequeño)
 $TamLLM = if ($ModeloLLM -eq 'qwen2.5:7b') { '4,7 GB' } else { '1,9 GB' }
 $ModeloEmb = 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'
