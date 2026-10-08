@@ -708,6 +708,7 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
     if any(s["estado"] == "ok" for s in salida):
         base.mkdir(parents=True, exist_ok=True)
         _guardar(carpeta, meta)
+        webinfo.guardar(carpeta)                                   # lo que se preguntó a Wikipedia no se vuelve a preguntar
         if indexar_ahora:
             _prog("Indexando el texto…", .1)
             ind = indexar(db or carpeta / "indice.db", {}, carpeta=carpeta)

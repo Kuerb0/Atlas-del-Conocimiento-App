@@ -77,3 +77,10 @@ def test_autor_de_y_sesgo_por_autor(tmp_path):
     (b / "metadatos.json").write_text(json.dumps({f"l/{i}.epub": {"origen": f"x/Libro {i} - Terry Pratchett.epub", "genero": "novela", "subgenero": "fantasia", "titulo": f"Libro {i}"} for i in range(3)}), encoding="utf-8")
     s = c._sesgo_autor("terry pratchett", "subgenero", tmp_path)
     assert abs(s["fantasia"] - c.PESO_AUTOR * 3 / 4) < 1e-9 and c._sesgo_autor("otro autor", "subgenero", tmp_path) == {}
+
+
+def test_la_cabeza_supervisada_se_fia_segun_los_ejemplos_propios():
+    from conocimiento import clasificador as c
+    ini, pleno = c.LIBROS_CABEZA
+    assert c.fuerza(0, c.LIBROS_CABEZA) == 0 and c.fuerza(ini, c.LIBROS_CABEZA) == 0 and c.fuerza(pleno, c.LIBROS_CABEZA) == 1 and c.fuerza(10 * pleno, c.LIBROS_CABEZA) == 1
+    assert 0 < c.fuerza((ini + pleno) // 2, c.LIBROS_CABEZA) < 1

@@ -27,6 +27,8 @@ SATURA = 20              # con tantos puntos las reglas ya se consideran seguras
 PESO_AUTOR = 0.3         # lo que suma el género (o subgénero) que ya tienen los otros libros del mismo autor, según cuántos haya (n / (n + 1))
 PESO_CABEZA = 2.0        # lo que suma la probabilidad de un clasificador supervisado (regresión logística sobre los embeddings de TODOS los ejemplos); 0 = apagado. Validado: 53 → 68 % de acierto de género (evaluar_corpus.py)
 PESO_CABEZA_SUB = 2.0    # lo mismo para el subgénero (un clasificador por género, con las frases de la taxonomía y tus libros de ese género)
+LIBROS_CABEZA = (100, 400)   # la cabeza supervisada pesa 0 con 100 libros tuyos como ejemplos o menos y su peso completo con 400 o más: con pocos ejemplos EMPEORA (79 → 75 % con 73 obras), con cientos mejora 15 puntos
+LIBROS_CABEZA_SUB = (20, 120)   # lo mismo para el subgénero, contando solo los libros de ese género
 MARGEN_REVISAR = 0.15    # distancia entre el género ganador y el segundo, dividida entre la escala máxima de puntos (1 + PESO_CABEZA + PESO_REGLAS); por debajo se pide revisión manual.
                          # Calibrado con 232 obras de validación y el LLM: marca ~44 % de las obras y recoge ~67 % de los errores de género (lo no marcado acierta ~85 %). Más alto = más avisos
 MARGEN_SUB_REVISAR = 0.03  # lo mismo para el subgénero (escala 1 + PESO_CABEZA_SUB)
@@ -204,6 +206,11 @@ def extra_ejemplo(m: dict) -> str:
     return " ".join(x for x in (m.get("web_resumen", ""), m.get("etiquetas", "")) if x).strip()
 
 
+def fuerza(n: int, rango: tuple) -> float:
+    """0 si hay `rango[0]` ejemplos o menos, 1 con `rango[1]` o más, lineal entre medias: cuánto fiarse de un clasificador supervisado según los ejemplos propios que tiene."""
+    return min(1.0, max(0.0, (n - rango[0]) / (rango[1] - rango[0])))
+
+
 def sugerir(texto: str, carpeta: Path | str | None = None, autor: str = "", pistas: dict | None = None) -> dict | None:
     """{'genero', 'confianza' (margen sobre el segundo), 'puntos': {género: parecido}} o None si no hay modelo."""
     if not ACTIVO or _cache.get("fallo"):
@@ -222,12 +229,13 @@ def sugerir(texto: str, carpeta: Path | str | None = None, autor: str = "", pist
     for g in {e[1] for e in ej}:
         v = sorted((s + .04 * (e[2] - 1) for s, e in zip(sims, ej) if e[1] == g), reverse=True)[:2]
         puntos[g] = float(np.mean(v))
-    if PESO_CABEZA:
+    peso = PESO_CABEZA * fuerza(sum(e[2] > 1 for e in ej), LIBROS_CABEZA)
+    if peso:
         clf = _cabeza(ej, X)
         if clf is not None:
             for g, pr in zip(clf.classes_, clf.predict_proba(q.reshape(1, -1))[0]):
                 if g in puntos:
-                    puntos[g] += PESO_CABEZA * float(pr)
+                    puntos[g] += peso * float(pr)
     for g, b in _sesgo_autor(autor, "genero", carpeta).items():
         if g in puntos:
             puntos[g] += b
@@ -272,12 +280,13 @@ def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor:
             for sid in ids:
                 v = sorted((s + .04 * (e[2] - 1) for s, e in zip(sims, ej) if e[1] == sid), reverse=True)[:2]
                 puntos[sid] = float(np.mean(v))
-            if PESO_CABEZA_SUB:
+            peso = PESO_CABEZA_SUB * fuerza(sum(e[2] > 1 for e in ej), LIBROS_CABEZA_SUB)
+            if peso:
                 clf = _cabeza(ej, X)
                 if clf is not None:
                     for sid, pr in zip(clf.classes_, clf.predict_proba(q.reshape(1, -1))[0]):
                         if sid in puntos:
-                            puntos[sid] += PESO_CABEZA_SUB * float(pr)
+                            puntos[sid] += peso * float(pr)
             for sid, b in _sesgo_autor(autor, "subgenero", carpeta, lambda m: m.get("genero") == genero).items():
                 if sid in puntos:
                     puntos[sid] += b

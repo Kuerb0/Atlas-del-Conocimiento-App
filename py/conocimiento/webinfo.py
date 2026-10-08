@@ -20,7 +20,7 @@ from . import CARPETA, _norm
 
 INTERVALO = 1.0                  # segundos mínimos entre dos peticiones (todas las de este módulo)
 ESPERA = 10                      # segundos de espera por petición
-UA = "arbol-estadistica/1.0 (biblioteca personal; clasifica libros; contacto en el repositorio) python-urllib"
+UA = "ArbolEstadistica/1.11 (https://github.com/Kuerb0/Arbol_de_la_estadistica; biblioteca personal que clasifica libros) python-urllib"      # Wikimedia pide nombre de la herramienta y un contacto
 _cerrojo, _cache_lock = threading.Lock(), threading.Lock()
 _estado: dict = {"ultimo": 0.0, "fallos": 0, "descanso": 0.0, "cache": None, "nuevos": 0}
 _etiq: dict = {}                    # Q-id -> nombre (se repiten mucho: «literary work», «novel»…)
@@ -47,8 +47,10 @@ def _cargar(carpeta: Path | str | None) -> dict:
 def guardar(carpeta: Path | str | None = None) -> None:        # (los tests sustituyen _estado y no llevan «nuevos»: por eso .get)
     """Escribe la caché en disco (se llama al acabar una tanda; guardar en cada obra sería lento)."""
     with _cache_lock:
+        if _estado["cache"] is None:                                  # no se ha leído ni usado: no hay nada que escribir (y no se pisa la caché que hay en disco)
+            return
         try:
-            _ruta(carpeta).write_text(json.dumps(_estado["cache"] or {}, ensure_ascii=False), encoding="utf-8")
+            _ruta(carpeta).write_text(json.dumps(_estado["cache"], ensure_ascii=False), encoding="utf-8")
         except OSError:
             pass
 
