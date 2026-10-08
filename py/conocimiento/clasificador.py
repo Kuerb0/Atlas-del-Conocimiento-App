@@ -27,8 +27,11 @@ SATURA = 20              # con tantos puntos las reglas ya se consideran seguras
 PESO_AUTOR = 0.3         # lo que suma el género (o subgénero) que ya tienen los otros libros del mismo autor, según cuántos haya (n / (n + 1))
 PESO_CABEZA = 2.0        # lo que suma la probabilidad de un clasificador supervisado (regresión logística sobre los embeddings de TODOS los ejemplos); 0 = apagado. Validado: 53 → 68 % de acierto de género (evaluar_corpus.py)
 PESO_CABEZA_SUB = 2.0    # lo mismo para el subgénero (un clasificador por género, con las frases de la taxonomía y tus libros de ese género)
-MARGEN_REVISAR = 0.27    # distancia entre el género ganador y el segundo, dividida entre la escala máxima de puntos (1 + PESO_CABEZA + PESO_REGLAS); por debajo se pide revisión manual. Con el corpus de validación marca el ~45 % y recoge ~80 % de los errores de género
-MARGEN_SUB_REVISAR = 0.05  # lo mismo para el subgénero (escala 1 + PESO_CABEZA_SUB)
+MARGEN_REVISAR = 0.15    # distancia entre el género ganador y el segundo, dividida entre la escala máxima de puntos (1 + PESO_CABEZA + PESO_REGLAS); por debajo se pide revisión manual.
+                         # Calibrado con 232 obras de validación y el LLM: marca ~44 % de las obras y recoge ~67 % de los errores de género (lo no marcado acierta ~85 %). Más alto = más avisos
+MARGEN_SUB_REVISAR = 0.03  # lo mismo para el subgénero (escala 1 + PESO_CABEZA_SUB)
+WIKI = True              # consultar Wikipedia/Wikidata (webinfo.py) por título y autor: su descripción y su género ayudan a clasificar. False: sin red
+PESO_WIKI = 0.6          # lo que suma el género que dice Wikidata de la obra (y 0,6 · el subgénero)
 MIN_PARECIDO = 0.25      # por debajo, el libro no se parece a ningún género: se queda como lo dejaron las reglas (p. ej. «otro»)
 _cache: dict = {}        # nombre del modelo -> función(textos) -> matriz normalizada; también guarda los vectores de las semillas
 
@@ -152,7 +155,7 @@ def _ejemplos(carpeta: Path | str) -> list[tuple[str, str, float]]:
         from .importar import GENEROS, leer_metadatos
         for m in leer_metadatos(Path(carpeta)).values():
             if m.get("genero") in GENEROS and m.get("genero") != "otro":
-                ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), m.get("etiquetas", "")), m["genero"], 1.5 if m.get("automatico") else 2.5))
+                ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), m["genero"], 1.5 if m.get("automatico") else 2.5))
     except Exception:
         pass
     return ej
@@ -168,7 +171,7 @@ def vecinos(texto: str, carpeta: Path | str, k: int = 6) -> list[dict]:
         if not ms:
             return []
         emb = _embedder(modelo(carpeta), carpeta)
-        X = emb([texto_libro(m.get("titulo", ""), m.get("capitulos", []), m.get("etiquetas", "")) for m in ms])
+        X = emb([texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)) for m in ms])
         orden = np.argsort(-(X @ emb([texto])[0]))[:k]
         return [{"titulo": ms[i].get("titulo", ""), "autor": autor_de(Path(ms[i].get("origen", "")).stem), "genero": ms[i]["genero"], "subgenero": ms[i].get("subgenero", "")} for i in orden]
     except Exception:
@@ -196,7 +199,12 @@ def _cabeza_(clave, ej, X):
     return _cabezas[clave]
 
 
-def sugerir(texto: str, carpeta: Path | str | None = None, autor: str = "") -> dict | None:
+def extra_ejemplo(m: dict) -> str:
+    """El texto que se suma al título y los capítulos de un libro de la biblioteca cuando hace de ejemplo: sus etiquetas y su descripción de Wikipedia (si la tuvo al importarse)."""
+    return " ".join(x for x in (m.get("web_resumen", ""), m.get("etiquetas", "")) if x).strip()
+
+
+def sugerir(texto: str, carpeta: Path | str | None = None, autor: str = "", pistas: dict | None = None) -> dict | None:
     """{'genero', 'confianza' (margen sobre el segundo), 'puntos': {género: parecido}} o None si no hay modelo."""
     if not ACTIVO or _cache.get("fallo"):
         return None
@@ -223,6 +231,9 @@ def sugerir(texto: str, carpeta: Path | str | None = None, autor: str = "") -> d
     for g, b in _sesgo_autor(autor, "genero", carpeta).items():
         if g in puntos:
             puntos[g] += b
+    for g, w in (pistas or {}).items():                                   # lo que dice Wikidata de la obra
+        if g in puntos:
+            puntos[g] += PESO_WIKI * w
     orden = sorted(puntos, key=puntos.get, reverse=True)
     return {"genero": orden[0], "confianza": puntos[orden[0]] - puntos[orden[1]], "puntos": {g: round(puntos[g], 3) for g in orden}}
 
@@ -234,7 +245,7 @@ def _palabras(t: str) -> set:
     return {w for w in __import__("re").findall(r"[a-z]{4,}", _norm(t)) if w not in _PARADA}
 
 
-def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor: str = "") -> dict | None:
+def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor: str = "", pistas: dict | None = None) -> dict | None:
     """Subgénero (de la taxonomía del género) que mejor describe el texto: {'id','nombre','confianza','puntos': {id: 0-100}} o None si el género no tiene subgéneros.
     Con modelo de embeddings compara con las frases del subgénero y con lo que ya tienes en esa categoría; sin modelo, por palabras en común."""
     from . import taxonomia
@@ -252,7 +263,7 @@ def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor:
                 ids = {s[0] for s in subs}
                 for m in leer_metadatos(carpeta).values():
                     if m.get("genero") == genero and m.get("subgenero") in ids:
-                        ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), m.get("etiquetas", "")), m["subgenero"], 1.5 if m.get("automatico") else 2.5))
+                        ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), m["subgenero"], 1.5 if m.get("automatico") else 2.5))
             except Exception:
                 pass
             X, q = emb([e[0] for e in ej]), emb([texto])[0]
@@ -270,6 +281,9 @@ def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor:
             for sid, b in _sesgo_autor(autor, "subgenero", carpeta, lambda m: m.get("genero") == genero).items():
                 if sid in puntos:
                     puntos[sid] += b
+            for sid, w in (pistas or {}).items():
+                if sid in puntos:
+                    puntos[sid] += PESO_WIKI * w
         except Exception:
             _cache["fallo"] = True
             puntos = None

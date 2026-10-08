@@ -58,6 +58,13 @@ def resultados() -> list[dict]:
     return out
 
 
+def progreso() -> list[dict]:
+    """La evolución por versión: los pasos de `enes/progreso.json` ([{archivo, version, paso}] en orden) con el acierto de cada resultado medido sobre la misma validación."""
+    res = {r["nombre"]: r for r in resultados()}
+    return [{"version": p["version"], "paso": p["paso"], "g": r["g"], "g_lo": r["g_lo"], "g_hi": r["g_hi"], "s": r["s"], "n": r["n"], "n_s": r["n_s"]}
+            for p in leer(RAIZ / "enes" / "progreso.json", []) for r in [res.get(p["archivo"])] if r]
+
+
 def vivo() -> dict | None:
     v = leer(RAIZ / "enes" / "resultados" / "_vivo.json", None)
     if v and time.time() - v["t"] < 600:
@@ -106,11 +113,12 @@ h1{font-size:20px;margin:0 0 4px}h2{font-size:13px;text-transform:uppercase;lett
 table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--bd)}th:first-child,td:first-child{text-align:left}th{font-size:12px;color:var(--mut);font-weight:600}
 .ok{color:var(--ok)}.ko{color:var(--ko)}.pill{display:inline-block;padding:1px 8px;border-radius:99px;background:var(--bar);font-size:12px}
 .lab{width:96px;color:var(--mut);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.val{width:44px;text-align:right;font-size:12px}
-svg text{fill:var(--tx);font-size:11px}.pulse{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--ok);animation:p 1.4s infinite}@keyframes p{50%{opacity:.25}}
+svg text{fill:var(--tx);font-size:11px}svg text.m{fill:var(--mut);font-size:10px}.pulse{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--ok);animation:p 1.4s infinite}@keyframes p{50%{opacity:.25}}
 </style><body>
 <h1>Progreso del clasificador</h1><div class="sub" id="sub">Cargando…</div>
 <div class="grid">
 <div class="card" id="ahora"></div><div class="card" id="maq"></div>
+<div class="card full"><h2>Progreso por versión: acierto de género y de subgénero (misma validación, sin LLM salvo que se indique)</h2><div id="prog"></div></div>
 <div class="card full"><h2>Configuraciones medidas (acierto de género con IC 95 %)</h2><div id="graf"></div><div style="overflow:auto"><table id="tabla"></table></div></div>
 <div class="card"><h2>Corpus</h2><div id="corpus"></div></div><div class="card"><h2>Últimas obras evaluadas</h2><div id="ultimas"></div></div>
 </div>
@@ -121,6 +129,14 @@ function graf(rs){const W=1040,H=26*rs.length+30,x=v=>150+v*(W-190);let s=`<svg 
  for(let t=0;t<=1;t+=.25)s+=`<line x1="${x(t)}" x2="${x(t)}" y1="6" y2="${H-18}" stroke="var(--bd)"/><text x="${x(t)}" y="${H-4}" text-anchor="middle">${100*t}%</text>`;
  rs.forEach((r,i)=>{const y=14+i*26;s+=`<text x="144" y="${y+4}" text-anchor="end">${r.nombre}</text><rect x="${x(0)}" y="${y-7}" width="${x(r.g)-x(0)}" height="14" rx="3" fill="var(--ac)" opacity=".85"/><line x1="${x(r.g_lo)}" x2="${x(r.g_hi)}" y1="${y}" y2="${y}" stroke="var(--tx)" stroke-width="2"/><text x="${x(r.g_hi)+6}" y="${y+4}">${pc(r.g)}</text>`});
  return s+'</svg>'}
+function lineas(ps){if(!ps.length)return '<div class="mut">Aún no hay pasos registrados.</div>';const W=1040,H=300,L=46,R=24,T=18,B=64,n=ps.length,x=i=>L+(n===1?(W-L-R)/2:i*(W-L-R)/(n-1)),y=v=>T+(1-v)*(H-T-B);
+ let s=`<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+ for(let t=0;t<=1.001;t+=.2)s+=`<line x1="${L}" x2="${W-R}" y1="${y(t)}" y2="${y(t)}" stroke="var(--bd)"/><text x="${L-6}" y="${y(t)+4}" text-anchor="end">${Math.round(100*t)}%</text>`;
+ const serie=(k,col,off)=>{let d=ps.map((p,i)=>`${i?'L':'M'}${x(i)},${y(p[k])}`).join(' ');let o=`<path d="${d}" fill="none" stroke="${col}" stroke-width="2.5"/>`;
+  ps.forEach((p,i)=>{if(k==='g')o+=`<line x1="${x(i)}" x2="${x(i)}" y1="${y(p.g_lo)}" y2="${y(p.g_hi)}" stroke="${col}" stroke-width="1.5" opacity=".55"/>`;o+=`<circle cx="${x(i)}" cy="${y(p[k])}" r="5" fill="${col}"/><text x="${x(i)}" y="${y(p[k])+off}" text-anchor="middle" style="font-weight:650">${(100*p[k]).toFixed(1)}</text>`});return o};
+ s+=serie('g','var(--ac)',-10)+serie('s','var(--ok)',17);
+ ps.forEach((p,i)=>{s+=`<text x="${x(i)}" y="${H-38}" text-anchor="middle" style="font-weight:650">${p.version}</text><text x="${x(i)}" y="${H-22}" text-anchor="middle" class="m">${p.paso}</text><text x="${x(i)}" y="${H-8}" text-anchor="middle" class="m">n=${p.n}</text>`});
+ return s+'</svg><div class="mut" style="margin-top:4px"><span style="color:var(--ac)">●</span> género (con IC 95 %) &nbsp; <span style="color:var(--ok)">●</span> subgénero (género y subgénero correctos)</div>'}
 async function ciclo(){try{const e=await (await fetch('estado')).json();
  $('sub').innerHTML=`<span class="pulse"></span> actualizado ${new Date().toLocaleTimeString()} · se refresca cada 3 s`;
  const v=e.vivo;
@@ -133,7 +149,7 @@ async function ciclo(){try{const e=await (await fetch('estado')).json();
  $('maq').innerHTML='<h2>Tu equipo</h2>'+(g?`<div class="row"><span class="lab">GPU ${g.uso}%</span><div class="track"><div class="fill" style="width:${g.uso}%"></div></div></div><div class="row"><span class="lab">VRAM</span><div class="track"><div class="fill" style="width:${100*g.vram/g.vram_total}%"></div></div><span class="val" style="width:auto">${(g.vram/1024).toFixed(1)}/${(g.vram_total/1024).toFixed(0)} GB</span></div><div class="mut">${g.nombre} · ${g.temp} °C</div>`:'<div class="mut">GPU no detectada</div>')+
   (r?`<div class="row"><span class="lab">RAM ${r.uso}%</span><div class="track"><div class="fill" style="width:${r.uso}%"></div></div><span class="val" style="width:auto">${r.libre_gb} GB libres</span></div>`:'')+
   `<div class="mut" style="margin-top:6px">Ollama: ${o===null?'apagado':o.length?o.map(x=>`<span class="pill">${x.modelo} · ${x.gb} GB (${x.vram_gb} GB en GPU)</span>`).join(' '):'sin modelo cargado'}</div>`;
- const rs=e.resultados; $('graf').innerHTML=graf(rs);
+ const rs=e.resultados; $('graf').innerHTML=graf(rs); $('prog').innerHTML=lineas(e.progreso||[]);
  $('tabla').innerHTML='<tr><th>Configuración</th><th>Obras</th><th>Género</th><th>IC 95 %</th><th>Subgénero</th><th>LLM</th><th>s/obra</th><th>Hora</th></tr>'+rs.slice().reverse().map(r=>`<tr><td title="${r.sets}">${r.nombre}</td><td>${r.n}</td><td><b>${pc(r.g)}</b></td><td class="mut">${(100*r.g_lo).toFixed(0)}–${(100*r.g_hi).toFixed(0)}</td><td>${pc(r.s)} <span class="mut">(${r.n_s})</span></td><td>${r.llm}</td><td>${r.seg.toFixed(1)}</td><td class="mut">${r.hora}</td></tr>`).join('');
  const c=e.corpus; $('corpus').innerHTML=`<div class="mut">${c.total} obras · entrenamiento ${c.entrenamiento} · validación ${c.validacion} · prueba ${c.prueba}</div><div style="margin:8px 0 4px"><b>Por tipo</b></div>`+barras(c.tipos,Math.max(...Object.values(c.tipos),1))+`<div style="margin:8px 0 4px"><b>Por género</b></div>`+barras(c.generos,Math.max(...Object.values(c.generos),1));
  $('ultimas').innerHTML=v&&v.ultimas&&v.ultimas.length?v.ultimas.slice().reverse().map(x=>`<div class="row"><span class="${x.g===x.pg?'ok':'ko'}">${x.g===x.pg?'✓':'✗'}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${x.titulo}">${x.titulo}</span><span class="mut">${x.g}${x.g===x.pg?'':' → '+x.pg}</span></div>`).join(''):'<div class="mut">Aparecerán aquí cuando corra una evaluación nueva.</div>';
@@ -148,7 +164,7 @@ class H(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.startswith("/estado"):
-            cuerpo, tipo = json.dumps({"vivo": vivo(), "corpus": corpus(), "resultados": resultados(), "maquina": maquina()}, ensure_ascii=False).encode("utf-8"), "application/json"
+            cuerpo, tipo = json.dumps({"vivo": vivo(), "corpus": corpus(), "resultados": resultados(), "progreso": progreso(), "maquina": maquina()}, ensure_ascii=False).encode("utf-8"), "application/json"
         else:
             cuerpo, tipo = PAGINA.encode("utf-8"), "text/html"
         self.send_response(200)

@@ -18,11 +18,12 @@ from pathlib import Path
 
 from . import CARPETA, _norm
 
-INTERVALO = 0.7                  # segundos mínimos entre dos peticiones (todas las de este módulo)
+INTERVALO = 1.0                  # segundos mínimos entre dos peticiones (todas las de este módulo)
 ESPERA = 10                      # segundos de espera por petición
 UA = "arbol-estadistica/1.0 (biblioteca personal; clasifica libros; contacto en el repositorio) python-urllib"
 _cerrojo, _cache_lock = threading.Lock(), threading.Lock()
-_estado: dict = {"ultimo": 0.0, "fallos": 0, "descanso": 0.0, "cache": None}
+_estado: dict = {"ultimo": 0.0, "fallos": 0, "descanso": 0.0, "cache": None, "nuevos": 0}
+_etiq: dict = {}                    # Q-id -> nombre (se repiten mucho: «literary work», «novel»…)
 
 # Tipo/género según Wikidata o el resumen → subgénero de novela (id de taxonomia.py). El primero que case gana.
 SUB_NOVELA = [("historica", r"historical (?:novel|fiction)|novela historica"), ("negra", r"detective|crime|mystery|noir|novela negra|policiaca"), ("thriller", r"thriller|espionage|spy"),
@@ -43,7 +44,7 @@ def _cargar(carpeta: Path | str | None) -> dict:
     return _estado["cache"]
 
 
-def guardar(carpeta: Path | str | None = None) -> None:
+def guardar(carpeta: Path | str | None = None) -> None:        # (los tests sustituyen _estado y no llevan «nuevos»: por eso .get)
     """Escribe la caché en disco (se llama al acabar una tanda; guardar en cada obra sería lento)."""
     with _cache_lock:
         try:
@@ -95,8 +96,11 @@ def _apellido(autor: str) -> str:
 def _etiquetas(ids: list[str]) -> dict:
     if not ids:
         return {}
-    d = _api("wikidata", action="wbgetentities", ids="|".join(ids[:50]), props="labels", languages="en|es")["entities"]
-    return {k: (v.get("labels", {}).get("en") or v.get("labels", {}).get("es") or {}).get("value", "") for k, v in d.items()}
+    nuevos = [i for i in ids if i not in _etiq]
+    if nuevos:
+        d = _api("wikidata", action="wbgetentities", ids="|".join(nuevos[:50]), props="labels", languages="en|es")["entities"]
+        _etiq.update({k: (v.get("labels", {}).get("en") or v.get("labels", {}).get("es") or {}).get("value", "") for k, v in d.items()})
+    return {i: _etiq.get(i, "") for i in ids}
 
 
 def _de_wikidata(qids: list[str]) -> dict:
@@ -116,6 +120,16 @@ def es_obra(tipos: list[str]) -> bool:
     """¿Wikidata dice que es una obra escrita (novela, ensayo, libro…) y no una persona, una película o un personaje?"""
     t = " ".join(tipos).lower()
     return bool(re.search(r"literary work|novel|book|essay|treatise|short story|written work|publication|poem|play\b|writing|text\b|non-fiction|scholarly|monograph", t)) and not re.search(r"\bhuman\b|film|fictional|television|taxon|album|musical", t)
+
+
+def genero_de(tipos: list[str], generos: list[str], resumen: str) -> str:
+    """Género (clave de GENEROS) que sugieren el tipo, el género y la descripción de una obra; "" si no dice nada. Las obras de ficción son «novela»."""
+    from .telescopio import genero_desde_materias
+    t = _norm(" ".join(tipos + generos) + " " + resumen[:200])
+    if re.search(r"\bnovel|\bfiction\b|\bnovela|\bcuento|short story|\bfantasy|\bnovella", t):
+        return "novela"
+    g = genero_desde_materias(tipos + generos + [resumen[:200]])
+    return "" if g == "otro" else g
 
 
 def subgenero_novela(texto: str) -> str:
@@ -160,7 +174,7 @@ def buscar(titulo: str, autor: str = "", idiomas: tuple = ("en", "es"), carpeta:
                     continue
                 ext = p["extract"]
                 res = {"pagina": p["title"], "lang": lang, "resumen": re.sub(r"\s+", " ", ext).strip()[:500], "tipos": tipos, "generos": gens,
-                       "subgenero": subgenero_novela(" ".join(gens + [ext[:240]]))}
+                       "subgenero": subgenero_novela(" ".join(gens + [ext[:240]])), "genero": genero_de(tipos, gens, ext)}
                 break
             if res:
                 break
@@ -168,4 +182,8 @@ def buscar(titulo: str, autor: str = "", idiomas: tuple = ("en", "es"), carpeta:
         return None                                                  # sin red o caído: no se guarda (se volverá a intentar)
     with _cache_lock:
         _cargar(carpeta)[clave] = res or {}
+        _estado["nuevos"] = _estado.get("nuevos", 0) + 1
+        guardar_ya = _estado["nuevos"] % 10 == 0
+    if guardar_ya:
+        guardar(carpeta)
     return res
