@@ -40,6 +40,7 @@ MODELO_GRANDE, MODELO_PEQUENO = "qwen2.5:7b", "qwen2.5:3b"      # 4,7 GB y 1,9 G
 MODELO = MODELO_GRANDE if ram_gb() >= 12 else MODELO_PEQUENO     # el que mejor rinde si el equipo lo aguanta
 URL = "http://localhost:11434"
 ACTIVO = True                    # False: nunca se consulta (los tests lo apagan)
+PASAJES = 0                      # cuántos pasajes del cuerpo del documento ve el LLM además del principio (0 = solo el principio, lo medido en 1.11.0); sin medir con LLM: probar con --set llm.PASAJES=3
 VECINOS = 8                      # cuántos libros parecidos de tu biblioteca se le enseñan al LLM como ejemplos resueltos (0 = solo los 4 fijos); ver clasificador.vecinos
 ESPERA = 180                    # segundos por consulta: en CPU un modelo de 3B tarda 10-40 s por libro
 _estado: dict = {}               # "ok": ¿Ollama responde y tiene el modelo?; "t": cuándo se miró. Si estaba apagado se vuelve a mirar cada minuto (por si se abre después que la app)
@@ -132,7 +133,7 @@ def _prompt(titulo: str, capitulos: list, vista: str, materias: list, generos: d
         ej = "\n".join(f'Libro: «{v["titulo"]}»{" de " + v["autor"] if v["autor"] else ""}.\n{{"genero": "{v["genero"]}", "motivo": "…"}}' for v in vecinos)
     caps = "; ".join((c["titulo"] if isinstance(c, dict) else str(c)) for c in capitulos[:8]) or "(sin índice)"
     return (f"Eres bibliotecario. Elige el género que mejor describe el LIBRO (no solo las palabras de su título).\nGéneros:\n{lista}\n\nEjemplos resueltos:\n{ej}\n\n"
-            f"Ahora este:\nLibro: «{titulo}»{' de ' + autor if autor else ''}. Capítulos o partes: {caps}. Materias según Open Library: {', '.join(materias[:6]) or '(no hay)'}. Principio del texto: {vista[:600]}\n\n"
+            f"Ahora este:\nLibro: «{titulo}»{' de ' + autor if autor else ''}. Capítulos o partes: {caps}. Materias según Open Library: {', '.join(materias[:6]) or '(no hay)'}. Texto: {vista[:1300]}\n\n"
             'Responde solo con JSON: {"genero": "<id>", "motivo": "<una frase corta>"}.')
 
 
@@ -162,7 +163,7 @@ def subgenero(titulo: str, capitulos: list, vista: str, genero: str, subs: list,
     ej = "".join(f'- «{v["titulo"]}»{" de " + v["autor"] if v["autor"] else ""} → {v["subgenero"]}\n' for v in (vecinos or []) if v.get("subgenero") in ids)
     ej = f"Libros parecidos que el usuario ya clasificó:\n{ej}\n" if ej else ""
     prompt = (f"Eres bibliotecario. El libro es de género «{genero}». Elige el subgénero que mejor lo describe.\nSubgéneros:\n{lista}\n\n{ej}"
-              f"Libro: «{titulo}»{' de ' + autor if autor else ''}. Capítulos o partes: {caps}. Principio del texto: {vista[:500]}\n\n"
+              f"Libro: «{titulo}»{' de ' + autor if autor else ''}. Capítulos o partes: {caps}. Texto: {vista[:1100]}\n\n"
               'Responde solo con JSON: {"subgenero": "<id>", "motivo": "<una frase corta>"}.')
     esquema = {"type": "object", "properties": {"subgenero": {"type": "string", "enum": ids}, "motivo": {"type": "string"}}, "required": ["subgenero", "motivo"]}
     try:

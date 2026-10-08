@@ -529,9 +529,13 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
         ev("web", "fin", materias=materias[:5], voto=web or "", voto_nombre=GENEROS.get(web, ""), forma=forma or "", barras=_barras(gp, forma))
     else:
         ev("web", "fin", omitido="solo se consulta para libros y artículos con título" if not corr and clasificador.WEB else "desactivado" if not clasificador.WEB else "ya corregido por ti")
+    B = clasificador.vector_cuerpo(texto, carpeta) if (not corr and tipo not in ("codigo", "datos")) else None       # pasajes del cuerpo (lo único que ve el modelo más allá de la portada)
+    if B is not None:
+        clasificador._pendientes[_sha1(f)] = B
+    vista_llm = vista[:600] + ("".join(" […] " + p[:300] for p in clasificador.pasajes(texto)[1::2][:llm.PASAJES]) if llm.PASAJES and clasificador.CUERPO and tipo not in ("codigo", "datos") else "")       # lo que lee el LLM: el principio y unos pasajes del cuerpo
     if not corr and tipo != "codigo" and clasificador.ACTIVO:                                  # parecido con ejemplos (embeddings locales) mezclado con las reglas; sin modelo, solo reglas
         ev("parecido", "inicio")
-        s = clasificador.sugerir(clasificador.texto_libro(tit, caps, vista), carpeta, aut, pistas)
+        s = clasificador.sugerir(clasificador.texto_libro(tit, caps, vista), carpeta, aut, pistas, B)
         if s:
             nuevo, cambia = clasificador.decidir(gp, genero, s, web)
             if cambia:
@@ -551,14 +555,14 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
         genero, metodo = forma, "web"
         subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
         motivo += f"; Open Library la clasifica como {', '.join(m for m in materias if _norm(m).strip(' .') in _FORMA[forma])}"
-    vec = clasificador.vecinos(clasificador.texto_libro(tit, caps, vista), carpeta, llm.VECINOS) if llm.VECINOS and llm.ACTIVO and not corr else None
+    vec = clasificador.vecinos(clasificador.texto_libro(tit, caps, vista), carpeta, llm.VECINOS, B) if llm.VECINOS and llm.ACTIVO and not corr else None
     if corr or tipo == "codigo" or not llm.ACTIVO:
         ev("llm", "fin", omitido="no aplica" if tipo == "codigo" or corr else "desactivado")
     elif forma or not (clasificador.dudoso(gp, s, web) or llm.ajustes(carpeta).get("siempre")):       # «siempre»: en ajustes.json se puede pedir que el LLM opine de todos los libros (+2 puntos de acierto, ~10 s más por libro)
         ev("llm", "fin", omitido="no hacía falta: el resultado era claro")
     else:                                                                  # caso dudoso: se pregunta al LLM local (Ollama)
         ev("llm", "inicio")
-        r = llm.clasificar(tit, caps, vista, materias, {k: v for k, v in GENEROS.items()}, carpeta, aut, vec) if llm.disponible(carpeta) else None
+        r = llm.clasificar(tit, caps, vista_llm, materias, {k: v for k, v in GENEROS.items()}, carpeta, aut, vec) if llm.disponible(carpeta) else None
         marcador = clasificador.puntuar(gp, s, web) if s else gp
         top3 = [g for g, v in sorted(marcador.items(), key=lambda kv: -kv[1])[:3] if v > 0]
         if r and top3 and r["genero"] not in top3:                          # un modelo pequeño a veces se inventa un género: si no está entre los 3 más probables, se ignora
@@ -573,10 +577,10 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
     if materias and metodo not in ("reglas", "llm"):
         motivo += f"; materias web: {', '.join(materias[:4])}"
     ev("subgenero", "inicio")
-    sg = None if tipo == "datos" else clasificador.subgenero(clasificador.texto_libro(tit, caps, vista), genero, carpeta, aut, pistas_sub if genero == "novela" else None)       # una tabla de números no tiene tema
+    sg = None if tipo == "datos" else clasificador.subgenero(clasificador.texto_libro(tit, caps, vista), genero, carpeta, aut, pistas_sub if genero == "novela" else None, B)       # una tabla de números no tiene tema
     sg0 = sg["id"] if sg else None                                                 # lo que decía el parecido, por si el LLM lo cambia (es una discrepancia que se avisa)
     if sg and not corr and llm.ACTIVO and llm.disponible(carpeta):          # el LLM conoce las obras: elige entre los subgéneros de su género (las novelas sin pistas en el texto son lo que peor sale por parecido)
-        elegido = llm.subgenero(tit, caps, vista, GENEROS[genero], taxonomia.subgeneros(genero, carpeta), aut, carpeta, vec)
+        elegido = llm.subgenero(tit, caps, vista_llm, GENEROS[genero], taxonomia.subgeneros(genero, carpeta), aut, carpeta, vec)
         if elegido and elegido != sg["id"]:
             motivo += f"; subgénero por el LLM (el parecido decía «{sg['nombre']}»)"
             sg = {**sg, "id": elegido, "nombre": taxonomia.nombre_sub(genero, elegido, carpeta)}
@@ -685,6 +689,7 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
                          "revisar": bool(auto["revisar"]) and not (d.get("genero") or d.get("subgenero")), "motivos_revisar": auto["motivos_revisar"], "margen": auto["margen"],
                          "web_resumen": auto["web_resumen"], "web_generos": auto["web_generos"]}      # si lo fijaste tú al importar, no hay nada que revisar
             hashes[h] = rel
+            clasificador.guardar_vector(carpeta, h, clasificador._pendientes.pop(h, None))        # el cuerpo de este documento servirá de ejemplo a los próximos
             if tipo == "libro":
                 nom = "portadas/" + h[:10] + ".jpg"
                 if portada(fin, base / nom, titulo, genero):

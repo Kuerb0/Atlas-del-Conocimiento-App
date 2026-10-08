@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 import threading
@@ -34,6 +35,9 @@ MARGEN_REVISAR = 0.15    # distancia entre el género ganador y el segundo, divi
 MARGEN_SUB_REVISAR = 0.03  # lo mismo para el subgénero (escala 1 + PESO_CABEZA_SUB)
 WIKI = "auto"            # Wikipedia/Wikidata (webinfo.py) por título y autor: "auto" = solo si el LLM no está disponible (con LLM no suma: 86/66 frente a 86/68 en 73 obras; sin él sube 75/49 → 79/56); True = siempre; False = nunca (sin red)
 PESO_WIKI = 0.6          # lo que suma el género que dice Wikidata de la obra (y 0,6 · el subgénero)
+CUERPO = True              # leer también pasajes repartidos por el cuerpo del documento (el modelo de embeddings solo lee ~100 palabras: sin esto, solo ve la portada). Medido: género 63 → 73 %, subgénero 48 → 55 %
+PESO_CUERPO = 1.0          # lo que pesa el vector del cuerpo frente al de título + capítulos + principio al mezclarlos
+PASAJES, LARGO_PASAJE = 8, 500
 MIN_PARECIDO = 0.25      # por debajo, el libro no se parece a ningún género: se queda como lo dejaron las reglas (p. ej. «otro»)
 _cache: dict = {}        # nombre del modelo -> función(textos) -> matriz normalizada; también guarda los vectores de las semillas
 
@@ -126,6 +130,78 @@ def texto_libro(titulo: str, capitulos: list, vista: str = "") -> str:
     return f"{titulo}. {caps}. {vista[:700]}".strip()
 
 
+def pasajes(texto: str) -> list[str]:
+    """Hasta PASAJES fragmentos de LARGO_PASAJE caracteres repartidos por el cuerpo del texto (se salta el principio: portada, licencia, índice)."""
+    cuerpo = re.sub(r"\s+", " ", texto[2000:])
+    if len(cuerpo) < 800:
+        cuerpo = re.sub(r"\s+", " ", texto)
+    paso = max(len(cuerpo) // PASAJES, 1)
+    return [p for k in range(PASAJES) for p in [cuerpo[k * paso: k * paso + LARGO_PASAJE]] if p.strip()]
+
+
+def vector_cuerpo(texto: str, carpeta: Path | str | None = None):
+    """Vector normalizado del cuerpo de un documento (media de los embeddings de sus pasajes), o None si no hay modelo o el documento no tiene texto."""
+    if not ACTIVO or not CUERPO or _cache.get("fallo"):
+        return None
+    ps = pasajes(texto)
+    if not ps:
+        return None
+    try:
+        v = _embedder(modelo(carpeta or CARPETA), carpeta)(ps).mean(axis=0)
+    except Exception:
+        _cache["fallo"] = True
+        return None
+    return v / (np.linalg.norm(v) or 1.0)
+
+
+_vec: dict = {}              # carpeta -> {hash: vector del cuerpo}; viven en biblioteca/vectores.npz (no se publican: .gitignore)
+_pendientes: dict = {}       # hash -> vector recién calculado al clasificar, a la espera de que importar() lo guarde
+
+
+def vectores(carpeta: Path | str) -> dict:
+    k = str(Path(carpeta))
+    if k not in _vec:
+        try:
+            z = np.load(Path(carpeta) / "biblioteca" / "vectores.npz", allow_pickle=True)
+            _vec[k] = {h: v.astype(float) for h, v in zip(z["claves"], z["V"])}
+        except Exception:
+            _vec[k] = {}
+    return _vec[k]
+
+
+def guardar_vector(carpeta: Path | str, h: str, v) -> None:
+    """Guarda el vector del cuerpo de un documento (por su hash) en biblioteca/vectores.npz para que sirva de ejemplo en las próximas clasificaciones."""
+    if v is None or not h:
+        return
+    d = vectores(carpeta)
+    d[h] = np.asarray(v, dtype=float)
+    f = Path(carpeta) / "biblioteca" / "vectores.npz"
+    try:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        np.savez(f, claves=np.array(list(d), dtype=object), V=np.array(list(d.values()), dtype=np.float16))
+    except OSError:
+        pass
+
+
+def mezcla(t, b):
+    """Vector de un documento: el de título + capítulos + principio sumado al del cuerpo (si lo hay), normalizado."""
+    if b is None:
+        return t
+    m = t + PESO_CUERPO * b
+    return m / (np.linalg.norm(m) or 1.0)
+
+
+def _matriz(ej: list, emb, carpeta) -> "np.ndarray":
+    """Matriz de embeddings de los ejemplos; los de la biblioteca que tienen vector de cuerpo guardado se mezclan con él."""
+    X = emb([e[0] for e in ej])
+    V = vectores(carpeta) if CUERPO else {}
+    if V:
+        for i, e in enumerate(ej):
+            if len(e) > 3 and e[3] in V:
+                X[i] = mezcla(X[i], V[e[3]])
+    return X
+
+
 def autor_de(nombre: str) -> str:
     """Autor según el nombre del archivo («Título - Autor»): el último tramo tras « - », normalizado; "" si no parece un nombre."""
     partes = [x.strip() for x in str(nombre).split(" - ")]
@@ -157,13 +233,13 @@ def _ejemplos(carpeta: Path | str) -> list[tuple[str, str, float]]:
         from .importar import GENEROS, leer_metadatos
         for m in leer_metadatos(Path(carpeta)).values():
             if m.get("genero") in GENEROS and m.get("genero") != "otro":
-                ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), m["genero"], 1.5 if m.get("automatico") else 2.5))
+                ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), m["genero"], 1.5 if m.get("automatico") else 2.5, m.get("hash")))
     except Exception:
         pass
     return ej
 
 
-def vecinos(texto: str, carpeta: Path | str, k: int = 6) -> list[dict]:
+def vecinos(texto: str, carpeta: Path | str, k: int = 6, cuerpo=None) -> list[dict]:
     """Los k libros ya clasificados de tu biblioteca más parecidos al texto: [{'titulo','autor','genero','subgenero'}]. Son los ejemplos que se le enseñan al LLM."""
     if not ACTIVO or _cache.get("fallo") or k <= 0:
         return []
@@ -173,8 +249,8 @@ def vecinos(texto: str, carpeta: Path | str, k: int = 6) -> list[dict]:
         if not ms:
             return []
         emb = _embedder(modelo(carpeta), carpeta)
-        X = emb([texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)) for m in ms])
-        orden = np.argsort(-(X @ emb([texto])[0]))[:k]
+        X = _matriz([(texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), None, 1.0, m.get("hash")) for m in ms], emb, carpeta)
+        orden = np.argsort(-(X @ mezcla(emb([texto])[0], cuerpo)))[:k]
         return [{"titulo": ms[i].get("titulo", ""), "autor": autor_de(Path(ms[i].get("origen", "")).stem), "genero": ms[i]["genero"], "subgenero": ms[i].get("subgenero", "")} for i in orden]
     except Exception:
         return []
@@ -183,9 +259,9 @@ def vecinos(texto: str, carpeta: Path | str, k: int = 6) -> list[dict]:
 _cabezas: dict = {}
 
 
-def _cabeza(ej: list, X):
+def _cabeza(ej: list, X, extra: int = 0):
     """Regresión logística multinomial entrenada con los ejemplos (semillas + biblioteca). Se guarda por contenido: con los mismos ejemplos no se vuelve a entrenar."""
-    clave = hash(tuple(e[0] for e in ej))
+    clave = hash((tuple(e[0] for e in ej), extra))
     with _candado:
         return _cabeza_(clave, ej, X)
 
@@ -211,7 +287,7 @@ def fuerza(n: int, rango: tuple) -> float:
     return min(1.0, max(0.0, (n - rango[0]) / (rango[1] - rango[0])))
 
 
-def sugerir(texto: str, carpeta: Path | str | None = None, autor: str = "", pistas: dict | None = None) -> dict | None:
+def sugerir(texto: str, carpeta: Path | str | None = None, autor: str = "", pistas: dict | None = None, cuerpo=None) -> dict | None:
     """{'genero', 'confianza' (margen sobre el segundo), 'puntos': {género: parecido}} o None si no hay modelo."""
     if not ACTIVO or _cache.get("fallo"):
         return None
@@ -219,8 +295,8 @@ def sugerir(texto: str, carpeta: Path | str | None = None, autor: str = "", pist
     try:
         emb = _embedder(modelo(carpeta), carpeta)
         ej = _ejemplos(carpeta)
-        X = emb([e[0] for e in ej])
-        q = emb([texto])[0]
+        X = _matriz(ej, emb, carpeta)
+        q = mezcla(emb([texto])[0], cuerpo)
     except Exception:
         _cache["fallo"] = True                                   # sin fastembed o sin modelo (p. ej. sin internet la primera vez): no se reintenta en cada archivo
         return None
@@ -231,7 +307,7 @@ def sugerir(texto: str, carpeta: Path | str | None = None, autor: str = "", pist
         puntos[g] = float(np.mean(v))
     peso = PESO_CABEZA * fuerza(sum(e[2] > 1 for e in ej), LIBROS_CABEZA)
     if peso:
-        clf = _cabeza(ej, X)
+        clf = _cabeza(ej, X, len(vectores(carpeta)))
         if clf is not None:
             for g, pr in zip(clf.classes_, clf.predict_proba(q.reshape(1, -1))[0]):
                 if g in puntos:
@@ -253,7 +329,7 @@ def _palabras(t: str) -> set:
     return {w for w in __import__("re").findall(r"[a-z]{4,}", _norm(t)) if w not in _PARADA}
 
 
-def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor: str = "", pistas: dict | None = None) -> dict | None:
+def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor: str = "", pistas: dict | None = None, cuerpo=None) -> dict | None:
     """Subgénero (de la taxonomía del género) que mejor describe el texto: {'id','nombre','confianza','puntos': {id: 0-100}} o None si el género no tiene subgéneros.
     Con modelo de embeddings compara con las frases del subgénero y con lo que ya tienes en esa categoría; sin modelo, por palabras en común."""
     from . import taxonomia
@@ -271,10 +347,10 @@ def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor:
                 ids = {s[0] for s in subs}
                 for m in leer_metadatos(carpeta).values():
                     if m.get("genero") == genero and m.get("subgenero") in ids:
-                        ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), m["subgenero"], 1.5 if m.get("automatico") else 2.5))
+                        ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), m["subgenero"], 1.5 if m.get("automatico") else 2.5, m.get("hash")))
             except Exception:
                 pass
-            X, q = emb([e[0] for e in ej]), emb([texto])[0]
+            X, q = _matriz(ej, emb, carpeta), mezcla(emb([texto])[0], cuerpo)
             sims = X @ q
             puntos = {}
             for sid in ids:
@@ -282,7 +358,7 @@ def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor:
                 puntos[sid] = float(np.mean(v))
             peso = PESO_CABEZA_SUB * fuerza(sum(e[2] > 1 for e in ej), LIBROS_CABEZA_SUB)
             if peso:
-                clf = _cabeza(ej, X)
+                clf = _cabeza(ej, X, len(vectores(carpeta)))
                 if clf is not None:
                     for sid, pr in zip(clf.classes_, clf.predict_proba(q.reshape(1, -1))[0]):
                         if sid in puntos:

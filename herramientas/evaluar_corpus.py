@@ -133,6 +133,8 @@ def evaluar(carpeta: Path, nombre: str, con_llm: bool = True, con_web: bool = Fa
             tmp = Path(t)
             (tmp / "biblioteca").mkdir()
             (tmp / "biblioteca" / "metadatos.json").write_text(json.dumps(train, ensure_ascii=False), encoding="utf-8")
+            if (base / "vectores.npz").exists():                           # los vectores del cuerpo de los ejemplos (no se recalculan por obra)
+                shutil.copy(base / "vectores.npz", tmp / "biblioteca" / "vectores.npz")
             for f in ("ajustes.json", "taxonomia.json"):
                 if (carpeta / f).exists():
                     shutil.copy(carpeta / f, tmp / f)
