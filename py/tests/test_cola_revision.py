@@ -52,3 +52,9 @@ def test_editar_cuenta_como_revisado(tmp_path):
 
 def test_umbrales_por_defecto_son_positivos():
     assert clasificador.MARGEN_REVISAR > 0 and clasificador.MARGEN_SUB_REVISAR > 0
+
+
+def test_si_el_parecido_dudaba_y_el_llm_decidio_no_hay_aviso_de_discrepancia():
+    p = {"puntos": {"novela": 0.9, "historia": 0.1}, "confianza": 0.8, "genero": "novela"}
+    dudoso = {"id": "fantasia", "puntos": {"fantasia": 1.0, "negra": 0.99}, "confianza": 0.01, "nombre": "Fantasía"}
+    assert not any("LLM y el parecido" in m for m in importar._seguridad({"novela": 30}, p, None, "novela", dudoso, "negra", "x" * 500, "libro", False)[2])

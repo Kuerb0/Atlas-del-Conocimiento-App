@@ -423,9 +423,11 @@ def _seguridad(gp: dict, s: dict | None, web, genero: str, sg: dict | None, sg0:
             motivos.append(f"el género elegido («{GENEROS.get(genero, genero)}») no es el que más puntúa («{GENEROS.get(orden[0], orden[0])}»)")
     if sg:
         margen_sub = sg.get("confianza")
-        if sg0 and sg["id"] != sg0:
-            motivos.append("el LLM y el parecido no coinciden en el subgénero")
-        elif margen_sub is not None and margen_sub / (1 + clasificador.PESO_CABEZA_SUB) < clasificador.MARGEN_SUB_REVISAR:
+        seguro = margen_sub is not None and margen_sub / (1 + clasificador.PESO_CABEZA_SUB) >= clasificador.MARGEN_SUB_REVISAR
+        if sg0 and sg["id"] != sg0:                                           # el LLM cambió lo que decía el parecido: solo es un aviso si el parecido estaba seguro (si dudaba, manda el LLM)
+            if seguro:
+                motivos.append("el LLM y el parecido no coinciden en el subgénero")
+        elif not seguro and margen_sub is not None:
             ps = sorted(sg["puntos"], key=sg["puntos"].get, reverse=True)
             motivos.append("subgénero poco claro" + (f": «{taxonomia.nombre_sub(genero, ps[0])}» y «{taxonomia.nombre_sub(genero, ps[1])}» casi empatan" if len(ps) > 1 else ""))
     return margen, margen_sub, motivos
