@@ -8,11 +8,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-# Géneros que se añaden a los 12 de siempre (historia, economia, ensayo, estadistica, ciencia, novela, biografia, politica, tecnologia, psicologia, arte, otro).
+# Géneros que se añaden a los 11 de siempre (historia, economia, ensayo, estadistica, ciencia, novela, biografia, politica, tecnologia, psicologia, arte, otro).
 GENEROS_NUEVOS = {
     "derecho": "Derecho y legislación", "cocina": "Cocina y gastronomía", "salud": "Salud y medicina", "viajes": "Viajes y geografía",
     "idiomas": "Idiomas y lingüística", "educacion": "Educación y pedagogía", "religion": "Religión y espiritualidad", "deporte": "Deporte y ocio",
-    "hogar": "Hogar, jardín y bricolaje",
+    "hogar": "Hogar, jardín y bricolaje", "literatura": "Literatura (poesía, teatro, cuentos)",
 }
 
 TAXONOMIA: dict[str, list[tuple[str, str, str, str]]] = {
@@ -128,11 +128,16 @@ TAXONOMIA: dict[str, list[tuple[str, str, str, str]]] = {
     "arte": [
         ("visuales", "Pintura y artes visuales", "Pintura, escultura, fotografía, historia del arte, museos y movimientos artísticos", "painting, sculpture, photography, art history, museums and art movements"),
         ("musica", "Música", "Música, compositores, historia de la música, instrumentos, teoría musical y géneros", "music, composers, history of music, instruments, music theory and genres"),
-        ("cine", "Cine, teatro y series", "Cine, directores, teatro, guion, series de televisión y lenguaje audiovisual", "film, directors, theatre, screenwriting, television series and audiovisual language"),
+        ("cine", "Cine y series", "Cine, directores, guion, series de televisión y lenguaje audiovisual", "film, directors, screenwriting, television series and audiovisual language"),
         ("arquitectura", "Arquitectura y diseño", "Arquitectura, urbanismo, diseño gráfico, diseño industrial y funcionalismo", "architecture, urbanism, graphic design, industrial design and functionalism"),
-        ("poesia", "Poesía", "Poesía, poemas, versos, poetas y antologías poéticas", "poetry, poems, verse, poets and poetic anthologies"),
-        ("critica", "Crítica literaria y cultura", "Crítica literaria, teoría de la literatura, cultura popular y análisis de obras", "literary criticism, literary theory, popular culture and analysis of works"),
+        ("cultura", "Cultura popular y medios", "Cultura popular, medios, humor gráfico, revistas culturales y análisis de la cultura de masas", "popular culture, media, comics and cartoons, cultural magazines and analysis of mass culture"),
         ("ver", "Cómo mirar y entender el arte", "Cómo mirar el arte, interpretar imágenes, publicidad y cultura visual", "how to look at art, interpreting images, advertising and visual culture"),
+    ],
+    "literatura": [
+        ("poesia", "Poesía", "Poesía, poemas, versos, sonetos, poetas, romancero, antologías poéticas y prosa poética", "poetry, poems, verse, sonnets, poets, ballads, poetic anthologies and prose poetry"),
+        ("teatro", "Teatro y dramaturgia", "Teatro, obras de teatro, comedias, tragedias, dramas, actos y escenas, dramaturgos y personajes que dialogan", "theatre, plays, comedies, tragedies, drama, acts and scenes, playwrights and dialogue between characters"),
+        ("cuentos", "Cuentos y relatos breves", "Cuentos, relatos cortos, colecciones de narraciones breves, fábulas, leyendas y cuentos populares", "short stories, tales, collections of short fiction, fables, legends and folk tales"),
+        ("critica", "Crítica y ensayo literario", "Crítica literaria, estudios sobre autores y obras, historia de la literatura, teoría literaria y ensayos sobre libros y lectura", "literary criticism, studies of authors and works, history of literature, literary theory and essays on books and reading"),
     ],
     "derecho": [
         ("civil", "Derecho civil y mercantil", "Derecho civil, contratos, propiedad, sociedades mercantiles y obligaciones", "civil law, contracts, property, commercial companies and obligations"),

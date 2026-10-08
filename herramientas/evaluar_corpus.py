@@ -117,9 +117,13 @@ def evaluar(carpeta: Path, nombre: str, con_llm: bool = True, con_web: bool = Fa
         sp = {**sp, "prueba": sorted(random.Random(1).sample(sp["prueba"], n_max))}      # misma muestra siempre: las configuraciones se comparan sobre las mismas obras
     train = {r: m for r, m in meta.items() if r in set(sp["entrenamiento"])}      # (con val=True, la prueba real queda fuera: ni como ejemplo)
     reg, t0, cerrojo = Regulador(max(hilos, 1)), time.time(), threading.Lock()
-    from conocimiento import webinfo
-    webinfo._estado["cache"] = None
-    webinfo._cargar(carpeta)                                   # la caché de Wikipedia vive en la carpeta del corpus (no en la temporal de cada obra)
+    try:
+        from conocimiento import webinfo                      # (las versiones anteriores a la 1.11 no lo tienen: se puede medir con ARBOL_PY)
+    except ImportError:
+        webinfo = None
+    if webinfo:
+        webinfo._estado["cache"] = None
+        webinfo._cargar(carpeta)                                   # la caché de Wikipedia vive en la carpeta del corpus (no en la temporal de cada obra)
     if hilos > 1:
         threading.Thread(target=reg.vigilar, daemon=True).start()
 
@@ -129,6 +133,8 @@ def evaluar(carpeta: Path, nombre: str, con_llm: bool = True, con_web: bool = Fa
             tmp = Path(t)
             (tmp / "biblioteca").mkdir()
             (tmp / "biblioteca" / "metadatos.json").write_text(json.dumps(train, ensure_ascii=False), encoding="utf-8")
+            if (base / "vectores.npz").exists():                           # los vectores del cuerpo de los ejemplos (no se recalculan por obra)
+                shutil.copy(base / "vectores.npz", tmp / "biblioteca" / "vectores.npz")
             for f in ("ajustes.json", "taxonomia.json"):
                 if (carpeta / f).exists():
                     shutil.copy(carpeta / f, tmp / f)
@@ -169,7 +175,8 @@ def evaluar(carpeta: Path, nombre: str, con_llm: bool = True, con_web: bool = Fa
     else:
         for rel in sp["prueba"]:
             hecha(una(rel))
-    webinfo.guardar(carpeta)
+    if webinfo:
+        webinfo.guardar(carpeta)
     out = carpeta.parent / "resultados"
     out.mkdir(exist_ok=True)
     (out / f"{nombre}.json").write_text(json.dumps({"nombre": nombre, "sets": sets or [], "llm": con_llm, "modelo_llm": llm.ajustes(carpeta)["modelo"], "filas": filas, "hilos": hilos, "version": (Path(importar.__file__).resolve().parent.parent / "VERSION.txt").read_text(encoding="utf-8").strip() if (Path(importar.__file__).resolve().parent.parent / "VERSION.txt").exists() else ""}, ensure_ascii=False, indent=1), encoding="utf-8")

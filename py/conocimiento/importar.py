@@ -36,13 +36,14 @@ _GEN_PALABRAS = {
     "economia": r"economics|economy|economia|economist|market|mercado|capitalism|capitalismo|trade|comercio|inflation|inflacion|monetary|monetaria|fiscal|growth|crecimiento|bank|banco|poverty|pobreza|wealth|riqueza|gdp|pib|labor|empresa|business|inversion|invest|finanzas|finance",
     "estadistica": r"statistic\w*|estadistic\w*|regression|regresion|probability|probabilidad|estimat\w*|hypothesis|hipotesis|bayes\w*|variance|varianza|econometric\w*|machine learning|theorem|teorema|calculus|algebra|matrix|matriz|likelihood|verosimilitud",
     "ciencia": r"physics|fisica|biology|biologia|chemistry|quimica|universe|universo|evolution|evolucion|neuroscience|neurociencia|quantum|cuantic\w*|genome|genoma|climate|clima|cosmos|astronomy|astronomia|scientific|cientific\w*|science|ciencia",
-    "novela": r"novel|novela|cuento|thriller|mystery|misterio|detective|fantasy|fantasia|romance|once upon|chapter one|capitulo uno|he said|she said|dijo",
+    "novela": r"novel|novela|thriller|mystery|misterio|detective|fantasy|fantasia|romance|once upon|chapter one|capitulo uno|he said|she said|dijo",
     "ensayo": r"philosoph\w*|filosof\w*|essay|ensayo|ethic\w*|etic\w*|metaphysic\w*|stoic\w*|estoic\w*|reason|razon|liberty|libertad|freedom|truth|verdad|meaning|sentido|virtue|virtud|moral\w*",
     "biografia": r"biograph\w*|memoir\w*|memorias|autobiograph\w*|life of|vida de|my life|mi vida",
     "politica": r"politic\w*|democracy|democracia|government|gobierno|election|eleccion\w*|geopolit\w*|society|sociedad|social|state|estado|policy|nationalism|nacionalismo",
     "tecnologia": r"software|programming|programacion|python|algorithm\w*|algoritmo\w*|computer|ordenador|internet|artificial intelligence|inteligencia artificial|data science|linux|codigo|developer",
     "psicologia": r"psycholog\w*|psicolog\w*|behavior|conducta|cognitive|cognitiv\w*|therapy|terapia|emotion\w*|emocion\w*|health|salud|mental",
-    "arte": r"art|arte|music|musica|painting|pintura|film|cine|literature|literatura|architecture|arquitectura|poetry|poesia|theatre|teatro|museum|museo"}
+    "arte": r"art|arte|music|musica|painting|pintura|film|cine|architecture|arquitectura|museum|museo",
+    "literatura": r"poem|poems|poetry|poesia|poemas?|verse|verso|versos|sonnet|soneto|ode|oda|ballad|romancero|poet|poeta|poetas|play|plays|drama|dramas|comedy|comedia|tragedy|tragedia|act i|acto|escena|scene|dramatis personae|short stories|short story|tales|cuentos?|relatos?|fables?|fabulas?|literature|literatura|literary|literario|literaria"}
 _GEN_RE = {g: re.compile(r"\b(?:" + p + r")\b") for g, p in _GEN_PALABRAS.items()}
 _ES = set("el la de que y en los las un una por con para es se del al lo como mas pero sus le ya o este si porque esta entre cuando muy sin sobre tambien me hasta hay donde quien desde todo nos durante".split())
 _EN = set("the of and to in is that for with as on by it this are was be at from or an which have has not but they their its been were all more can will one also".split())
@@ -157,7 +158,7 @@ def titulo_corto(nombre: str, n: int = 60) -> str:
 _COLOR_GENERO = {"historia": (150, 90, 50), "economia": (40, 120, 80), "ensayo": (110, 80, 150), "estadistica": (40, 90, 170), "ciencia": (30, 130, 150), "novela": (160, 60, 90),
                  "biografia": (140, 110, 40), "politica": (150, 60, 50), "tecnologia": (60, 70, 90), "psicologia": (130, 70, 130), "arte": (170, 90, 120), "otro": (80, 90, 110),
                  "derecho": (90, 90, 120), "cocina": (190, 110, 50), "salud": (50, 140, 110), "viajes": (60, 130, 170), "idiomas": (120, 100, 60), "educacion": (100, 120, 160),
-                 "religion": (120, 90, 70), "deporte": (60, 150, 80), "hogar": (130, 100, 80)}
+                 "religion": (120, 90, 70), "deporte": (60, 150, 80), "hogar": (130, 100, 80), "literatura": (125, 70, 105)}
 
 
 def _imagen_epub(f: Path) -> bytes | None:
@@ -528,9 +529,13 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
         ev("web", "fin", materias=materias[:5], voto=web or "", voto_nombre=GENEROS.get(web, ""), forma=forma or "", barras=_barras(gp, forma))
     else:
         ev("web", "fin", omitido="solo se consulta para libros y artículos con título" if not corr and clasificador.WEB else "desactivado" if not clasificador.WEB else "ya corregido por ti")
+    B = clasificador.vector_cuerpo(texto, carpeta) if (not corr and tipo not in ("codigo", "datos")) else None       # pasajes del cuerpo (lo único que ve el modelo más allá de la portada)
+    if B is not None:
+        clasificador._pendientes[_sha1(f)] = B
+    vista_llm = vista[:600] + ("".join(" […] " + p[:300] for p in clasificador.pasajes(texto)[1::2][:llm.PASAJES]) if llm.PASAJES and clasificador.CUERPO and tipo not in ("codigo", "datos") else "")       # lo que lee el LLM: el principio y unos pasajes del cuerpo
     if not corr and tipo != "codigo" and clasificador.ACTIVO:                                  # parecido con ejemplos (embeddings locales) mezclado con las reglas; sin modelo, solo reglas
         ev("parecido", "inicio")
-        s = clasificador.sugerir(clasificador.texto_libro(tit, caps, vista), carpeta, aut, pistas)
+        s = clasificador.sugerir(clasificador.texto_libro(tit, caps, vista), carpeta, aut, pistas, B)
         if s:
             nuevo, cambia = clasificador.decidir(gp, genero, s, web)
             if cambia:
@@ -550,14 +555,14 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
         genero, metodo = forma, "web"
         subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
         motivo += f"; Open Library la clasifica como {', '.join(m for m in materias if _norm(m).strip(' .') in _FORMA[forma])}"
-    vec = clasificador.vecinos(clasificador.texto_libro(tit, caps, vista), carpeta, llm.VECINOS) if llm.VECINOS and llm.ACTIVO and not corr else None
+    vec = clasificador.vecinos(clasificador.texto_libro(tit, caps, vista), carpeta, llm.VECINOS, B) if llm.VECINOS and llm.ACTIVO and not corr else None
     if corr or tipo == "codigo" or not llm.ACTIVO:
         ev("llm", "fin", omitido="no aplica" if tipo == "codigo" or corr else "desactivado")
     elif forma or not (clasificador.dudoso(gp, s, web) or llm.ajustes(carpeta).get("siempre")):       # «siempre»: en ajustes.json se puede pedir que el LLM opine de todos los libros (+2 puntos de acierto, ~10 s más por libro)
         ev("llm", "fin", omitido="no hacía falta: el resultado era claro")
     else:                                                                  # caso dudoso: se pregunta al LLM local (Ollama)
         ev("llm", "inicio")
-        r = llm.clasificar(tit, caps, vista, materias, {k: v for k, v in GENEROS.items()}, carpeta, aut, vec) if llm.disponible(carpeta) else None
+        r = llm.clasificar(tit, caps, vista_llm, materias, {k: v for k, v in GENEROS.items()}, carpeta, aut, vec) if llm.disponible(carpeta) else None
         marcador = clasificador.puntuar(gp, s, web) if s else gp
         top3 = [g for g, v in sorted(marcador.items(), key=lambda kv: -kv[1])[:3] if v > 0]
         if r and top3 and r["genero"] not in top3:                          # un modelo pequeño a veces se inventa un género: si no está entre los 3 más probables, se ignora
@@ -572,10 +577,10 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
     if materias and metodo not in ("reglas", "llm"):
         motivo += f"; materias web: {', '.join(materias[:4])}"
     ev("subgenero", "inicio")
-    sg = None if tipo == "datos" else clasificador.subgenero(clasificador.texto_libro(tit, caps, vista), genero, carpeta, aut, pistas_sub if genero == "novela" else None)       # una tabla de números no tiene tema
+    sg = None if tipo == "datos" else clasificador.subgenero(clasificador.texto_libro(tit, caps, vista), genero, carpeta, aut, pistas_sub if genero == "novela" else None, B)       # una tabla de números no tiene tema
     sg0 = sg["id"] if sg else None                                                 # lo que decía el parecido, por si el LLM lo cambia (es una discrepancia que se avisa)
     if sg and not corr and llm.ACTIVO and llm.disponible(carpeta):          # el LLM conoce las obras: elige entre los subgéneros de su género (las novelas sin pistas en el texto son lo que peor sale por parecido)
-        elegido = llm.subgenero(tit, caps, vista, GENEROS[genero], taxonomia.subgeneros(genero, carpeta), aut, carpeta, vec)
+        elegido = llm.subgenero(tit, caps, vista_llm, GENEROS[genero], taxonomia.subgeneros(genero, carpeta), aut, carpeta, vec)
         if elegido and elegido != sg["id"]:
             motivo += f"; subgénero por el LLM (el parecido decía «{sg['nombre']}»)"
             sg = {**sg, "id": elegido, "nombre": taxonomia.nombre_sub(genero, elegido, carpeta)}
@@ -684,6 +689,7 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
                          "revisar": bool(auto["revisar"]) and not (d.get("genero") or d.get("subgenero")), "motivos_revisar": auto["motivos_revisar"], "margen": auto["margen"],
                          "web_resumen": auto["web_resumen"], "web_generos": auto["web_generos"]}      # si lo fijaste tú al importar, no hay nada que revisar
             hashes[h] = rel
+            clasificador.guardar_vector(carpeta, h, clasificador._pendientes.pop(h, None))        # el cuerpo de este documento servirá de ejemplo a los próximos
             if tipo == "libro":
                 nom = "portadas/" + h[:10] + ".jpg"
                 if portada(fin, base / nom, titulo, genero):

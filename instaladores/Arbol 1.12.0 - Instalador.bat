@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.11.0 - Actualizar
+title Arbol de la estadistica 1.12.0 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=actualizar"
-set "ARBOL_VERSION=1.11.0"
+set "ARBOL_MODO=instalar"
+set "ARBOL_VERSION=1.12.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -682,7 +682,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.11.0
+1.12.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -3026,7 +3026,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.11.0"
+version = "1.12.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3706,7 +3706,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.11.0"
+__version__ = "1.12.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -14632,6 +14632,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 import threading
@@ -14657,6 +14658,9 @@ MARGEN_REVISAR = 0.15    # distancia entre el género ganador y el segundo, divi
 MARGEN_SUB_REVISAR = 0.03  # lo mismo para el subgénero (escala 1 + PESO_CABEZA_SUB)
 WIKI = "auto"            # Wikipedia/Wikidata (webinfo.py) por título y autor: "auto" = solo si el LLM no está disponible (con LLM no suma: 86/66 frente a 86/68 en 73 obras; sin él sube 75/49 → 79/56); True = siempre; False = nunca (sin red)
 PESO_WIKI = 0.6          # lo que suma el género que dice Wikidata de la obra (y 0,6 · el subgénero)
+CUERPO = True              # leer también pasajes repartidos por el cuerpo del documento (el modelo de embeddings solo lee ~100 palabras: sin esto, solo ve la portada). Medido: género 63 → 73 %, subgénero 48 → 55 %
+PESO_CUERPO = 1.0          # lo que pesa el vector del cuerpo frente al de título + capítulos + principio al mezclarlos
+PASAJES, LARGO_PASAJE = 8, 500
 MIN_PARECIDO = 0.25      # por debajo, el libro no se parece a ningún género: se queda como lo dejaron las reglas (p. ej. «otro»)
 _cache: dict = {}        # nombre del modelo -> función(textos) -> matriz normalizada; también guarda los vectores de las semillas
 
@@ -14749,6 +14753,78 @@ def texto_libro(titulo: str, capitulos: list, vista: str = "") -> str:
     return f"{titulo}. {caps}. {vista[:700]}".strip()
 
 
+def pasajes(texto: str) -> list[str]:
+    """Hasta PASAJES fragmentos de LARGO_PASAJE caracteres repartidos por el cuerpo del texto (se salta el principio: portada, licencia, índice)."""
+    cuerpo = re.sub(r"\s+", " ", texto[2000:])
+    if len(cuerpo) < 800:
+        cuerpo = re.sub(r"\s+", " ", texto)
+    paso = max(len(cuerpo) // PASAJES, 1)
+    return [p for k in range(PASAJES) for p in [cuerpo[k * paso: k * paso + LARGO_PASAJE]] if p.strip()]
+
+
+def vector_cuerpo(texto: str, carpeta: Path | str | None = None):
+    """Vector normalizado del cuerpo de un documento (media de los embeddings de sus pasajes), o None si no hay modelo o el documento no tiene texto."""
+    if not ACTIVO or not CUERPO or _cache.get("fallo"):
+        return None
+    ps = pasajes(texto)
+    if not ps:
+        return None
+    try:
+        v = _embedder(modelo(carpeta or CARPETA), carpeta)(ps).mean(axis=0)
+    except Exception:
+        _cache["fallo"] = True
+        return None
+    return v / (np.linalg.norm(v) or 1.0)
+
+
+_vec: dict = {}              # carpeta -> {hash: vector del cuerpo}; viven en biblioteca/vectores.npz (no se publican: .gitignore)
+_pendientes: dict = {}       # hash -> vector recién calculado al clasificar, a la espera de que importar() lo guarde
+
+
+def vectores(carpeta: Path | str) -> dict:
+    k = str(Path(carpeta))
+    if k not in _vec:
+        try:
+            z = np.load(Path(carpeta) / "biblioteca" / "vectores.npz", allow_pickle=True)
+            _vec[k] = {h: v.astype(float) for h, v in zip(z["claves"], z["V"])}
+        except Exception:
+            _vec[k] = {}
+    return _vec[k]
+
+
+def guardar_vector(carpeta: Path | str, h: str, v) -> None:
+    """Guarda el vector del cuerpo de un documento (por su hash) en biblioteca/vectores.npz para que sirva de ejemplo en las próximas clasificaciones."""
+    if v is None or not h:
+        return
+    d = vectores(carpeta)
+    d[h] = np.asarray(v, dtype=float)
+    f = Path(carpeta) / "biblioteca" / "vectores.npz"
+    try:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        np.savez(f, claves=np.array(list(d), dtype=object), V=np.array(list(d.values()), dtype=np.float16))
+    except OSError:
+        pass
+
+
+def mezcla(t, b):
+    """Vector de un documento: el de título + capítulos + principio sumado al del cuerpo (si lo hay), normalizado."""
+    if b is None:
+        return t
+    m = t + PESO_CUERPO * b
+    return m / (np.linalg.norm(m) or 1.0)
+
+
+def _matriz(ej: list, emb, carpeta) -> "np.ndarray":
+    """Matriz de embeddings de los ejemplos; los de la biblioteca que tienen vector de cuerpo guardado se mezclan con él."""
+    X = emb([e[0] for e in ej])
+    V = vectores(carpeta) if CUERPO else {}
+    if V:
+        for i, e in enumerate(ej):
+            if len(e) > 3 and e[3] in V:
+                X[i] = mezcla(X[i], V[e[3]])
+    return X
+
+
 def autor_de(nombre: str) -> str:
     """Autor según el nombre del archivo («Título - Autor»): el último tramo tras « - », normalizado; "" si no parece un nombre."""
     partes = [x.strip() for x in str(nombre).split(" - ")]
@@ -14780,13 +14856,13 @@ def _ejemplos(carpeta: Path | str) -> list[tuple[str, str, float]]:
         from .importar import GENEROS, leer_metadatos
         for m in leer_metadatos(Path(carpeta)).values():
             if m.get("genero") in GENEROS and m.get("genero") != "otro":
-                ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), m["genero"], 1.5 if m.get("automatico") else 2.5))
+                ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), m["genero"], 1.5 if m.get("automatico") else 2.5, m.get("hash")))
     except Exception:
         pass
     return ej
 
 
-def vecinos(texto: str, carpeta: Path | str, k: int = 6) -> list[dict]:
+def vecinos(texto: str, carpeta: Path | str, k: int = 6, cuerpo=None) -> list[dict]:
     """Los k libros ya clasificados de tu biblioteca más parecidos al texto: [{'titulo','autor','genero','subgenero'}]. Son los ejemplos que se le enseñan al LLM."""
     if not ACTIVO or _cache.get("fallo") or k <= 0:
         return []
@@ -14796,8 +14872,8 @@ def vecinos(texto: str, carpeta: Path | str, k: int = 6) -> list[dict]:
         if not ms:
             return []
         emb = _embedder(modelo(carpeta), carpeta)
-        X = emb([texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)) for m in ms])
-        orden = np.argsort(-(X @ emb([texto])[0]))[:k]
+        X = _matriz([(texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), None, 1.0, m.get("hash")) for m in ms], emb, carpeta)
+        orden = np.argsort(-(X @ mezcla(emb([texto])[0], cuerpo)))[:k]
         return [{"titulo": ms[i].get("titulo", ""), "autor": autor_de(Path(ms[i].get("origen", "")).stem), "genero": ms[i]["genero"], "subgenero": ms[i].get("subgenero", "")} for i in orden]
     except Exception:
         return []
@@ -14806,9 +14882,9 @@ def vecinos(texto: str, carpeta: Path | str, k: int = 6) -> list[dict]:
 _cabezas: dict = {}
 
 
-def _cabeza(ej: list, X):
+def _cabeza(ej: list, X, extra: int = 0):
     """Regresión logística multinomial entrenada con los ejemplos (semillas + biblioteca). Se guarda por contenido: con los mismos ejemplos no se vuelve a entrenar."""
-    clave = hash(tuple(e[0] for e in ej))
+    clave = hash((tuple(e[0] for e in ej), extra))
     with _candado:
         return _cabeza_(clave, ej, X)
 
@@ -14834,7 +14910,7 @@ def fuerza(n: int, rango: tuple) -> float:
     return min(1.0, max(0.0, (n - rango[0]) / (rango[1] - rango[0])))
 
 
-def sugerir(texto: str, carpeta: Path | str | None = None, autor: str = "", pistas: dict | None = None) -> dict | None:
+def sugerir(texto: str, carpeta: Path | str | None = None, autor: str = "", pistas: dict | None = None, cuerpo=None) -> dict | None:
     """{'genero', 'confianza' (margen sobre el segundo), 'puntos': {género: parecido}} o None si no hay modelo."""
     if not ACTIVO or _cache.get("fallo"):
         return None
@@ -14842,8 +14918,8 @@ def sugerir(texto: str, carpeta: Path | str | None = None, autor: str = "", pist
     try:
         emb = _embedder(modelo(carpeta), carpeta)
         ej = _ejemplos(carpeta)
-        X = emb([e[0] for e in ej])
-        q = emb([texto])[0]
+        X = _matriz(ej, emb, carpeta)
+        q = mezcla(emb([texto])[0], cuerpo)
     except Exception:
         _cache["fallo"] = True                                   # sin fastembed o sin modelo (p. ej. sin internet la primera vez): no se reintenta en cada archivo
         return None
@@ -14854,7 +14930,7 @@ def sugerir(texto: str, carpeta: Path | str | None = None, autor: str = "", pist
         puntos[g] = float(np.mean(v))
     peso = PESO_CABEZA * fuerza(sum(e[2] > 1 for e in ej), LIBROS_CABEZA)
     if peso:
-        clf = _cabeza(ej, X)
+        clf = _cabeza(ej, X, len(vectores(carpeta)))
         if clf is not None:
             for g, pr in zip(clf.classes_, clf.predict_proba(q.reshape(1, -1))[0]):
                 if g in puntos:
@@ -14876,7 +14952,7 @@ def _palabras(t: str) -> set:
     return {w for w in __import__("re").findall(r"[a-z]{4,}", _norm(t)) if w not in _PARADA}
 
 
-def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor: str = "", pistas: dict | None = None) -> dict | None:
+def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor: str = "", pistas: dict | None = None, cuerpo=None) -> dict | None:
     """Subgénero (de la taxonomía del género) que mejor describe el texto: {'id','nombre','confianza','puntos': {id: 0-100}} o None si el género no tiene subgéneros.
     Con modelo de embeddings compara con las frases del subgénero y con lo que ya tienes en esa categoría; sin modelo, por palabras en común."""
     from . import taxonomia
@@ -14894,10 +14970,10 @@ def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor:
                 ids = {s[0] for s in subs}
                 for m in leer_metadatos(carpeta).values():
                     if m.get("genero") == genero and m.get("subgenero") in ids:
-                        ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), m["subgenero"], 1.5 if m.get("automatico") else 2.5))
+                        ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), m["subgenero"], 1.5 if m.get("automatico") else 2.5, m.get("hash")))
             except Exception:
                 pass
-            X, q = emb([e[0] for e in ej]), emb([texto])[0]
+            X, q = _matriz(ej, emb, carpeta), mezcla(emb([texto])[0], cuerpo)
             sims = X @ q
             puntos = {}
             for sid in ids:
@@ -14905,7 +14981,7 @@ def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor:
                 puntos[sid] = float(np.mean(v))
             peso = PESO_CABEZA_SUB * fuerza(sum(e[2] > 1 for e in ej), LIBROS_CABEZA_SUB)
             if peso:
-                clf = _cabeza(ej, X)
+                clf = _cabeza(ej, X, len(vectores(carpeta)))
                 if clf is not None:
                     for sid, pr in zip(clf.classes_, clf.predict_proba(q.reshape(1, -1))[0]):
                         if sid in puntos:
@@ -15080,13 +15156,14 @@ _GEN_PALABRAS = {
     "economia": r"economics|economy|economia|economist|market|mercado|capitalism|capitalismo|trade|comercio|inflation|inflacion|monetary|monetaria|fiscal|growth|crecimiento|bank|banco|poverty|pobreza|wealth|riqueza|gdp|pib|labor|empresa|business|inversion|invest|finanzas|finance",
     "estadistica": r"statistic\w*|estadistic\w*|regression|regresion|probability|probabilidad|estimat\w*|hypothesis|hipotesis|bayes\w*|variance|varianza|econometric\w*|machine learning|theorem|teorema|calculus|algebra|matrix|matriz|likelihood|verosimilitud",
     "ciencia": r"physics|fisica|biology|biologia|chemistry|quimica|universe|universo|evolution|evolucion|neuroscience|neurociencia|quantum|cuantic\w*|genome|genoma|climate|clima|cosmos|astronomy|astronomia|scientific|cientific\w*|science|ciencia",
-    "novela": r"novel|novela|cuento|thriller|mystery|misterio|detective|fantasy|fantasia|romance|once upon|chapter one|capitulo uno|he said|she said|dijo",
+    "novela": r"novel|novela|thriller|mystery|misterio|detective|fantasy|fantasia|romance|once upon|chapter one|capitulo uno|he said|she said|dijo",
     "ensayo": r"philosoph\w*|filosof\w*|essay|ensayo|ethic\w*|etic\w*|metaphysic\w*|stoic\w*|estoic\w*|reason|razon|liberty|libertad|freedom|truth|verdad|meaning|sentido|virtue|virtud|moral\w*",
     "biografia": r"biograph\w*|memoir\w*|memorias|autobiograph\w*|life of|vida de|my life|mi vida",
     "politica": r"politic\w*|democracy|democracia|government|gobierno|election|eleccion\w*|geopolit\w*|society|sociedad|social|state|estado|policy|nationalism|nacionalismo",
     "tecnologia": r"software|programming|programacion|python|algorithm\w*|algoritmo\w*|computer|ordenador|internet|artificial intelligence|inteligencia artificial|data science|linux|codigo|developer",
     "psicologia": r"psycholog\w*|psicolog\w*|behavior|conducta|cognitive|cognitiv\w*|therapy|terapia|emotion\w*|emocion\w*|health|salud|mental",
-    "arte": r"art|arte|music|musica|painting|pintura|film|cine|literature|literatura|architecture|arquitectura|poetry|poesia|theatre|teatro|museum|museo"}
+    "arte": r"art|arte|music|musica|painting|pintura|film|cine|architecture|arquitectura|museum|museo",
+    "literatura": r"poem|poems|poetry|poesia|poemas?|verse|verso|versos|sonnet|soneto|ode|oda|ballad|romancero|poet|poeta|poetas|play|plays|drama|dramas|comedy|comedia|tragedy|tragedia|act i|acto|escena|scene|dramatis personae|short stories|short story|tales|cuentos?|relatos?|fables?|fabulas?|literature|literatura|literary|literario|literaria"}
 _GEN_RE = {g: re.compile(r"\b(?:" + p + r")\b") for g, p in _GEN_PALABRAS.items()}
 _ES = set("el la de que y en los las un una por con para es se del al lo como mas pero sus le ya o este si porque esta entre cuando muy sin sobre tambien me hasta hay donde quien desde todo nos durante".split())
 _EN = set("the of and to in is that for with as on by it this are was be at from or an which have has not but they their its been were all more can will one also".split())
@@ -15201,7 +15278,7 @@ def titulo_corto(nombre: str, n: int = 60) -> str:
 _COLOR_GENERO = {"historia": (150, 90, 50), "economia": (40, 120, 80), "ensayo": (110, 80, 150), "estadistica": (40, 90, 170), "ciencia": (30, 130, 150), "novela": (160, 60, 90),
                  "biografia": (140, 110, 40), "politica": (150, 60, 50), "tecnologia": (60, 70, 90), "psicologia": (130, 70, 130), "arte": (170, 90, 120), "otro": (80, 90, 110),
                  "derecho": (90, 90, 120), "cocina": (190, 110, 50), "salud": (50, 140, 110), "viajes": (60, 130, 170), "idiomas": (120, 100, 60), "educacion": (100, 120, 160),
-                 "religion": (120, 90, 70), "deporte": (60, 150, 80), "hogar": (130, 100, 80)}
+                 "religion": (120, 90, 70), "deporte": (60, 150, 80), "hogar": (130, 100, 80), "literatura": (125, 70, 105)}
 
 
 def _imagen_epub(f: Path) -> bytes | None:
@@ -15572,9 +15649,13 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
         ev("web", "fin", materias=materias[:5], voto=web or "", voto_nombre=GENEROS.get(web, ""), forma=forma or "", barras=_barras(gp, forma))
     else:
         ev("web", "fin", omitido="solo se consulta para libros y artículos con título" if not corr and clasificador.WEB else "desactivado" if not clasificador.WEB else "ya corregido por ti")
+    B = clasificador.vector_cuerpo(texto, carpeta) if (not corr and tipo not in ("codigo", "datos")) else None       # pasajes del cuerpo (lo único que ve el modelo más allá de la portada)
+    if B is not None:
+        clasificador._pendientes[_sha1(f)] = B
+    vista_llm = vista[:600] + ("".join(" […] " + p[:300] for p in clasificador.pasajes(texto)[1::2][:llm.PASAJES]) if llm.PASAJES and clasificador.CUERPO and tipo not in ("codigo", "datos") else "")       # lo que lee el LLM: el principio y unos pasajes del cuerpo
     if not corr and tipo != "codigo" and clasificador.ACTIVO:                                  # parecido con ejemplos (embeddings locales) mezclado con las reglas; sin modelo, solo reglas
         ev("parecido", "inicio")
-        s = clasificador.sugerir(clasificador.texto_libro(tit, caps, vista), carpeta, aut, pistas)
+        s = clasificador.sugerir(clasificador.texto_libro(tit, caps, vista), carpeta, aut, pistas, B)
         if s:
             nuevo, cambia = clasificador.decidir(gp, genero, s, web)
             if cambia:
@@ -15594,14 +15675,14 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
         genero, metodo = forma, "web"
         subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
         motivo += f"; Open Library la clasifica como {', '.join(m for m in materias if _norm(m).strip(' .') in _FORMA[forma])}"
-    vec = clasificador.vecinos(clasificador.texto_libro(tit, caps, vista), carpeta, llm.VECINOS) if llm.VECINOS and llm.ACTIVO and not corr else None
+    vec = clasificador.vecinos(clasificador.texto_libro(tit, caps, vista), carpeta, llm.VECINOS, B) if llm.VECINOS and llm.ACTIVO and not corr else None
     if corr or tipo == "codigo" or not llm.ACTIVO:
         ev("llm", "fin", omitido="no aplica" if tipo == "codigo" or corr else "desactivado")
     elif forma or not (clasificador.dudoso(gp, s, web) or llm.ajustes(carpeta).get("siempre")):       # «siempre»: en ajustes.json se puede pedir que el LLM opine de todos los libros (+2 puntos de acierto, ~10 s más por libro)
         ev("llm", "fin", omitido="no hacía falta: el resultado era claro")
     else:                                                                  # caso dudoso: se pregunta al LLM local (Ollama)
         ev("llm", "inicio")
-        r = llm.clasificar(tit, caps, vista, materias, {k: v for k, v in GENEROS.items()}, carpeta, aut, vec) if llm.disponible(carpeta) else None
+        r = llm.clasificar(tit, caps, vista_llm, materias, {k: v for k, v in GENEROS.items()}, carpeta, aut, vec) if llm.disponible(carpeta) else None
         marcador = clasificador.puntuar(gp, s, web) if s else gp
         top3 = [g for g, v in sorted(marcador.items(), key=lambda kv: -kv[1])[:3] if v > 0]
         if r and top3 and r["genero"] not in top3:                          # un modelo pequeño a veces se inventa un género: si no está entre los 3 más probables, se ignora
@@ -15616,10 +15697,10 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
     if materias and metodo not in ("reglas", "llm"):
         motivo += f"; materias web: {', '.join(materias[:4])}"
     ev("subgenero", "inicio")
-    sg = None if tipo == "datos" else clasificador.subgenero(clasificador.texto_libro(tit, caps, vista), genero, carpeta, aut, pistas_sub if genero == "novela" else None)       # una tabla de números no tiene tema
+    sg = None if tipo == "datos" else clasificador.subgenero(clasificador.texto_libro(tit, caps, vista), genero, carpeta, aut, pistas_sub if genero == "novela" else None, B)       # una tabla de números no tiene tema
     sg0 = sg["id"] if sg else None                                                 # lo que decía el parecido, por si el LLM lo cambia (es una discrepancia que se avisa)
     if sg and not corr and llm.ACTIVO and llm.disponible(carpeta):          # el LLM conoce las obras: elige entre los subgéneros de su género (las novelas sin pistas en el texto son lo que peor sale por parecido)
-        elegido = llm.subgenero(tit, caps, vista, GENEROS[genero], taxonomia.subgeneros(genero, carpeta), aut, carpeta, vec)
+        elegido = llm.subgenero(tit, caps, vista_llm, GENEROS[genero], taxonomia.subgeneros(genero, carpeta), aut, carpeta, vec)
         if elegido and elegido != sg["id"]:
             motivo += f"; subgénero por el LLM (el parecido decía «{sg['nombre']}»)"
             sg = {**sg, "id": elegido, "nombre": taxonomia.nombre_sub(genero, elegido, carpeta)}
@@ -15728,6 +15809,7 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
                          "revisar": bool(auto["revisar"]) and not (d.get("genero") or d.get("subgenero")), "motivos_revisar": auto["motivos_revisar"], "margen": auto["margen"],
                          "web_resumen": auto["web_resumen"], "web_generos": auto["web_generos"]}      # si lo fijaste tú al importar, no hay nada que revisar
             hashes[h] = rel
+            clasificador.guardar_vector(carpeta, h, clasificador._pendientes.pop(h, None))        # el cuerpo de este documento servirá de ejemplo a los próximos
             if tipo == "libro":
                 nom = "portadas/" + h[:10] + ".jpg"
                 if portada(fin, base / nom, titulo, genero):
@@ -15981,6 +16063,7 @@ MODELO_GRANDE, MODELO_PEQUENO = "qwen2.5:7b", "qwen2.5:3b"      # 4,7 GB y 1,9 G
 MODELO = MODELO_GRANDE if ram_gb() >= 12 else MODELO_PEQUENO     # el que mejor rinde si el equipo lo aguanta
 URL = "http://localhost:11434"
 ACTIVO = True                    # False: nunca se consulta (los tests lo apagan)
+PASAJES = 0                      # cuántos pasajes del cuerpo del documento ve el LLM además del principio (0 = solo el principio, lo medido en 1.11.0); sin medir con LLM: probar con --set llm.PASAJES=3
 VECINOS = 8                      # cuántos libros parecidos de tu biblioteca se le enseñan al LLM como ejemplos resueltos (0 = solo los 4 fijos); ver clasificador.vecinos
 ESPERA = 180                    # segundos por consulta: en CPU un modelo de 3B tarda 10-40 s por libro
 _estado: dict = {}               # "ok": ¿Ollama responde y tiene el modelo?; "t": cuándo se miró. Si estaba apagado se vuelve a mirar cada minuto (por si se abre después que la app)
@@ -16073,7 +16156,7 @@ def _prompt(titulo: str, capitulos: list, vista: str, materias: list, generos: d
         ej = "\n".join(f'Libro: «{v["titulo"]}»{" de " + v["autor"] if v["autor"] else ""}.\n{{"genero": "{v["genero"]}", "motivo": "…"}}' for v in vecinos)
     caps = "; ".join((c["titulo"] if isinstance(c, dict) else str(c)) for c in capitulos[:8]) or "(sin índice)"
     return (f"Eres bibliotecario. Elige el género que mejor describe el LIBRO (no solo las palabras de su título).\nGéneros:\n{lista}\n\nEjemplos resueltos:\n{ej}\n\n"
-            f"Ahora este:\nLibro: «{titulo}»{' de ' + autor if autor else ''}. Capítulos o partes: {caps}. Materias según Open Library: {', '.join(materias[:6]) or '(no hay)'}. Principio del texto: {vista[:600]}\n\n"
+            f"Ahora este:\nLibro: «{titulo}»{' de ' + autor if autor else ''}. Capítulos o partes: {caps}. Materias según Open Library: {', '.join(materias[:6]) or '(no hay)'}. Texto: {vista[:1300]}\n\n"
             'Responde solo con JSON: {"genero": "<id>", "motivo": "<una frase corta>"}.')
 
 
@@ -16103,7 +16186,7 @@ def subgenero(titulo: str, capitulos: list, vista: str, genero: str, subs: list,
     ej = "".join(f'- «{v["titulo"]}»{" de " + v["autor"] if v["autor"] else ""} → {v["subgenero"]}\n' for v in (vecinos or []) if v.get("subgenero") in ids)
     ej = f"Libros parecidos que el usuario ya clasificó:\n{ej}\n" if ej else ""
     prompt = (f"Eres bibliotecario. El libro es de género «{genero}». Elige el subgénero que mejor lo describe.\nSubgéneros:\n{lista}\n\n{ej}"
-              f"Libro: «{titulo}»{' de ' + autor if autor else ''}. Capítulos o partes: {caps}. Principio del texto: {vista[:500]}\n\n"
+              f"Libro: «{titulo}»{' de ' + autor if autor else ''}. Capítulos o partes: {caps}. Texto: {vista[:1100]}\n\n"
               'Responde solo con JSON: {"subgenero": "<id>", "motivo": "<una frase corta>"}.')
     esquema = {"type": "object", "properties": {"subgenero": {"type": "string", "enum": ids}, "motivo": {"type": "string"}}, "required": ["subgenero", "motivo"]}
     try:
@@ -16125,11 +16208,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-# Géneros que se añaden a los 12 de siempre (historia, economia, ensayo, estadistica, ciencia, novela, biografia, politica, tecnologia, psicologia, arte, otro).
+# Géneros que se añaden a los 11 de siempre (historia, economia, ensayo, estadistica, ciencia, novela, biografia, politica, tecnologia, psicologia, arte, otro).
 GENEROS_NUEVOS = {
     "derecho": "Derecho y legislación", "cocina": "Cocina y gastronomía", "salud": "Salud y medicina", "viajes": "Viajes y geografía",
     "idiomas": "Idiomas y lingüística", "educacion": "Educación y pedagogía", "religion": "Religión y espiritualidad", "deporte": "Deporte y ocio",
-    "hogar": "Hogar, jardín y bricolaje",
+    "hogar": "Hogar, jardín y bricolaje", "literatura": "Literatura (poesía, teatro, cuentos)",
 }
 
 TAXONOMIA: dict[str, list[tuple[str, str, str, str]]] = {
@@ -16245,11 +16328,16 @@ TAXONOMIA: dict[str, list[tuple[str, str, str, str]]] = {
     "arte": [
         ("visuales", "Pintura y artes visuales", "Pintura, escultura, fotografía, historia del arte, museos y movimientos artísticos", "painting, sculpture, photography, art history, museums and art movements"),
         ("musica", "Música", "Música, compositores, historia de la música, instrumentos, teoría musical y géneros", "music, composers, history of music, instruments, music theory and genres"),
-        ("cine", "Cine, teatro y series", "Cine, directores, teatro, guion, series de televisión y lenguaje audiovisual", "film, directors, theatre, screenwriting, television series and audiovisual language"),
+        ("cine", "Cine y series", "Cine, directores, guion, series de televisión y lenguaje audiovisual", "film, directors, screenwriting, television series and audiovisual language"),
         ("arquitectura", "Arquitectura y diseño", "Arquitectura, urbanismo, diseño gráfico, diseño industrial y funcionalismo", "architecture, urbanism, graphic design, industrial design and functionalism"),
-        ("poesia", "Poesía", "Poesía, poemas, versos, poetas y antologías poéticas", "poetry, poems, verse, poets and poetic anthologies"),
-        ("critica", "Crítica literaria y cultura", "Crítica literaria, teoría de la literatura, cultura popular y análisis de obras", "literary criticism, literary theory, popular culture and analysis of works"),
+        ("cultura", "Cultura popular y medios", "Cultura popular, medios, humor gráfico, revistas culturales y análisis de la cultura de masas", "popular culture, media, comics and cartoons, cultural magazines and analysis of mass culture"),
         ("ver", "Cómo mirar y entender el arte", "Cómo mirar el arte, interpretar imágenes, publicidad y cultura visual", "how to look at art, interpreting images, advertising and visual culture"),
+    ],
+    "literatura": [
+        ("poesia", "Poesía", "Poesía, poemas, versos, sonetos, poetas, romancero, antologías poéticas y prosa poética", "poetry, poems, verse, sonnets, poets, ballads, poetic anthologies and prose poetry"),
+        ("teatro", "Teatro y dramaturgia", "Teatro, obras de teatro, comedias, tragedias, dramas, actos y escenas, dramaturgos y personajes que dialogan", "theatre, plays, comedies, tragedies, drama, acts and scenes, playwrights and dialogue between characters"),
+        ("cuentos", "Cuentos y relatos breves", "Cuentos, relatos cortos, colecciones de narraciones breves, fábulas, leyendas y cuentos populares", "short stories, tales, collections of short fiction, fables, legends and folk tales"),
+        ("critica", "Crítica y ensayo literario", "Crítica literaria, estudios sobre autores y obras, historia de la literatura, teoría literaria y ensayos sobre libros y lectura", "literary criticism, studies of authors and works, history of literature, literary theory and essays on books and reading"),
     ],
     "derecho": [
         ("civil", "Derecho civil y mercantil", "Derecho civil, contratos, propiedad, sociedades mercantiles y obligaciones", "civil law, contracts, property, commercial companies and obligations"),
@@ -36277,7 +36365,7 @@ ROMA = "Roma antigua: Julio César, la república romana, las legiones, Augusto 
 
 
 def test_los_datos_de_la_taxonomia_son_coherentes():
-    assert sum(len(v) for v in tx.TAXONOMIA.values()) >= 100 and len(tx.GENEROS_NUEVOS) == 9
+    assert sum(len(v) for v in tx.TAXONOMIA.values()) >= 100 and len(tx.GENEROS_NUEVOS) == 10
     for g, subs in tx.TAXONOMIA.items():
         assert g in im.GENEROS and subs, g
         ids = [s[0] for s in subs]
@@ -41740,13 +41828,14 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 5k. **Telescopio:** pestaña «📡 Telescopio» (`py/conocimiento/telescopio.py`, API `Api.telescopio_buscar/traer`, consola `python -m conocimiento telescopio <consulta> [--traer N]`). Busca **solo fuentes legales**: Project Gutenberg (catálogo OPDS oficial, dominio público; Gutendex se descartó por lento), Google Books y Open Library (catálogo: ficha y enlace; descarga solo si es dominio público o lectura abierta; Google necesita clave en `GOOGLE_BOOKS_KEY` o `conocimiento/google_books.key` porque la cuota anónima diaria suele estar agotada), arXiv, OpenAlex (solo con PDF abierto) e Internet Archive (solo licencia CC/dominio público o publicado ≤ 1929). **No se añaden fuentes piratas (Anna's Archive, Z-Library, LibGen…) ni descargadores de ellas.** `traer` descarga (https, ≤ 200 MB, comprueba que es PDF/EPUB de verdad) y pasa por `importar.importar` con el género sacado de las materias de la obra (`genero_desde_materias`); `materias_de` consulta Open Library para clasificar un título que ya tienes. Tests sin red (`_get` se sustituye): `tests/test_telescopio.py`.
 5p. **Importar cualquier archivo:** además de libros, el importador acepta código (`CODIGO_EXT`: .py .ipynb .r .sas .sql .js …), datos (`DATOS_EXT`: .csv .xlsx .json .yaml …) y apuntes (`APUNTES_EXT`: .pptx .tex .html .rst) — todo en `EXT_IMPORTABLE` (`conocimiento/__init__.py`). El código va a la galaxia Código (tipo `codigo`, género tecnología); los datos al tipo `datos` (solo se indexa la cabecera); los cuadernos se indexan por celdas y su «índice» son los títulos markdown. Las carpetas de `fuentes.json` siguen leyendo solo `EXT` (documentos), para no indexar todo un disco. Otros formatos (imágenes, .zip, .exe) se rechazan con un mensaje claro. Se filtran en el buscador con prefijos como `py:`, `ipynb:`, `csv:`, `sql:`, `pptx:` (`conocimiento.buscar(formato=)`). Test: `tests/test_importar_formatos.py`.
 5u. **Clasificación en vivo (sala de clasificación):** `importar.clasificar(ruta, carpeta, etapa=callback)` llama a `etapa(fase, datos)` al empezar y al acabar cada fase de `ETAPAS` (leer, reglas, web, parecido, llm, subgenero, decision); `datos['estado']` es `inicio`|`fin`, y al acabar trae `barras` (`_barras`: las 6 mejores puntuaciones de género como 0-100 relativas a la mejor) o `omitido` con el motivo. Un callback que falla se ignora (la clasificación no se rompe). La app lo ejecuta en segundo plano (`Api.clasificar_en_vivo(rutas)` + `Api.estado_clasificacion()`, que el visor consulta cada 0,3 s) y la pestaña Importar lo pinta en `#impSala` (`salaFicha`/`salaRender` en plantilla.html): una ficha por archivo con las 7 etapas encendiéndose (○ pendiente · ⏳ en curso · ✓ hecha · — omitida), barras de género que se mueven etapa a etapa (transición CSS), barras de subgénero y la decisión final con el color de su galaxia. Al añadir una fase nueva a `clasificar`, añadirla a `ETAPAS` y a `SALA_ETAPAS`. Tests: `tests/test_vivo.py`.
-5t. **Taxonomía género › subgénero:** `py/conocimiento/taxonomia.py` (123 subgéneros en 20 géneros; los 11 de siempre + derecho, cocina, salud, viajes, idiomas, educación, religión, deporte y hogar; cada subgénero lleva una frase en español y otra en inglés). **Ampliable sin tocar código** con `conocimiento/taxonomia.json`: `{"generos": {"id": "Nombre"}, "sub": {"genero": [{"id": "x", "nombre": "…", "frases": ["es", "en"]}]}}` (mismo id = sustituye; recarga con el botón ⟳ Actualizar). `clasificador.subgenero(texto, genero)` elige el subgénero entre los de su género (embeddings con las frases y con lo que ya tienes en esa categoría; sin modelo, por palabras en común); los géneros nuevos no tienen reglas de palabras clave, solo parecido y LLM (sus semillas salen de las frases de sus subgéneros: `semillas_todas`). Se guarda en `metadatos.json` como `subgenero` (más `propuesta.subgenero`), los libros van a `biblioteca/libros/<Género>/<Subgénero>/`, hay selector en las tarjetas de importación y en el Observatorio (cambiar de género limpia el subgénero) y cada género es prefijo de búsqueda (`cocina:`, `derecho:`…). **Medido** (`python herramientas/comparar_clasificadores.py`, 84 libros, 20 géneros, MiniLM): género 89 % (reglas 83 %, parecido 88 %); subgénero 87 % dado el género correcto y 74 % de principio a fin. Al ampliar la taxonomía o cambiar las frases, volver a medir. Tests: `tests/test_taxonomia.py`.
+5t. **Taxonomía género › subgénero:** `py/conocimiento/taxonomia.py` (127 subgéneros en 21 géneros; los 11 de siempre + derecho, cocina, salud, viajes, idiomas, educación, religión, deporte y hogar; cada subgénero lleva una frase en español y otra en inglés). **Ampliable sin tocar código** con `conocimiento/taxonomia.json`: `{"generos": {"id": "Nombre"}, "sub": {"genero": [{"id": "x", "nombre": "…", "frases": ["es", "en"]}]}}` (mismo id = sustituye; recarga con el botón ⟳ Actualizar). `clasificador.subgenero(texto, genero)` elige el subgénero entre los de su género (embeddings con las frases y con lo que ya tienes en esa categoría; sin modelo, por palabras en común); los géneros nuevos no tienen reglas de palabras clave, solo parecido y LLM (sus semillas salen de las frases de sus subgéneros: `semillas_todas`). Se guarda en `metadatos.json` como `subgenero` (más `propuesta.subgenero`), los libros van a `biblioteca/libros/<Género>/<Subgénero>/`, hay selector en las tarjetas de importación y en el Observatorio (cambiar de género limpia el subgénero) y cada género es prefijo de búsqueda (`cocina:`, `derecho:`…). **Medido** (`python herramientas/comparar_clasificadores.py`, 84 libros, 20 géneros, MiniLM): género 89 % (reglas 83 %, parecido 88 %); subgénero 87 % dado el género correcto y 74 % de principio a fin. Al ampliar la taxonomía o cambiar las frases, volver a medir. Tests: `tests/test_taxonomia.py`.
 5s. **Instalador con IA local (compartir por GitHub):** el instalador/actualizador (`herramientas/plantillas/motor.ps1`, función `Preparar-IA`) comprueba y muestra con ✓/✗ qué hay: fastembed, modelo MiniLM (~240 MB, `python -m conocimiento modelos`), Ollama (~1,6 GB) y el modelo `qwen2.5:3b` (~1,9 GB); descarga solo lo que falta, con barra de progreso, velocidad y reanudación (`curl -C -`), verifica la firma digital «Ollama Inc.» antes de ejecutar `OllamaSetup.exe` y pregunta antes de bajar nada (`ARBOL_SIN_IA=1` o `ARBOL_SIN_RED=1` lo omiten). Nada de esto va en el repositorio (3,5 GB): se baja de las fuentes oficiales al instalar. Si ya tienes la misma versión, el actualizador solo comprueba componentes; si la app está abierta, la cierra antes de mover `py`. Trampas PowerShell ya vividas: `"$Version:"` en comillas dobles es una variable con ámbito (usar `${Version}:`); un parámetro `$ok` tapa a `$Ok` (no distingue mayúsculas); `ollama serve` oculto solo arranca con la salida redirigida; la primera llamada de PowerShell a `Invoke-RestMethod` tarda 2-3 s (timeouts ≥ 8 s). `tests/test_instaladores.py` valida la sintaxis de motor.ps1 con el analizador de PowerShell. Para repetir la comprobación: ejecutar de nuevo el `Actualizar.bat` (opción «comprobar componentes»).
 5r. **LLM local (Ollama) para los casos dudosos:** `py/conocimiento/llm.py`. Ollama 0.40 instalado en `%LOCALAPPDATA%\Programs\Ollama` con el modelo `qwen2.5:3b` (1,9 GB; CPU, ~6 s por consulta). Solo se le pregunta el género cuando `clasificador.dudoso` (el mejor género saca menos de `MARGEN_DUDA` al segundo, nada se parece, o reglas flojas sin parecido); responde JSON con enum cerrado de GENEROS y su respuesta cuenta como `metodo = llm`. Todo en localhost (`_http` rechaza otras URLs). Si Ollama no está o no tiene el modelo, se ignora sin error y se vuelve a mirar cada minuto. Ajustes: `ARBOL_LLM` (modelo, o `no`) o `conocimiento/ajustes.json` {"llm": {"modelo": "qwen2.5:7b"}}. **Medido** (`python herramientas/comparar_clasificadores.py --llm qwen2.5:3b`, 66 libros): reglas + parecido 86 %; LLM solo 82 % (con el prompt de descripciones + 4 ejemplos resueltos; con el prompt simple era 50 %: los modelos pequeños necesitan ejemplos); híbrido 88 %. En un PC potente probar `qwen2.5:7b`. Tests: `tests/test_llm.py` (Ollama falso; la suite lo apaga con `llm.ACTIVO = False`).
 5q. **Importar en masa y revisar por fecha:** la casilla «Importar sin revisar (clasifica solo)» de la pestaña Importar clasifica e importa todo lo que sueltes sin pasar por las tarjetas (se recuerda en el navegador). Cada archivo guarda en `metadatos.json` cuándo se importó (`fecha`, con hora), cómo se clasificó (`metodo`: `reglas` | `parecido` | `web`, `motivo`, `materias_web`) y la `propuesta` automática original; así se ve qué corregiste a mano. **Para revisar con Claude:** `python -m conocimiento revisar [--desde AAAA-MM-DD] [--hasta …] [--json]` lista lo importado de más reciente a más antiguo con `corregido` (distinto de la propuesta); el Observatorio ordena por fecha y filtra «importados desde». Claude lee ese JSON, propone la clasificación que él habría hecho y se comparan los desacuerdos para mejorar reglas, frases semilla (`clasificador.SEMILLAS`) o pesos. **Materias web:** para libros y artículos, `importar._materias_web` consulta Open Library por el título (timeout de 6 s; si falla una vez, no se reintenta en la sesión) y el género de esas materias suma `PESO_WEB` en `clasificador.decidir` (o decide si todo lo demás da «otro»). No se hace scraping de páginas: solo APIs de metadatos. Las pruebas desactivan la red con `clasificador.WEB = False`. Tests: `tests/test_revisar.py`.
 5n. **Búsqueda por tipo de archivo y por título/autor:** en el buscador principal los prefijos `pdf:`, `epub:`, `docx:`, `md:`, `txt:` filtran lo que sale de tu conocimiento por formato (`conocimiento.buscar(..., formato=)`; con un prefijo de formato no se listan nodos del mapa). En el Telescopio, «Qué buscamos» (Todo / Un libro / Un artículo) muestra casillas de **Título** y **Autor** (el autor se comprueba en cada resultado), el selector de tipo elige las fuentes (libro: Google Books, Open Library, Gutenberg, Internet Archive; artículo: arXiv, OpenAlex) y «Solo PDF / Solo EPUB» filtra por formato descargable. Consola: `python -m conocimiento telescopio -T título -a autor --tipo libro --formato pdf`.
 5o. **Clasificador por parecido (embeddings locales):** `py/conocimiento/clasificador.py`. El importador mezcla las reglas de palabras clave con el parecido del libro (título + capítulos + principio) a unas frases semilla por género y a lo que ya hay en tu biblioteca (lo que corregiste a mano pesa más); `decidir` suma parecido + cuota de las reglas × su seguridad, y si nada se parece (`MIN_PARECIDO`) respeta a las reglas. Corre en local con `fastembed` (ONNX, sin PyTorch; **opcional**: `pip install fastembed`; sin él o sin el modelo todo sigue con las reglas). Los modelos se guardan en `conocimiento/modelos/` (no se publican). Modelo por defecto `paraphrase-multilingual-MiniLM-L12-v2` (0,2 GB; sirve en un portátil de 8 GB); para otro, `conocimiento/ajustes.json` {"modelo_embeddings": "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"} o la variable ARBOL_MODELO. **Medido con `python herramientas/comparar_clasificadores.py`** (66 libros de prueba): reglas solas 42 %; con MiniLM 86 %, con mpnet 89 % (1 GB, algo más lento), con potion-multilingual-128M 82 %; ~0,1 s por libro una vez cargado el modelo. Al añadir géneros o frases semilla, vuelve a medir. El resultado de `clasificar` trae `metodo` (`reglas` | `parecido`) y el motivo lo explica. Tests: `tests/test_clasificador.py` (con un modelo falso; la suite desactiva el real).
-5v. **Cómo se mide y se entrena el clasificador (1.11.0):** `herramientas/evaluar_corpus.py CARPETA NOMBRE [--sin-llm] [--val] [--n N] [--hilos N] [--set modulo.ATRIBUTO=valor]` clasifica una muestra de PRUEBA (25 %, estratificada, semilla fija, `split.json`) con ejemplos solo de entrenamiento y guarda las predicciones en `resultados/`; `--val` reparte el entrenamiento otra vez (validación: ajustar parámetros sin mirar la prueba). `herramientas/estadisticas_clasificacion.py` da acierto con IC de Wilson, F1 macro, calibración, confusiones, cola de revisión y McNemar entre configuraciones; `herramientas/panel_progreso.py RAIZ` abre un panel en `localhost:8765` (progreso en vivo, gráfica por versión desde `enes/progreso.json`, GPU/VRAM/RAM). El corpus se monta con `herramientas/corpus/` (EPUB de Gutenberg en inglés y español con la etiqueta de su estantería, arXiv, código y datos de paquetes instalados) y NO se publica. `herramientas/evaluar_biblioteca.py` mide dejando uno fuera con tu biblioteca. **Medido sobre 232 obras de validación (inglés/español, 19 géneros):** 1.10.1 50 % género / 27 % subgénero → autor, licencia y capítulos limpios 53/28 → cabeza supervisada 67/36 → con cabeza en subgénero 68/39 → LLM 7b con ejemplos parecidos 75/42 (McNemar p = 0,005 en el género). mpnet no mejora a MiniLM; el LLM sin ejemplos parecidos no ayuda; «solo si hay duda» no cambia nada. Con libros nuevos (distribución distinta a la de tu biblioteca) el acierto real es mucho menor que el 94 % que daba dejando uno fuera con tus propios libros: **siempre mide con un conjunto separado.** `clasificador.PESO_CABEZA`/`PESO_CABEZA_SUB` (regresión logística sobre los embeddings de todos los ejemplos), `PESO_AUTOR`, `PESO_WIKI`, `llm.VECINOS`, `llm.ajustes()["siempre"]` y los umbrales `MARGEN_*` son los mandos; cualquier cambio de peso se valida con `--val` y se confirma con `--set` en la prueba. Trampas ya vividas: la licencia de Gutenberg al principio del EPUB se leía como texto de la obra (`importar.sin_licencia`); los hilos de `evaluar_corpus` exigen el candado de `clasificador._candado`; `ARBOL_PY=otra/py` mide otra versión del código.
+5v. **Cómo se mide y se entrena el clasificador (1.11.0):** `herramientas/evaluar_corpus.py CARPETA NOMBRE [--sin-llm] [--val] [--n N] [--hilos N] [--set modulo.ATRIBUTO=valor]` clasifica una muestra de PRUEBA (25 %, estratificada, semilla fija, `split.json`) con ejemplos solo de entrenamiento y guarda las predicciones en `resultados/`; `--val` reparte el entrenamiento otra vez (validación: ajustar parámetros sin mirar la prueba). `herramientas/estadisticas_clasificacion.py` da acierto con IC de Wilson, F1 macro, calibración, confusiones, cola de revisión y McNemar entre configuraciones; `herramientas/panel_progreso.py RAIZ` abre un panel en `localhost:8765` (progreso en vivo, gráfica por versión desde `enes/progreso.json`, GPU/VRAM/RAM). El corpus se monta con `herramientas/corpus/` (EPUB de Gutenberg en inglés y español con la etiqueta de su estantería, arXiv, código y datos de paquetes instalados) y NO se publica. `herramientas/evaluar_biblioteca.py` mide dejando uno fuera con tu biblioteca. **Medido sobre 232 obras de validación (inglés/español, 19 géneros):** 1.10.1 50 % género / 27 % subgénero → autor, licencia y capítulos limpios 53/28 → cabeza supervisada 67/36 → con cabeza en subgénero 68/39 → LLM 7b con ejemplos parecidos 75/42 (McNemar p = 0,005 en el género). mpnet no mejora a MiniLM; el LLM sin ejemplos parecidos no ayuda; «solo si hay duda» no cambia nada. Con libros nuevos (distribución distinta a la de tu biblioteca) el acierto real es mucho menor que el 94 % que daba dejando uno fuera con tus propios libros: **siempre mide con un conjunto separado.** `clasificador.PESO_CABEZA`/`PESO_CABEZA_SUB` (regresión logística sobre los embeddings de todos los ejemplos), `PESO_AUTOR`, `PESO_WIKI`, `llm.VECINOS`, `llm.ajustes()["siempre"]` y los umbrales `MARGEN_*` son los mandos; cualquier cambio de peso se valida con `--val` y se confirma con `--set` en la prueba. **Cifra final sobre el conjunto de PRUEBA (310 obras que no se usaron para decidir nada):** 1.10.1 53,2 % de género (IC 95 % 48-59) y 27,9 % de subgénero → 1.11.0 sin LLM 71,0 % / 38,9 % → 1.11.0 con LLM 7b y ejemplos parecidos **78,7 %** (IC 74-83) / 38,9 %; McNemar frente a 1.10.1: 15 contra 94 obras a favor, p < 0,001. El subgénero sigue siendo el punto débil (el LLM no lo mejora en la prueba). **Probado y descartado:** una «cabeza base» preentrenada con 1 089 obras (regresión logística sobre los embeddings, ~60 KB que viajarían con el programa) NO transfiere a tu biblioteca: con peso 0,5 sube el género 79 → 81 % pero baja el subgénero 56 → 52 %, y con más peso empeora (peso 2: 70/45); la cabeza propia con pocos libros también empeora (79 → 75 % con 73 obras), por eso `clasificador.fuerza` la apaga por debajo de 100 libros tuyos y la enciende del todo con 400. Mientras no haya un corpus moderno etiquetado (los de dominio público son de los siglos XIX-XX) lo que viaja con el programa son los pesos, las semillas y el LLM con ejemplos parecidos. Trampas ya vividas: la licencia de Gutenberg al principio del EPUB se leía como texto de la obra (`importar.sin_licencia`); los hilos de `evaluar_corpus` exigen el candado de `clasificador._candado`; `ARBOL_PY=otra/py` mide otra versión del código.
+5z. **Lectura del cuerpo y género «literatura» (1.12.0):** el modelo de embeddings (MiniLM) solo lee ~100 palabras, que en un libro suelen ser portada y licencia: `clasificador.vector_cuerpo` embebe 8 pasajes de 500 caracteres repartidos por el documento (`pasajes`) y su media se mezcla con el vector de título + capítulos + principio (`mezcla`, `PESO_CUERPO`); los libros importados guardan su vector en `conocimiento/biblioteca/vectores.npz` (por hash; no se publica) para servir de ejemplo con la misma representación (`_matriz`). Medido sin LLM en 232 obras de validación: género 68,1 → 74,6 % (McNemar p = 0,028), subgénero 41,4 → 46,6 %; en el experimento previo con solo una regresión logística, 63 → 73 %. `CUERPO = False` lo apaga. **Sin medir:** que el LLM vea también pasajes del cuerpo (`llm.PASAJES`, apagado por defecto; probar con `--set llm.PASAJES=3`) y el efecto exacto del cuerpo encima del LLM. **Género nuevo `literatura`** (poesía, teatro, cuentos, crítica; `arte` pierde la poesía y la crítica literaria): neutro en precisión (78,7 % → 78,7 % en las mismas 310 obras con el oro antiguo) y reconoce la literatura (35/50); a cambio roba algunas obras de ensayo, novela y viajes. Los pares de subgéneros que más se confunden (ingeniería de software ↔ programación, física ↔ química, guías ↔ relatos de viaje) son parecidos de verdad y varias etiquetas del corpus salen de categorías de arXiv mapeadas a ojo: no merece la pena retocar definiciones sin etiquetas mejores. `herramientas/panel_progreso.py --log fichero` enseña ese registro en vivo.
 5w. **Cola de revisión («no estoy seguro»):** `importar._seguridad` mide el margen entre el género ganador y el segundo (y lo mismo en el subgénero), si el LLM y el parecido discrepan, si casi no hay texto o si no encaja en ningún género; `clasificar` devuelve `revisar`, `motivos_revisar` y `margen`, `importar()` los guarda en `metadatos.json`. El Observatorio muestra ⚠ con el motivo y «✓ Está bien» (`Api.biblioteca_confirmar` → `importar.confirmar`, que además lo recuerda como corrección tuya), la casilla «Solo por revisar» y un contador en la pestaña 🔭 (`Api.biblioteca_por_revisar`); tocar cualquier campo cuenta como revisado; al terminar una importación se avisa de cuántos hay. Consola: `python -m conocimiento revisar --dudosos`. Umbrales calibrados con datos (`MARGEN_REVISAR`, `MARGEN_SUB_REVISAR`): ~44 % marcado recoge ~67 % de los errores de género; subirlos avisa más. Tests: `tests/test_cola_revision.py`.
 5x. **Información web (Wikipedia/Wikidata) y vídeos:** `py/conocimiento/webinfo.py` busca «título autor» en Wikipedia (APIs oficiales, nada de rascar HTML), exige que la introducción nombre al autor y que Wikidata diga que es una obra escrita (no una persona, película o personaje) y devuelve descripción, tipo, género y subgénero de novela; entra al clasificador como descripción (para el parecido y el LLM) y como pista de género (`PESO_WIKI`). Respeta a los servidores: 1 petición por segundo, reintentos con espera ante 429 (Wikimedia limita de verdad), descanso tras fallos y caché en `conocimiento/webinfo_cache.json`; solo sale el título y el autor; `clasificador.WIKI = "auto"` (por defecto) la usa solo cuando el LLM no está disponible, porque con LLM no suma; `True` = siempre, `False` o `ARBOL_WIKI=no` = nunca (los tests la apagan). Medido en 73 obras conocidas (dejando uno fuera): sin LLM 75/49 → con Wikipedia 79/56; con LLM 7b y ejemplos parecidos 86/68, y 86/66 si además se usa Wikipedia. **Vídeos:** `py/conocimiento/enlaces.py` acepta accesos directos `.url` de YouTube/Vimeo: título, canal y miniatura (portada) salen del oEmbed oficial, sin transcripciones; tipo `video`, galaxia Libros, se clasifican por título y canal (+ Wikipedia si es un documental con ficha). Tests: `tests/test_webinfo.py`, `tests/test_enlaces.py`.
 5y. **LLM por defecto (1.11.0):** `llm.py` pregunta por TODAS las obras (`siempre`) y le enseña los `VECINOS = 8` libros más parecidos ya clasificados; el modelo por defecto depende de la RAM (`qwen2.5:7b` con 12 GB o más, `qwen2.5:3b` con menos; si falta el elegido usa el otro), y el instalador (`motor.ps1`) baja el que corresponda. Se cambia con `ajustes.json` o `ARBOL_LLM`.
@@ -41821,6 +41910,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 - **Versión:** parche (`0.11.7` → `0.11.8`) para arreglos, textos y ajustes de rendimiento o instalador; menor (`0.12.0`) para funciones, demos o ramas nuevas; mayor (`1.0.0`, publicada: universo, importador, observatorio y buscador con ámbitos) cuando Mario decida que es estable.
 - Cambios que no tocan el programa (solo documentación) van como `docs: …`, sin subir versión ni regenerar instaladores.
 - Nunca `Co-Authored-By`. Nunca datos privados (`publicar.py` lo comprueba antes de hacer commit).
+- **Publicar desde un worktree sin arrastrar tu biblioteca:** `python herramientas/publicar_seguro.py "qué cambió" --rama <rama> [--ensayo]` (aparta tus ficheros de `conocimiento/` sin commitear, trae la rama con `merge --squash`, construye el visor y los instaladores con `ARBOL_CONOCIMIENTO` vacío y te los devuelve; `--ensayo` lo prueba en un clon sin push). Al acabar, `python py/construir_visor.py` en main para recuperar tu visor con tus libros.
 
 ## Reglas de estilo heredadas de los agentes de Mario
 

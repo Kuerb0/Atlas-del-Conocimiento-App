@@ -65,6 +65,14 @@ def progreso() -> list[dict]:
             for p in leer(RAIZ / "enes" / "progreso.json", []) for r in [res.get(p["archivo"])] if r]
 
 
+def registro(n: int = 14) -> list[str]:
+    """Las últimas líneas del registro (--log) de lo que corre ahora, sin los avisos ruidosos de las librerías."""
+    if not (LOG and LOG.exists()):
+        return []
+    ruido = ("Fetching", "warn", "symlink", "Developer", "Exceeded", "Ignoring", "Got invalid", "HF_TOKEN")
+    return [x[:200] for x in LOG.read_text(encoding="utf-8", errors="replace").splitlines() if x.strip() and not any(r in x for r in ruido)][-n:]
+
+
 def vivo() -> dict | None:
     v = leer(RAIZ / "enes" / "resultados" / "_vivo.json", None)
     if v and time.time() - v["t"] < 600:
@@ -120,6 +128,7 @@ svg text{fill:var(--tx);font-size:11px}svg text.m{fill:var(--mut);font-size:10px
 <div class="card" id="ahora"></div><div class="card" id="maq"></div>
 <div class="card full"><h2>Progreso por versión: acierto de género y de subgénero (misma validación, sin LLM salvo que se indique)</h2><div id="prog"></div></div>
 <div class="card full"><h2>Configuraciones medidas (acierto de género con IC 95 %)</h2><div id="graf"></div><div style="overflow:auto"><table id="tabla"></table></div></div>
+<div class="card full" id="regcard" hidden><h2>Registro en vivo</h2><pre id="reg" style="margin:0;white-space:pre-wrap;font:12px/1.5 ui-monospace,Consolas,monospace;color:var(--mut)"></pre></div>
 <div class="card"><h2>Corpus</h2><div id="corpus"></div></div><div class="card"><h2>Últimas obras evaluadas</h2><div id="ultimas"></div></div>
 </div>
 <script>
@@ -149,6 +158,7 @@ async function ciclo(){try{const e=await (await fetch('estado')).json();
  $('maq').innerHTML='<h2>Tu equipo</h2>'+(g?`<div class="row"><span class="lab">GPU ${g.uso}%</span><div class="track"><div class="fill" style="width:${g.uso}%"></div></div></div><div class="row"><span class="lab">VRAM</span><div class="track"><div class="fill" style="width:${100*g.vram/g.vram_total}%"></div></div><span class="val" style="width:auto">${(g.vram/1024).toFixed(1)}/${(g.vram_total/1024).toFixed(0)} GB</span></div><div class="mut">${g.nombre} · ${g.temp} °C</div>`:'<div class="mut">GPU no detectada</div>')+
   (r?`<div class="row"><span class="lab">RAM ${r.uso}%</span><div class="track"><div class="fill" style="width:${r.uso}%"></div></div><span class="val" style="width:auto">${r.libre_gb} GB libres</span></div>`:'')+
   `<div class="mut" style="margin-top:6px">Ollama: ${o===null?'apagado':o.length?o.map(x=>`<span class="pill">${x.modelo} · ${x.gb} GB (${x.vram_gb} GB en GPU)</span>`).join(' '):'sin modelo cargado'}</div>`;
+ if(e.registro&&e.registro.length){$('regcard').hidden=false;$('reg').textContent=e.registro.join('\\n')+(e.hace_log>90?'\\n(sin novedades hace '+e.hace_log+' s)':'')}
  const rs=e.resultados; $('graf').innerHTML=graf(rs); $('prog').innerHTML=lineas(e.progreso||[]);
  $('tabla').innerHTML='<tr><th>Configuración</th><th>Obras</th><th>Género</th><th>IC 95 %</th><th>Subgénero</th><th>LLM</th><th>s/obra</th><th>Hora</th></tr>'+rs.slice().reverse().map(r=>`<tr><td title="${r.sets}">${r.nombre}</td><td>${r.n}</td><td><b>${pc(r.g)}</b></td><td class="mut">${(100*r.g_lo).toFixed(0)}–${(100*r.g_hi).toFixed(0)}</td><td>${pc(r.s)} <span class="mut">(${r.n_s})</span></td><td>${r.llm}</td><td>${r.seg.toFixed(1)}</td><td class="mut">${r.hora}</td></tr>`).join('');
  const c=e.corpus; $('corpus').innerHTML=`<div class="mut">${c.total} obras · entrenamiento ${c.entrenamiento} · validación ${c.validacion} · prueba ${c.prueba}</div><div style="margin:8px 0 4px"><b>Por tipo</b></div>`+barras(c.tipos,Math.max(...Object.values(c.tipos),1))+`<div style="margin:8px 0 4px"><b>Por género</b></div>`+barras(c.generos,Math.max(...Object.values(c.generos),1));
@@ -164,7 +174,7 @@ class H(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.startswith("/estado"):
-            cuerpo, tipo = json.dumps({"vivo": vivo(), "corpus": corpus(), "resultados": resultados(), "progreso": progreso(), "maquina": maquina()}, ensure_ascii=False).encode("utf-8"), "application/json"
+            cuerpo, tipo = json.dumps({"vivo": vivo(), "corpus": corpus(), "resultados": resultados(), "progreso": progreso(), "maquina": maquina(), "registro": registro(), "hace_log": round(time.time() - LOG.stat().st_mtime) if LOG and LOG.exists() else None}, ensure_ascii=False).encode("utf-8"), "application/json"
         else:
             cuerpo, tipo = PAGINA.encode("utf-8"), "text/html"
         self.send_response(200)
