@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.10.1 - Instalador
+title Arbol de la estadistica 1.11.0 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
 set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=1.10.1"
+set "ARBOL_VERSION=1.11.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -372,7 +372,9 @@ function Abrir-App($dest) {
 
 # ---------------------------------------------------------------- IA local: embeddings (fastembed) + LLM (Ollama), con barras de progreso
 $Bloque = [string][char]0x2588; $Claro = [string][char]0x2591; $Ok = [string][char]0x2713; $No = [string][char]0x2717
-$ModeloLLM = 'qwen2.5:3b'
+$RamGB = try { [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB) } catch { 8 }          # si no se puede medir, se supone un equipo modesto
+$ModeloLLM = if ($RamGB -ge 12) { 'qwen2.5:7b' } else { 'qwen2.5:3b' }          # el que mejor rinde si el equipo lo aguanta (con menos de 12 GB de RAM, el pequeño)
+$TamLLM = if ($ModeloLLM -eq 'qwen2.5:7b') { '4,7 GB' } else { '1,9 GB' }
 $ModeloEmb = 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'
 
 function Barra($pct, $texto) {
@@ -495,7 +497,7 @@ function Preparar-IA($py, $dest) {
     Estado-Linea $tieneFE 'fastembed (embeddings locales)' $(if ($tieneFE) { 'ya instalado' } else { 'falta, ~60 MB' })
     Estado-Linea $tieneEmb 'modelo de parecido MiniLM' $(if ($tieneEmb) { 'ya descargado' } else { 'falta, ~240 MB' })
     Estado-Linea ([bool]$exe) 'Ollama' $(if ($exe) { $exe } else { 'falta, ~1,6 GB' })
-    Estado-Linea $tieneLLM "modelo $ModeloLLM" $(if ($tieneLLM) { 'ya descargado' } elseif ($exe -and -not $respondia) { 'Ollama no arranca: ábrelo y repite' } else { 'falta, ~1,9 GB' })
+    Estado-Linea $tieneLLM "modelo $ModeloLLM" $(if ($tieneLLM) { 'ya descargado' } elseif ($exe -and -not $respondia) { 'Ollama no arranca: ábrelo y repite' } else { "falta, ~${TamLLM}" })
     $faltaAlgo = (-not $tieneFE) -or (-not $tieneEmb) -or (-not $exe) -or ($exe -and -not $tieneLLM)
     if (-not $faltaAlgo) { Info 'Todo al día: no hay nada que descargar.'; return }
     if (-not $env:ARBOL_DESTINO) {
@@ -525,7 +527,7 @@ function Preparar-IA($py, $dest) {
     Paso '[IA local] Arrancando Ollama...'
     if (-not (Arrancar-Ollama $exe)) { Aviso 'Ollama no respondió. Ábrelo desde el menú Inicio y repite esto para bajar el modelo.'; return }
     if (-not (Tiene-Modelo-Ollama $ModeloLLM)) {
-        Paso "[IA local] Descargando el modelo $ModeloLLM (1,9 GB; Ollama muestra su propio progreso)..."
+        Paso "[IA local] Descargando el modelo $ModeloLLM (${TamLLM}; Ollama muestra su propio progreso)..."
         & $exe pull $ModeloLLM | Out-Host
         if (Tiene-Modelo-Ollama $ModeloLLM) { Estado-Linea $true "modelo $ModeloLLM" 'listo' } else { Aviso "El modelo $ModeloLLM no se descargó. Repite esto con conexión." }
     } else { Estado-Linea $true "modelo $ModeloLLM" 'ya descargado' }
@@ -680,7 +682,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.10.1
+1.11.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -845,6 +847,14 @@ class Api:
 
     def biblioteca_editar(self, rel, cambios):
         return self._bib("editar", str(rel), dict(cambios))
+
+    def biblioteca_confirmar(self, rel):
+        return self._bib("confirmar", str(rel))
+
+    def biblioteca_por_revisar(self):
+        """Cuántos documentos importados esperan que los revises (el visor pone la cifra en la pestaña del Observatorio)."""
+        r = self._bib("por_revisar")
+        return r if isinstance(r, dict) else {"n": len(r), "lista": r[:50]}
 
     def biblioteca_reclasificar(self, rel):
         return self._bib("reclasificar_uno", str(rel))
@@ -3016,7 +3026,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.10.1"
+version = "1.11.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3696,7 +3706,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.10.1"
+__version__ = "1.11.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -14106,7 +14116,8 @@ EXT = {".md", ".txt", ".pdf", ".epub", ".docx"}                          # lo qu
 CODIGO_EXT = {".py", ".ipynb", ".r", ".rmd", ".qmd", ".sas", ".sql", ".js", ".ts", ".sh", ".bat", ".ps1", ".c", ".cpp", ".h", ".java", ".jl", ".m"}
 DATOS_EXT = {".csv", ".tsv", ".xlsx", ".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".xml"}
 APUNTES_EXT = {".rst", ".tex", ".html", ".htm", ".pptx"}
-EXT_IMPORTABLE = EXT | CODIGO_EXT | DATOS_EXT | APUNTES_EXT                # lo que acepta el importador y se indexa dentro de biblioteca/
+ENLACE_EXT = {".url"}                                                    # accesos directos a vídeos (YouTube, Vimeo): enlaces.py
+EXT_IMPORTABLE = EXT | CODIGO_EXT | DATOS_EXT | APUNTES_EXT | ENLACE_EXT                # lo que acepta el importador y se indexa dentro de biblioteca/
 
 
 SIN_VENTANA = getattr(__import__("subprocess"), "CREATE_NO_WINDOW", 0)      # creationflags de los subprocess: en la app (pythonw) evita que parpadee una ventana de consola
@@ -14277,6 +14288,9 @@ def _extraer(col: str, f: Path):
     if col == "conceptos":
         return _conceptos(f)
     ext = f.suffix.lower()
+    if ext in ENLACE_EXT:
+        from . import enlaces
+        return _trocear(enlaces.texto(f), f.stem, "")
     if ext in CODIGO_EXT and ext != ".ipynb":
         return _codigo_texto(f)
     return {".pdf": _pdf, ".epub": _epub, ".docx": _docx, ".ipynb": _ipynb, ".csv": _datos, ".tsv": _datos, ".json": _datos, ".yaml": _datos, ".yml": _datos, ".toml": _datos,
@@ -14465,6 +14479,7 @@ r = sub.add_parser("revisar", help="lista lo importado por fecha con cómo se cl
 r.add_argument("--desde", default="", help="AAAA-MM-DD")
 r.add_argument("--hasta", default="", help="AAAA-MM-DD")
 r.add_argument("--json", action="store_true", help="salida en JSON (para que Claude la revise)")
+r.add_argument("--dudosos", action="store_true", help="solo lo que el clasificador no vio claro y aún no has mirado (cola de revisión), con el motivo")
 sub.add_parser("modelos", help="descarga el modelo de embeddings (lo usa el instalador)")
 b = sub.add_parser("buscar", help="busca en todas las colecciones")
 b.add_argument("consulta", nargs="+")
@@ -14493,7 +14508,11 @@ elif a.orden == "modelos":
         print(f"ERROR: {type(e).__name__}: {e}")
         sys.exit(1)
 elif a.orden == "revisar":
-    from .importar import revisar
+    from .importar import por_revisar, revisar
+    if a.dudosos:
+        for x in por_revisar():
+            print(f"⚠ {x['titulo'][:48]:48} → {x['genero']}/{x['subgenero'] or '-'}   {' · '.join(x['motivos'])}")
+        sys.exit(0)
     filas = revisar(a.desde, a.hasta)
     if a.json:
         import json
@@ -14615,6 +14634,8 @@ import json
 import os
 from pathlib import Path
 
+import threading
+
 import numpy as np
 
 from . import CARPETA, _norm
@@ -14626,6 +14647,16 @@ PESO_WEB = 0.15          # lo que suma al género que dicen las materias web
 MARGEN_DUDA = 0.05       # si el mejor género saca menos que esto al segundo, el caso es dudoso (y se pregunta al LLM si hay uno)
 PESO_REGLAS = 1.0        # cuánto pesa lo que opinan las reglas (parte de los puntos que se llevaría cada género) frente al parecido
 SATURA = 20              # con tantos puntos las reglas ya se consideran seguras
+PESO_AUTOR = 0.3         # lo que suma el género (o subgénero) que ya tienen los otros libros del mismo autor, según cuántos haya (n / (n + 1))
+PESO_CABEZA = 2.0        # lo que suma la probabilidad de un clasificador supervisado (regresión logística sobre los embeddings de TODOS los ejemplos); 0 = apagado. Validado: 53 → 68 % de acierto de género (evaluar_corpus.py)
+PESO_CABEZA_SUB = 2.0    # lo mismo para el subgénero (un clasificador por género, con las frases de la taxonomía y tus libros de ese género)
+LIBROS_CABEZA = (100, 400)   # la cabeza supervisada pesa 0 con 100 libros tuyos como ejemplos o menos y su peso completo con 400 o más: con pocos ejemplos EMPEORA (79 → 75 % con 73 obras), con cientos mejora 15 puntos
+LIBROS_CABEZA_SUB = (20, 120)   # lo mismo para el subgénero, contando solo los libros de ese género
+MARGEN_REVISAR = 0.15    # distancia entre el género ganador y el segundo, dividida entre la escala máxima de puntos (1 + PESO_CABEZA + PESO_REGLAS); por debajo se pide revisión manual.
+                         # Calibrado con 232 obras de validación y el LLM: marca ~44 % de las obras y recoge ~67 % de los errores de género (lo no marcado acierta ~85 %). Más alto = más avisos
+MARGEN_SUB_REVISAR = 0.03  # lo mismo para el subgénero (escala 1 + PESO_CABEZA_SUB)
+WIKI = "auto"            # Wikipedia/Wikidata (webinfo.py) por título y autor: "auto" = solo si el LLM no está disponible (con LLM no suma: 86/66 frente a 86/68 en 73 obras; sin él sube 75/49 → 79/56); True = siempre; False = nunca (sin red)
+PESO_WIKI = 0.6          # lo que suma el género que dice Wikidata de la obra (y 0,6 · el subgénero)
 MIN_PARECIDO = 0.25      # por debajo, el libro no se parece a ningún género: se queda como lo dejaron las reglas (p. ej. «otro»)
 _cache: dict = {}        # nombre del modelo -> función(textos) -> matriz normalizada; también guarda los vectores de las semillas
 
@@ -14675,7 +14706,15 @@ def modelo(carpeta: Path | str = CARPETA) -> str:
         return MODELO
 
 
+_candado = threading.RLock()        # cargar el modelo y entrenar la cabeza una sola vez aunque varios hilos clasifiquen a la vez (evaluar_corpus.py usa hilos)
+
+
 def _embedder(nombre: str, carpeta: Path | str = None):  # los modelos son de todos los proyectos: siempre en CARPETA/modelos
+    with _candado:
+        return _embedder_(nombre)
+
+
+def _embedder_(nombre: str):
     if nombre not in _cache:
         from fastembed import TextEmbedding
         m = TextEmbedding(model_name=nombre, cache_dir=str(Path(CARPETA) / "modelos"))
@@ -14683,11 +14722,12 @@ def _embedder(nombre: str, carpeta: Path | str = None):  # los modelos son de to
         memo: dict = {}                                          # texto -> vector: los ejemplos de la biblioteca no se vuelven a calcular en cada archivo
 
         def emb(textos):
-            nuevos = [t for t in dict.fromkeys(textos) if t not in memo]
-            if nuevos:
-                v = np.array(list(m.embed(nuevos)), dtype=float)
-                memo.update(zip(nuevos, v / np.linalg.norm(v, axis=1, keepdims=True)))
-            return np.array([memo[t] for t in textos])
+            with _candado:
+                nuevos = [t for t in dict.fromkeys(textos) if t not in memo]
+                if nuevos:
+                    v = np.array(list(m.embed(nuevos)), dtype=float)
+                    memo.update(zip(nuevos, v / np.linalg.norm(v, axis=1, keepdims=True)))
+                return np.array([memo[t] for t in textos])
         _cache[nombre] = emb
     return _cache[nombre]
 
@@ -14700,10 +14740,37 @@ def preparar(carpeta: Path | str | None = None) -> str:
     return f"modelo {nombre} listo ({v.shape[1]} dimensiones) en {Path(CARPETA) / 'modelos'}"
 
 
+_CAP_VACIO = __import__("re").compile(r"^\W*(?:chapter|cap[ií]tulo|cap\.?|part|parte|book|libro|section)?\W*(?:m{0,3}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})|\d+)?\W*$", __import__("re").I)
+
+
 def texto_libro(titulo: str, capitulos: list, vista: str = "") -> str:
     """Lo que se compara de un libro: título, los primeros capítulos y el principio del texto."""
-    caps = "; ".join((c["titulo"] if isinstance(c, dict) else str(c)) for c in capitulos[:8])
+    caps = "; ".join(x for x in ((c["titulo"] if isinstance(c, dict) else str(c)) for c in capitulos[:12]) if not _CAP_VACIO.match(x))[:400]       # «Chapter II.», «III» o «Parte 2» no dicen nada
     return f"{titulo}. {caps}. {vista[:700]}".strip()
+
+
+def autor_de(nombre: str) -> str:
+    """Autor según el nombre del archivo («Título - Autor»): el último tramo tras « - », normalizado; "" si no parece un nombre."""
+    partes = [x.strip() for x in str(nombre).split(" - ")]
+    a = _norm(partes[-1]).strip() if len(partes) > 1 else ""
+    return a if 1 <= len(a.split()) <= 5 and not any(c.isdigit() for c in a) else ""
+
+
+def _del_autor(autor: str, carpeta: Path | str) -> list[dict]:
+    """Metadatos de los libros de la biblioteca cuyo archivo original tenía ese autor."""
+    if not autor:
+        return []
+    try:
+        from .importar import leer_metadatos
+        return [m for m in leer_metadatos(Path(carpeta)).values() if autor_de(Path(m.get("origen", "")).stem or m.get("titulo", "")) == autor]
+    except Exception:
+        return []
+
+
+def _sesgo_autor(autor: str, clave: str, carpeta: Path | str, filtro=lambda m: True) -> dict:
+    """{valor de `clave`: bonus} según lo que ya tienen los otros libros de ese autor (los que cumplen `filtro`)."""
+    ms = [m for m in _del_autor(autor, carpeta) if filtro(m) and m.get(clave)]
+    return {v: PESO_AUTOR * sum(m[clave] == v for m in ms) / (len(ms) + 1) for v in {m[clave] for m in ms}}
 
 
 def _ejemplos(carpeta: Path | str) -> list[tuple[str, str, float]]:
@@ -14713,13 +14780,61 @@ def _ejemplos(carpeta: Path | str) -> list[tuple[str, str, float]]:
         from .importar import GENEROS, leer_metadatos
         for m in leer_metadatos(Path(carpeta)).values():
             if m.get("genero") in GENEROS and m.get("genero") != "otro":
-                ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), m.get("etiquetas", "")), m["genero"], 1.5 if m.get("automatico") else 2.5))
+                ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), m["genero"], 1.5 if m.get("automatico") else 2.5))
     except Exception:
         pass
     return ej
 
 
-def sugerir(texto: str, carpeta: Path | str | None = None) -> dict | None:
+def vecinos(texto: str, carpeta: Path | str, k: int = 6) -> list[dict]:
+    """Los k libros ya clasificados de tu biblioteca más parecidos al texto: [{'titulo','autor','genero','subgenero'}]. Son los ejemplos que se le enseñan al LLM."""
+    if not ACTIVO or _cache.get("fallo") or k <= 0:
+        return []
+    try:
+        from .importar import GENEROS, leer_metadatos
+        ms = [m for m in leer_metadatos(Path(carpeta)).values() if m.get("genero") in GENEROS and m["genero"] != "otro"]
+        if not ms:
+            return []
+        emb = _embedder(modelo(carpeta), carpeta)
+        X = emb([texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)) for m in ms])
+        orden = np.argsort(-(X @ emb([texto])[0]))[:k]
+        return [{"titulo": ms[i].get("titulo", ""), "autor": autor_de(Path(ms[i].get("origen", "")).stem), "genero": ms[i]["genero"], "subgenero": ms[i].get("subgenero", "")} for i in orden]
+    except Exception:
+        return []
+
+
+_cabezas: dict = {}
+
+
+def _cabeza(ej: list, X):
+    """Regresión logística multinomial entrenada con los ejemplos (semillas + biblioteca). Se guarda por contenido: con los mismos ejemplos no se vuelve a entrenar."""
+    clave = hash(tuple(e[0] for e in ej))
+    with _candado:
+        return _cabeza_(clave, ej, X)
+
+
+def _cabeza_(clave, ej, X):
+    if clave not in _cabezas:
+        from sklearn.linear_model import LogisticRegression
+        y = [e[1] for e in ej]
+        if len(set(y)) < 2:
+            _cabezas[clave] = None
+        else:
+            _cabezas[clave] = LogisticRegression(C=10.0, max_iter=500, class_weight="balanced").fit(X, y, sample_weight=[e[2] for e in ej])
+    return _cabezas[clave]
+
+
+def extra_ejemplo(m: dict) -> str:
+    """El texto que se suma al título y los capítulos de un libro de la biblioteca cuando hace de ejemplo: sus etiquetas y su descripción de Wikipedia (si la tuvo al importarse)."""
+    return " ".join(x for x in (m.get("web_resumen", ""), m.get("etiquetas", "")) if x).strip()
+
+
+def fuerza(n: int, rango: tuple) -> float:
+    """0 si hay `rango[0]` ejemplos o menos, 1 con `rango[1]` o más, lineal entre medias: cuánto fiarse de un clasificador supervisado según los ejemplos propios que tiene."""
+    return min(1.0, max(0.0, (n - rango[0]) / (rango[1] - rango[0])))
+
+
+def sugerir(texto: str, carpeta: Path | str | None = None, autor: str = "", pistas: dict | None = None) -> dict | None:
     """{'genero', 'confianza' (margen sobre el segundo), 'puntos': {género: parecido}} o None si no hay modelo."""
     if not ACTIVO or _cache.get("fallo"):
         return None
@@ -14737,6 +14852,19 @@ def sugerir(texto: str, carpeta: Path | str | None = None) -> dict | None:
     for g in {e[1] for e in ej}:
         v = sorted((s + .04 * (e[2] - 1) for s, e in zip(sims, ej) if e[1] == g), reverse=True)[:2]
         puntos[g] = float(np.mean(v))
+    peso = PESO_CABEZA * fuerza(sum(e[2] > 1 for e in ej), LIBROS_CABEZA)
+    if peso:
+        clf = _cabeza(ej, X)
+        if clf is not None:
+            for g, pr in zip(clf.classes_, clf.predict_proba(q.reshape(1, -1))[0]):
+                if g in puntos:
+                    puntos[g] += peso * float(pr)
+    for g, b in _sesgo_autor(autor, "genero", carpeta).items():
+        if g in puntos:
+            puntos[g] += b
+    for g, w in (pistas or {}).items():                                   # lo que dice Wikidata de la obra
+        if g in puntos:
+            puntos[g] += PESO_WIKI * w
     orden = sorted(puntos, key=puntos.get, reverse=True)
     return {"genero": orden[0], "confianza": puntos[orden[0]] - puntos[orden[1]], "puntos": {g: round(puntos[g], 3) for g in orden}}
 
@@ -14748,7 +14876,7 @@ def _palabras(t: str) -> set:
     return {w for w in __import__("re").findall(r"[a-z]{4,}", _norm(t)) if w not in _PARADA}
 
 
-def subgenero(texto: str, genero: str, carpeta: Path | str | None = None) -> dict | None:
+def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor: str = "", pistas: dict | None = None) -> dict | None:
     """Subgénero (de la taxonomía del género) que mejor describe el texto: {'id','nombre','confianza','puntos': {id: 0-100}} o None si el género no tiene subgéneros.
     Con modelo de embeddings compara con las frases del subgénero y con lo que ya tienes en esa categoría; sin modelo, por palabras en común."""
     from . import taxonomia
@@ -14766,14 +14894,28 @@ def subgenero(texto: str, genero: str, carpeta: Path | str | None = None) -> dic
                 ids = {s[0] for s in subs}
                 for m in leer_metadatos(carpeta).values():
                     if m.get("genero") == genero and m.get("subgenero") in ids:
-                        ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), m.get("etiquetas", "")), m["subgenero"], 1.5 if m.get("automatico") else 2.5))
+                        ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), m["subgenero"], 1.5 if m.get("automatico") else 2.5))
             except Exception:
                 pass
-            sims = emb([e[0] for e in ej]) @ emb([texto])[0]
+            X, q = emb([e[0] for e in ej]), emb([texto])[0]
+            sims = X @ q
             puntos = {}
             for sid in ids:
                 v = sorted((s + .04 * (e[2] - 1) for s, e in zip(sims, ej) if e[1] == sid), reverse=True)[:2]
                 puntos[sid] = float(np.mean(v))
+            peso = PESO_CABEZA_SUB * fuerza(sum(e[2] > 1 for e in ej), LIBROS_CABEZA_SUB)
+            if peso:
+                clf = _cabeza(ej, X)
+                if clf is not None:
+                    for sid, pr in zip(clf.classes_, clf.predict_proba(q.reshape(1, -1))[0]):
+                        if sid in puntos:
+                            puntos[sid] += peso * float(pr)
+            for sid, b in _sesgo_autor(autor, "subgenero", carpeta, lambda m: m.get("genero") == genero).items():
+                if sid in puntos:
+                    puntos[sid] += b
+            for sid, w in (pistas or {}).items():
+                if sid in puntos:
+                    puntos[sid] += PESO_WIKI * w
         except Exception:
             _cache["fallo"] = True
             puntos = None
@@ -14815,6 +14957,83 @@ def dudoso(reglas: dict, parecido: dict | None, web: str | None = None) -> bool:
     v = sorted(puntuar(reglas, parecido, web).values(), reverse=True)
     return v[0] - v[1] < MARGEN_DUDA
 :::END
+:::BEGIN py/conocimiento/enlaces.py|text
+"""Enlaces a vídeos (YouTube, Vimeo): el título y el canal salen del oEmbed oficial de cada plataforma (sin clave y sin rascar la página).
+
+Un enlace entra al importador como un acceso directo `.url` (lo que crea el navegador al arrastrar una dirección al escritorio o a una carpeta). No se descarga el vídeo ni su
+transcripción: con el título, el canal y, si la obra tiene ficha en Wikipedia (documentales), su descripción, se clasifica como cualquier otro documento.
+Solo sale la dirección del vídeo hacia YouTube/Vimeo. Sin red: el nombre del acceso directo hace de título.
+"""
+from __future__ import annotations
+
+import json
+import re
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+UA = "arbol-estadistica/1.0 (biblioteca personal) python-urllib"
+OEMBED = {"youtube": "https://www.youtube.com/oembed?format=json&url=", "vimeo": "https://vimeo.com/api/oembed.json?url="}
+_memo: dict = {}
+
+
+def url_de(f: Path | str) -> str:
+    """La dirección de un acceso directo `.url` (línea `URL=…` del formato INI de Windows); "" si no la tiene."""
+    try:
+        t = Path(f).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    m = re.search(r"(?im)^\s*URL\s*=\s*(\S+)", t)
+    return m.group(1).strip() if m else ""
+
+
+def plataforma(url: str) -> str:
+    """'youtube' | 'vimeo' | '' según la dirección."""
+    h = (urllib.parse.urlparse(url).hostname or "").lower()
+    if h in ("youtu.be", "youtube.com") or h.endswith(".youtube.com"):
+        return "youtube"
+    if h == "vimeo.com" or h.endswith(".vimeo.com"):
+        return "vimeo"
+    return ""
+
+
+def info(f: Path | str) -> dict | None:
+    """{'url', 'plataforma', 'titulo', 'canal', 'miniatura'} del vídeo de un acceso directo (o de una dirección), o None si no es de una plataforma conocida o no responde."""
+    url = str(f) if str(f).startswith("http") else url_de(f)
+    p = plataforma(url)
+    if not p:
+        return None
+    if url not in _memo:
+        try:
+            req = urllib.request.Request(OEMBED[p] + urllib.parse.quote(url, safe=""), headers={"User-Agent": UA})
+            with urllib.request.urlopen(req, timeout=8) as r:
+                d = json.loads(r.read().decode("utf-8"))
+            _memo[url] = {"url": url, "plataforma": p, "titulo": re.sub(r"\s+", " ", d.get("title", "")).strip(), "canal": d.get("author_name", "").strip(), "miniatura": d.get("thumbnail_url", "")}
+        except Exception:
+            _memo[url] = {"url": url, "plataforma": p, "titulo": "", "canal": "", "miniatura": ""}          # sin red o vídeo no disponible: se clasifica por el nombre del acceso directo
+    return _memo[url]
+
+
+def miniatura(url: str, limite: int = 2_000_000) -> bytes | None:
+    """La imagen de portada del vídeo (https, hasta 2 MB), o None."""
+    if not url.startswith("https://"):
+        return None
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": UA}), timeout=8) as r:
+            datos = r.read(limite + 1)
+        return datos if 0 < len(datos) <= limite and datos[:3] in (b"\xff\xd8\xff", b"\x89PN", b"RIF") else None
+    except Exception:
+        return None
+
+
+def texto(f: Path | str) -> str:
+    """Lo que se lee de un vídeo para clasificarlo e indexarlo: título, canal y plataforma."""
+    i = info(f)
+    nombre = Path(str(f)).stem
+    if not i:
+        return nombre
+    return "\n".join(x for x in (i["titulo"] or nombre, f"Canal: {i['canal']}" if i["canal"] else "", f"Vídeo de {i['plataforma'].capitalize()}", i["url"]) if x)
+:::END
 :::BEGIN py/conocimiento/fuentes.ejemplo.json|text
 {
   "libros": ["D:/Libros/Estadistica"],
@@ -14848,10 +15067,10 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from . import CARPETA, CODIGO_EXT, DATOS_EXT, DB, EXT_IMPORTABLE, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, indexar, llm, taxonomia
+from . import CARPETA, CODIGO_EXT, DATOS_EXT, DB, EXT_IMPORTABLE, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, enlaces, indexar, llm, taxonomia, webinfo
 
 GALAXIAS = {"codigo": "Código", "conceptos": "Conceptos", "demos": "Demos y guías", "finanzas": "Finanzas", "libros": "Libros", "notas": "Notas y enlaces"}
-TIPOS = {"libro": "Libro", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "codigo": "Código", "datos": "Datos", "otro": "Otro"}
+TIPOS = {"libro": "Libro", "video": "Vídeo", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "codigo": "Código", "datos": "Datos", "otro": "Otro"}
 _GENEROS_BASE = {"historia": "Historia", "economia": "Economía y finanzas", "ensayo": "Ensayo y filosofía", "estadistica": "Estadística y matemáticas", "ciencia": "Ciencia y divulgación",
                  "novela": "Novela y ficción", "biografia": "Biografía y memorias", "politica": "Política y sociedad", "tecnologia": "Tecnología e informática",
                  "psicologia": "Psicología y salud", "arte": "Arte, música y cultura"}
@@ -15222,6 +15441,51 @@ def _barras(puntos: dict, forzar: str | None = None, n: int = 6) -> list[dict]:
     return [{"id": g, "nombre": GENEROS[g], "valor": round(100 * v / m)} for g, v in sorted(p.items(), key=lambda kv: -kv[1])[:n]]
 
 
+def _seguridad(gp: dict, s: dict | None, web, genero: str, sg: dict | None, sg0: str | None, texto: str, tipo: str, corr: bool) -> tuple[float | None, float | None, list[str]]:
+    """(margen del género, margen del subgénero, motivos por los que conviene que lo revises tú). Sin motivos = el sistema está seguro.
+    El margen es la distancia de puntos entre la primera y la segunda opción (la misma escala que decide el género); los umbrales están en clasificador.MARGEN_*."""
+    motivos, margen, margen_sub = [], None, None
+    if len(texto.strip()) < 300 and tipo not in ("codigo", "datos", "video"):
+        motivos.append("casi no hay texto que leer (¿PDF escaneado o protegido?)")
+    if corr or tipo in ("codigo", "datos"):                                  # algo parecido que ya corregiste, o un fichero cuyo «género» no es lo importante
+        return margen, margen_sub, motivos
+    if s:
+        sc = clasificador.puntuar(gp, s, web)
+    else:
+        tot = sum(gp.values()) or 1
+        sc = {g: v / tot for g, v in gp.items()}
+        if max(gp.values(), default=0) < 10:
+            motivos.append("pocas pistas: ni palabras clave claras ni modelo de parecido")
+    orden = sorted(sc, key=sc.get, reverse=True)
+    if genero == "otro":
+        motivos.append("no encaja en ningún género")
+    if len(orden) > 1:
+        margen = sc[orden[0]] - sc[orden[1]]
+        if margen / (1 + clasificador.PESO_CABEZA + clasificador.PESO_REGLAS if s else 1) < (clasificador.MARGEN_REVISAR if s else 0.25):
+            motivos.append(f"género poco claro: «{GENEROS.get(orden[0], orden[0])}» y «{GENEROS.get(orden[1], orden[1])}» casi empatan")
+        if genero != orden[0] and genero in sc:
+            motivos.append(f"el género elegido («{GENEROS.get(genero, genero)}») no es el que más puntúa («{GENEROS.get(orden[0], orden[0])}»)")
+    if sg:
+        margen_sub = sg.get("confianza")
+        seguro = margen_sub is not None and margen_sub / (1 + clasificador.PESO_CABEZA_SUB) >= clasificador.MARGEN_SUB_REVISAR
+        if sg0 and sg["id"] != sg0:                                           # el LLM cambió lo que decía el parecido: solo es un aviso si el parecido estaba seguro (si dudaba, manda el LLM)
+            if seguro:
+                motivos.append("el LLM y el parecido no coinciden en el subgénero")
+        elif not seguro and margen_sub is not None:
+            ps = sorted(sg["puntos"], key=sg["puntos"].get, reverse=True)
+            motivos.append("subgénero poco claro" + (f": «{taxonomia.nombre_sub(genero, ps[0])}» y «{taxonomia.nombre_sub(genero, ps[1])}» casi empatan" if len(ps) > 1 else ""))
+    return margen, margen_sub, motivos
+
+
+_INICIO_LICENCIA = re.compile(r"\*\*\* ?START OF (?:THE|THIS) PROJECT GUTENBERG[^\n*]*\*\*\*", re.I)
+
+
+def sin_licencia(texto: str) -> str:
+    """Quita la cabecera de licencia de Project Gutenberg (lo primero del EPUB), que no dice nada de la obra y confunde al clasificador."""
+    m = _INICIO_LICENCIA.search(texto)
+    return texto[m.end():] if m else texto
+
+
 def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dict:
     """Propone galaxia, subtema, tipo y título de un fichero, con el motivo. {'galaxia','subtema','tipo','titulo','motivo','paginas'}
     `etapa(nombre, datos)`, si se da, se llama al empezar y al acabar cada fase (ETAPAS) con `datos['estado']` = inicio | fin y, al acabar, las barras de género parciales:
@@ -15235,14 +15499,18 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
     ev("leer", "inicio")
     f = Path(ruta)
     carpeta = Path(carpeta or carpeta_datos())
+    inf_v = enlaces.info(f) if f.suffix.lower() == ".url" else None        # un vídeo: su título y su canal salen del oEmbed de la plataforma
     texto, paginas = _muestra(f)
+    texto = sin_licencia(texto)
     t = " " + _norm(texto[:40000]) + " "
-    nombre = _norm(re.sub(r"[_\-.]+", " ", f.stem))
+    nombre = _norm(re.sub(r"[_\-.]+", " ", (inf_v or {}).get("titulo") or f.stem))
     puntos = _puntos_temas(t, nombre)
     (tid, tnombre), p = max(puntos.items(), key=lambda kv: kv[1]) if puntos else ((None, "General"), 0)
     fin = len(FINANZAS.findall(t)) + 4 * len(FINANZAS.findall(nombre))
     ext = f.suffix.lower()
-    if ext in CODIGO_EXT:
+    if ext == ".url":
+        tipo = "video"
+    elif ext in CODIGO_EXT:
         tipo = "codigo"
     elif ext in DATOS_EXT:
         tipo = "datos"
@@ -15254,6 +15522,8 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
         tipo = "apuntes"
     else:
         tipo = "nota"
+    tit = titulo_corto((inf_v or {}).get("titulo") or f.stem)             # (en los vídeos, el título real y no el nombre del acceso directo)
+    aut = "" if tipo == "video" else clasificador.autor_de(f.stem)
     gp = {g: len(r.findall(t)) + 6 * len(r.findall(nombre)) for g, r in _GEN_RE.items()}
     if p >= 6:
         gp["economia" if tid == "t_fin" else "estadistica"] += p        # lo que casa con los temas de estadística/finanzas también cuenta como ese género
@@ -15264,6 +15534,8 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
     subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
     if tipo == "codigo":
         galaxia, motivo = "codigo", f"archivo de código ({ext})"
+    elif tipo == "video":
+        galaxia, motivo = "libros", f"vídeo de {inf_v['plataforma'].capitalize()}" if inf_v else "enlace a un vídeo"
     elif tipo == "libro":                                                # un libro va a Libros, sea de lo que sea; Finanzas y Notas son para documentos más cortos
         galaxia, motivo = "libros", f"{'EPUB' if ext == '.epub' else str(paginas) + ' páginas'}"
     elif fin >= 8 or (tid == "t_fin" and p >= 6):
@@ -15283,9 +15555,18 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
     metodo, materias, s = "reglas", [], None
     web = None
     forma = None
-    if not corr and tipo in ("libro", "articulo") and clasificador.WEB and len(titulo_corto(f.stem).split()) >= 2:    # materias reales de la obra según Open Library (si hay red)
+    info, pistas, pistas_sub, vista = None, None, None, re.sub(r"\s+", " ", texto[:1500])
+    if not corr and tipo in ("libro", "articulo", "video") and (clasificador.WIKI is True or (clasificador.WIKI == "auto" and not (llm.ACTIVO and llm.disponible(carpeta)))):                    # Wikipedia/Wikidata por título y autor: descripción, tipo y género de la obra
+        pal = re.findall(r"[a-z]+", t[:20000])
+        info = webinfo.buscar(tit, aut, ("es", "en") if sum(w in _ES for w in pal) > sum(w in _EN for w in pal) else ("en", "es"), carpeta)
+        if info:
+            vista = (info["resumen"] + " " + vista)[:1500]
+            materias = materias + info["tipos"] + info["generos"]
+            pistas = {info["genero"]: 1.0} if info.get("genero") in GENEROS else None
+            pistas_sub = {info["subgenero"]: 1.0} if info.get("subgenero") and info.get("genero") == "novela" else None
+    if not corr and tipo in ("libro", "articulo") and clasificador.WEB and len(tit.split()) >= 2:    # materias reales de la obra según Open Library (si hay red)
         ev("web", "inicio")
-        materias = _materias_web(titulo_corto(f.stem))
+        materias = materias + _materias_web(tit)
         web = _genero_materias(materias)
         forma = _forma_materias(materias)
         ev("web", "fin", materias=materias[:5], voto=web or "", voto_nombre=GENEROS.get(web, ""), forma=forma or "", barras=_barras(gp, forma))
@@ -15293,7 +15574,7 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
         ev("web", "fin", omitido="solo se consulta para libros y artículos con título" if not corr and clasificador.WEB else "desactivado" if not clasificador.WEB else "ya corregido por ti")
     if not corr and tipo != "codigo" and clasificador.ACTIVO:                                  # parecido con ejemplos (embeddings locales) mezclado con las reglas; sin modelo, solo reglas
         ev("parecido", "inicio")
-        s = clasificador.sugerir(clasificador.texto_libro(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500])), carpeta)
+        s = clasificador.sugerir(clasificador.texto_libro(tit, caps, vista), carpeta, aut, pistas)
         if s:
             nuevo, cambia = clasificador.decidir(gp, genero, s, web)
             if cambia:
@@ -15313,13 +15594,14 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
         genero, metodo = forma, "web"
         subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
         motivo += f"; Open Library la clasifica como {', '.join(m for m in materias if _norm(m).strip(' .') in _FORMA[forma])}"
+    vec = clasificador.vecinos(clasificador.texto_libro(tit, caps, vista), carpeta, llm.VECINOS) if llm.VECINOS and llm.ACTIVO and not corr else None
     if corr or tipo == "codigo" or not llm.ACTIVO:
         ev("llm", "fin", omitido="no aplica" if tipo == "codigo" or corr else "desactivado")
-    elif forma or not clasificador.dudoso(gp, s, web):
+    elif forma or not (clasificador.dudoso(gp, s, web) or llm.ajustes(carpeta).get("siempre")):       # «siempre»: en ajustes.json se puede pedir que el LLM opine de todos los libros (+2 puntos de acierto, ~10 s más por libro)
         ev("llm", "fin", omitido="no hacía falta: el resultado era claro")
     else:                                                                  # caso dudoso: se pregunta al LLM local (Ollama)
         ev("llm", "inicio")
-        r = llm.clasificar(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500]), materias, {k: v for k, v in GENEROS.items()}, carpeta) if llm.disponible(carpeta) else None
+        r = llm.clasificar(tit, caps, vista, materias, {k: v for k, v in GENEROS.items()}, carpeta, aut, vec) if llm.disponible(carpeta) else None
         marcador = clasificador.puntuar(gp, s, web) if s else gp
         top3 = [g for g, v in sorted(marcador.items(), key=lambda kv: -kv[1])[:3] if v > 0]
         if r and top3 and r["genero"] not in top3:                          # un modelo pequeño a veces se inventa un género: si no está entre los 3 más probables, se ignora
@@ -15334,25 +15616,33 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
     if materias and metodo not in ("reglas", "llm"):
         motivo += f"; materias web: {', '.join(materias[:4])}"
     ev("subgenero", "inicio")
-    sg = None if tipo == "datos" else clasificador.subgenero(clasificador.texto_libro(titulo_corto(f.stem), caps, re.sub(r"\s+", " ", texto[:1500])), genero, carpeta)       # una tabla de números no tiene tema
+    sg = None if tipo == "datos" else clasificador.subgenero(clasificador.texto_libro(tit, caps, vista), genero, carpeta, aut, pistas_sub if genero == "novela" else None)       # una tabla de números no tiene tema
+    sg0 = sg["id"] if sg else None                                                 # lo que decía el parecido, por si el LLM lo cambia (es una discrepancia que se avisa)
+    if sg and not corr and llm.ACTIVO and llm.disponible(carpeta):          # el LLM conoce las obras: elige entre los subgéneros de su género (las novelas sin pistas en el texto son lo que peor sale por parecido)
+        elegido = llm.subgenero(tit, caps, vista, GENEROS[genero], taxonomia.subgeneros(genero, carpeta), aut, carpeta, vec)
+        if elegido and elegido != sg["id"]:
+            motivo += f"; subgénero por el LLM (el parecido decía «{sg['nombre']}»)"
+            sg = {**sg, "id": elegido, "nombre": taxonomia.nombre_sub(genero, elegido, carpeta)}
     if sg:
         motivo += f"; subgénero «{sg['nombre']}»"
         ev("subgenero", "fin", id=sg["id"], nombre=sg["nombre"], barras=[{"id": k, "nombre": taxonomia.nombre_sub(genero, k, carpeta), "valor": round(100 * v / max(max(sg["puntos"].values()), 1e-9))} for k, v in sg["puntos"].items()])
     else:
         ev("subgenero", "fin", omitido="los datos numéricos no tienen un tema que clasificar" if tipo == "datos" else "este género no tiene subgéneros" if not taxonomia.subgeneros(genero, carpeta) else "no hay pistas suficientes")
-    ev("decision", "fin", genero=genero, genero_nombre=GENEROS.get(genero, genero), galaxia=galaxia, tipo=tipo, subgenero_nombre=sg["nombre"] if sg else "", metodo=metodo, motivo=motivo)
+    margen, margen_sub, motivos_rev = _seguridad(gp, s, web, genero, sg, sg0, texto, tipo, bool(corr))
+    ev("decision", "fin", revisar=bool(motivos_rev), motivos_revisar=motivos_rev, genero=genero, genero_nombre=GENEROS.get(genero, genero), galaxia=galaxia, tipo=tipo, subgenero_nombre=sg["nombre"] if sg else "", metodo=metodo, motivo=motivo)
     palabras = re.findall(r"[a-z]+", t[:20000])
     es, en = sum(w in _ES for w in palabras), sum(w in _EN for w in palabras)
     h = _sha1(f)
     dup = next((rel for rel, m in leer_metadatos(carpeta).items() if m.get("hash") == h), "")
-    return {"galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "titulo": titulo_corto(f.stem), "titulo_largo": f.stem, "motivo": motivo, "metodo": metodo, "materias_web": materias[:8], "paginas": paginas,
+    return {"galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "titulo": tit, "titulo_largo": (inf_v or {}).get("titulo") or f.stem, "url": (inf_v or {}).get("url", ""), "motivo": motivo, "metodo": metodo, "materias_web": materias[:8], "paginas": paginas,
             "subgenero": sg["id"] if sg else "", "subgenero_nombre": sg["nombre"] if sg else "",
             "subgeneros": [{"id": k, "nombre": taxonomia.nombre_sub(genero, k, carpeta), "puntos": v} for k, v in sg["puntos"].items()] if sg else [],
             "tamano": f.stat().st_size, "extension": ext.lstrip("."), "idioma": "es" if es > en else "en" if en else "", "duplicado": dup,
             "vista_previa": re.sub(r"\s+", " ", texto[:1500]).strip()[:380],
             "temas": [{"tema": nombre_t, "puntos": pt} for (_, nombre_t), pt in sorted(puntos.items(), key=lambda kv: -kv[1])[:4] if pt >= 3] if genero in GENEROS_CON_TEMA else [],
             "generos": [{"id": g, "nombre": GENEROS[g], "puntos": pt} for g, pt in sorted(gp.items(), key=lambda kv: -kv[1])[:4] if pt],
-            "n_capitulos": len(caps), "capitulos": [c["titulo"] for c in caps[:6]]}
+            "confianza": round(s["confianza"], 3) if s else None, "margen": None if margen is None else round(margen, 3), "margen_sub": None if margen_sub is None else round(margen_sub, 3),
+            "revisar": bool(motivos_rev), "motivos_revisar": motivos_rev, "web_resumen": (info or {}).get("resumen", "")[:300], "web_generos": (info or {}).get("generos", []), "web_pagina": (info or {}).get("pagina", ""), "n_capitulos": len(caps), "capitulos": [c["titulo"] for c in caps[:6]]}
 
 
 def _slug(s: str) -> str:
@@ -15434,11 +15724,21 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
             meta[rel] = {"capitulos": caps, "paginas": pags, "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "etiquetas": (d.get("etiquetas") or "").strip(), "origen": str(f), "hash": h,
                          "fecha": datetime.now().isoformat(timespec="seconds"), "automatico": not (d.get("galaxia") or d.get("subtema") or d.get("tipo") or d.get("genero")) and (d.get("titulo") or auto["titulo"]).strip() == auto["titulo"],
                          "metodo": auto["metodo"], "motivo": auto["motivo"], "materias_web": auto.get("materias_web", []),
-                         "propuesta": {"galaxia": auto["galaxia"], "subtema": auto["subtema"], "genero": auto["genero"], "tipo": auto["tipo"], "subgenero": auto["subgenero"]}, "subgenero": subgenero}
+                         "propuesta": {"galaxia": auto["galaxia"], "subtema": auto["subtema"], "genero": auto["genero"], "tipo": auto["tipo"], "subgenero": auto["subgenero"]}, "subgenero": subgenero,
+                         "revisar": bool(auto["revisar"]) and not (d.get("genero") or d.get("subgenero")), "motivos_revisar": auto["motivos_revisar"], "margen": auto["margen"],
+                         "web_resumen": auto["web_resumen"], "web_generos": auto["web_generos"]}      # si lo fijaste tú al importar, no hay nada que revisar
             hashes[h] = rel
             if tipo == "libro":
                 nom = "portadas/" + h[:10] + ".jpg"
                 if portada(fin, base / nom, titulo, genero):
+                    meta[rel]["portada"] = nom
+            elif tipo == "video" and auto.get("url"):
+                meta[rel]["url"] = auto["url"]
+                img = enlaces.miniatura((enlaces.info(auto["url"]) or {}).get("miniatura", ""))      # la portada del vídeo es su miniatura
+                if img:
+                    nom = "portadas/" + h[:10] + ".jpg"
+                    (base / "portadas").mkdir(parents=True, exist_ok=True)
+                    (base / nom).write_bytes(img)
                     meta[rel]["portada"] = nom
             movido = False
             if d.get("modo") == "mover" and fin.stat().st_size == f.stat().st_size:     # «mover»: el original desaparece de su carpeta (la copia queda en la biblioteca)
@@ -15448,12 +15748,13 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
                 except OSError:
                     pass
             salida.append({**r, "movido": movido, "estado": "ok", "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "destino": str(fin), "mensaje": auto["motivo"],
-                           "subgenero": subgenero, "subgenero_nombre": validos.get(subgenero, "")})
+                           "subgenero": subgenero, "subgenero_nombre": validos.get(subgenero, ""), "revisar": meta[rel]["revisar"], "motivos_revisar": meta[rel]["motivos_revisar"]})
         except Exception as e:
             salida.append({**r, "estado": "error", "mensaje": str(e)})
     if any(s["estado"] == "ok" for s in salida):
         base.mkdir(parents=True, exist_ok=True)
         _guardar(carpeta, meta)
+        webinfo.guardar(carpeta)                                   # lo que se preguntó a Wikipedia no se vuelve a preguntar
         if indexar_ahora:
             _prog("Indexando el texto…", .1)
             ind = indexar(db or carpeta / "indice.db", {}, carpeta=carpeta)
@@ -15521,7 +15822,7 @@ def _ficha(carpeta: Path, rel: str, m: dict, con_portada: bool = True) -> dict:
     return {"rel": rel, "existe": f.is_file(), "titulo": m.get("titulo", ""), "titulo_largo": Path(m.get("origen", "")).stem or m.get("titulo", ""), "galaxia": m.get("galaxia", ""),
             "genero": m.get("genero", "otro"), "subgenero": m.get("subgenero", ""), "subgenero_nombre": taxonomia.nombre_sub(m.get("genero", ""), m.get("subgenero", ""), carpeta),
             "subtema": m.get("subtema", ""), "tipo": m.get("tipo", ""), "etiquetas": m.get("etiquetas", ""), "paginas": m.get("paginas", 0),
-            "capitulos": len(m.get("capitulos", [])), "fecha": m.get("fecha", "")[:10], "automatico": bool(m.get("automatico")), "fecha_hora": m.get("fecha", ""), "metodo": m.get("metodo", ""), "motivo": m.get("motivo", ""), "extension": f.suffix.lstrip(".").lower(),
+            "capitulos": len(m.get("capitulos", [])), "fecha": m.get("fecha", "")[:10], "automatico": bool(m.get("automatico")), "fecha_hora": m.get("fecha", ""), "revisar": bool(m.get("revisar")), "motivos_revisar": m.get("motivos_revisar", []), "metodo": m.get("metodo", ""), "motivo": m.get("motivo", ""), "extension": f.suffix.lstrip(".").lower(),
             "tamano": f.stat().st_size if f.is_file() else 0, "ruta": str(f), "portada": portada_datauri(carpeta, m.get("portada", "")) if con_portada else ""}
 
 
@@ -15558,12 +15859,32 @@ def editar(rel: str, cambios: dict, carpeta: Path | None = None, db: Path | None
         m[k] = v
         if k == "genero" and "subgenero" not in cambios and m.get("subgenero") not in {s[0] for s in taxonomia.subgeneros(v, carpeta)}:
             m["subgenero"] = ""                                       # al cambiar de género, el subgénero antiguo ya no vale
-    m["automatico"] = False
+    m["automatico"], m["revisar"] = False, False                  # lo has tocado tú: ya está revisado
     _guardar(carpeta, meta)
     if m.get("galaxia") != antes:
         _galaxia_en_indice(db or carpeta / "indice.db", str(carpeta / "biblioteca" / rel), m["galaxia"])
     if {"genero", "subtema"} & set(cambios):
         recordar_correccion(m, carpeta)
+    return _ficha(carpeta, rel, m)
+
+
+def por_revisar(carpeta: Path | None = None) -> list[dict]:
+    """Lo importado en lo que el clasificador no estaba seguro y que aún no has mirado: [{rel, titulo, genero, subgenero, motivos, margen}], lo menos claro primero."""
+    carpeta = Path(carpeta or carpeta_datos())
+    filas = [{"rel": rel, "titulo": m.get("titulo", ""), "genero": m.get("genero"), "subgenero": m.get("subgenero", ""), "motivos": m.get("motivos_revisar", []), "margen": m.get("margen")}
+             for rel, m in leer_metadatos(carpeta).items() if m.get("revisar")]
+    return sorted(filas, key=lambda x: (x["margen"] is None, x["margen"] if x["margen"] is not None else 0))
+
+
+def confirmar(rel: str, carpeta: Path | None = None) -> dict:
+    """«Está bien»: das por buena la clasificación actual. Deja de aparecer como pendiente y se recuerda como corrección tuya (lo parecido que importes se clasificará igual). Devuelve la ficha."""
+    carpeta = Path(carpeta or carpeta_datos()); meta = leer_metadatos(carpeta)
+    if rel not in meta:
+        raise KeyError(f"no está en el observatorio: {rel}")
+    m = meta[rel]
+    m["revisar"], m["automatico"] = False, False
+    _guardar(carpeta, meta)
+    recordar_correccion(m, carpeta)
     return _ficha(carpeta, rel, m)
 
 
@@ -15589,6 +15910,7 @@ def reclasificar_uno(rel: str, carpeta: Path | None = None, db: Path | None = No
     c = clasificar(f, carpeta)
     antes = m.get("galaxia")
     m["galaxia"], m["genero"], m["subtema"], m["automatico"], m["subgenero"] = c["galaxia"], c["genero"], c["subtema"], True, c["subgenero"]
+    m["revisar"], m["motivos_revisar"], m["margen"] = c["revisar"], c["motivos_revisar"], c["margen"]
     _guardar(carpeta, meta)
     if m["galaxia"] != antes:
         _galaxia_en_indice(db or carpeta / "indice.db", str(f), m["galaxia"])
@@ -15617,10 +15939,13 @@ def borrar(rel: str, carpeta: Path | None = None, db: Path | None = None) -> boo
     return True
 :::END
 :::BEGIN py/conocimiento/llm.py|text
-"""LLM local (Ollama) para los casos dudosos de la clasificación. Opcional: sin Ollama o sin el modelo, `clasificar` devuelve None y todo sigue como antes.
+"""LLM local (Ollama) que opina sobre el género y el subgénero de cada obra. Opcional: sin Ollama o sin el modelo, `clasificar` devuelve None y todo sigue como antes.
 
-Solo se le pregunta el género (de la lista cerrada de GENEROS) cuando las reglas y el parecido no se ponen de acuerdo. Todo en local: nada sale del ordenador.
-Ajustes: variable ARBOL_LLM (nombre del modelo, o «no» para apagarlo) o `conocimiento/ajustes.json` {"llm": {"modelo": "qwen2.5:3b", "url": "http://localhost:11434"}}.
+Se le pregunta por todas las obras (`siempre`), con los libros más parecidos de tu biblioteca como ejemplos resueltos (`VECINOS`): medido con 232 obras de validación sube el acierto de género
+de 68 % a 75 % (McNemar p = 0,005). Lista cerrada de GENEROS y de subgéneros; todo en local: nada sale del ordenador.
+Modelo por defecto según la RAM: qwen2.5:7b (4,7 GB) con 12 GB o más, qwen2.5:3b (1,9 GB) con menos; si falta el elegido se usa el otro.
+Ajustes: variable ARBOL_LLM (nombre del modelo, o «no» para apagarlo) o `conocimiento/ajustes.json` {"llm": {"modelo": "qwen2.5:3b", "url": "http://localhost:11434", "siempre": true}}
+("siempre": false = solo para los casos dudosos).
 """
 from __future__ import annotations
 
@@ -15635,21 +15960,44 @@ from pathlib import Path
 
 from . import CARPETA
 
-MODELO = "qwen2.5:3b"            # ~1,9 GB; rápido en CPU y obedece bien al formato JSON. En un PC potente: qwen2.5:7b
+def ram_gb() -> float:
+    """RAM total del equipo en GB (0 si no se sabe)."""
+    try:
+        import ctypes
+
+        class _Mem(ctypes.Structure):
+            _fields_ = [("l", ctypes.c_ulong), ("c", ctypes.c_ulong), ("total", ctypes.c_ulonglong), ("libre", ctypes.c_ulonglong), ("tp", ctypes.c_ulonglong), ("lp", ctypes.c_ulonglong), ("tv", ctypes.c_ulonglong), ("lv", ctypes.c_ulonglong), ("e", ctypes.c_ulonglong)]
+        m = _Mem(); m.l = ctypes.sizeof(_Mem)
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
+        return m.total / 1e9
+    except Exception:
+        try:
+            return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 1e9
+        except Exception:
+            return 0.0
+
+
+MODELO_GRANDE, MODELO_PEQUENO = "qwen2.5:7b", "qwen2.5:3b"      # 4,7 GB y 1,9 GB; los dos obedecen bien al formato JSON
+MODELO = MODELO_GRANDE if ram_gb() >= 12 else MODELO_PEQUENO     # el que mejor rinde si el equipo lo aguanta
 URL = "http://localhost:11434"
 ACTIVO = True                    # False: nunca se consulta (los tests lo apagan)
-ESPERA = 180                     # segundos por consulta: en CPU un modelo de 3B tarda 10-40 s por libro
+VECINOS = 8                      # cuántos libros parecidos de tu biblioteca se le enseñan al LLM como ejemplos resueltos (0 = solo los 4 fijos); ver clasificador.vecinos
+ESPERA = 180                    # segundos por consulta: en CPU un modelo de 3B tarda 10-40 s por libro
 _estado: dict = {}               # "ok": ¿Ollama responde y tiene el modelo?; "t": cuándo se miró. Si estaba apagado se vuelve a mirar cada minuto (por si se abre después que la app)
 
 
 def ajustes(carpeta: Path | str = CARPETA) -> dict:
-    a = {"modelo": MODELO, "url": URL}
+    a, explicito = {"modelo": MODELO, "url": URL, "siempre": True}, False
     try:
-        a.update(json.loads((Path(carpeta) / "ajustes.json").read_text(encoding="utf-8")).get("llm", {}))
+        j = json.loads((Path(carpeta) / "ajustes.json").read_text(encoding="utf-8")).get("llm", {})
+        a.update(j)
+        explicito = "modelo" in j
     except (OSError, ValueError):
         pass
     if os.environ.get("ARBOL_LLM"):
-        a["modelo"] = os.environ["ARBOL_LLM"]
+        a["modelo"], explicito = os.environ["ARBOL_LLM"], True
+    if not explicito and _estado.get("modelo"):                            # el elegido por defecto no está instalado: se usa el otro
+        a["modelo"] = _estado["modelo"]
     return a
 
 
@@ -15695,7 +16043,15 @@ def disponible(carpeta: Path | str = CARPETA) -> bool:
                 _arrancar()                                              # instalado pero apagado: se enciende (tarda unos segundos la primera vez)
                 tags = _http(a["url"] + "/api/tags", espera=5)
             nombres = [m["name"] for m in tags.get("models", [])]
-            _estado["ok"] = any(n == a["modelo"] or n.split(":")[0] == a["modelo"] for n in nombres) or any(n.startswith(a["modelo"]) for n in nombres)
+
+            def tiene(mod):
+                return any(n == mod or n.split(":")[0] == mod for n in nombres) or any(n.startswith(mod) for n in nombres)
+            _estado["ok"] = tiene(a["modelo"])
+            if not _estado["ok"] and a["modelo"] in (MODELO_GRANDE, MODELO_PEQUENO) and "modelo" not in _estado:
+                for alt in (MODELO_GRANDE, MODELO_PEQUENO):          # lo que haya: antes preferir el que mejor rinda
+                    if alt != a["modelo"] and tiene(alt):
+                        _estado["modelo"], _estado["ok"] = alt, True
+                        break
         except Exception:
             _estado["ok"] = False
         _estado["t"] = time.time()
@@ -15708,18 +16064,20 @@ EJEMPLOS = [("Orgullo y prejuicio", "Una joven inglesa y un rico caballero super
             ("Clean Architecture", "Principios de diseño de software para sistemas mantenibles.", "tecnologia")]      # ejemplos resueltos: con ellos el modelo de 3B pasó del 61 % al 76 % en las pruebas
 
 
-def _prompt(titulo: str, capitulos: list, vista: str, materias: list, generos: dict) -> str:
+def _prompt(titulo: str, capitulos: list, vista: str, materias: list, generos: dict, autor: str = "", vecinos: list | None = None) -> str:
     from .clasificador import semillas_todas
     S = semillas_todas()
     lista = "\n".join(f"- {g}: {S[g][0] if g in S else 'no encaja en ninguno de los demás'}" for g in generos)
     ej = "\n".join(f'Libro: «{t}». Sinopsis: {s}\n{{"genero": "{g}", "motivo": "…"}}' for t, s, g in EJEMPLOS)
+    if vecinos:        # ejemplos reales: libros parecidos que el usuario ya tiene, con su género
+        ej = "\n".join(f'Libro: «{v["titulo"]}»{" de " + v["autor"] if v["autor"] else ""}.\n{{"genero": "{v["genero"]}", "motivo": "…"}}' for v in vecinos)
     caps = "; ".join((c["titulo"] if isinstance(c, dict) else str(c)) for c in capitulos[:8]) or "(sin índice)"
     return (f"Eres bibliotecario. Elige el género que mejor describe el LIBRO (no solo las palabras de su título).\nGéneros:\n{lista}\n\nEjemplos resueltos:\n{ej}\n\n"
-            f"Ahora este:\nLibro: «{titulo}». Capítulos o partes: {caps}. Materias según Open Library: {', '.join(materias[:6]) or '(no hay)'}. Principio del texto: {vista[:600]}\n\n"
+            f"Ahora este:\nLibro: «{titulo}»{' de ' + autor if autor else ''}. Capítulos o partes: {caps}. Materias según Open Library: {', '.join(materias[:6]) or '(no hay)'}. Principio del texto: {vista[:600]}\n\n"
             'Responde solo con JSON: {"genero": "<id>", "motivo": "<una frase corta>"}.')
 
 
-def clasificar(titulo: str, capitulos: list, vista: str, materias: list, generos: dict, carpeta: Path | str = CARPETA) -> dict | None:
+def clasificar(titulo: str, capitulos: list, vista: str, materias: list, generos: dict, carpeta: Path | str = CARPETA, autor: str = "", vecinos: list | None = None) -> dict | None:
     """{'genero': id, 'motivo': str} según el LLM, o None si no está disponible o responde algo inválido."""
     if not disponible(carpeta):
         return None
@@ -15727,9 +16085,32 @@ def clasificar(titulo: str, capitulos: list, vista: str, materias: list, generos
     esquema = {"type": "object", "properties": {"genero": {"type": "string", "enum": list(generos)}, "motivo": {"type": "string"}}, "required": ["genero", "motivo"]}
     try:
         r = _http(a["url"] + "/api/chat", {"model": a["modelo"], "stream": False, "format": esquema, "options": {"temperature": 0, "num_predict": 80, "num_ctx": 2048},
-                                           "messages": [{"role": "user", "content": _prompt(titulo, capitulos, vista, materias, generos)}]})
+                                           "messages": [{"role": "user", "content": _prompt(titulo, capitulos, vista, materias, generos, autor, vecinos)}]})
         j = json.loads(re.sub(r"^```(?:json)?|```$", "", r["message"]["content"].strip()))
         return {"genero": j["genero"], "motivo": str(j.get("motivo", ""))[:160]} if j.get("genero") in generos else None
+    except Exception:
+        return None
+
+
+def subgenero(titulo: str, capitulos: list, vista: str, genero: str, subs: list, autor: str = "", carpeta: Path | str = CARPETA, vecinos: list | None = None) -> str | None:
+    """Id del subgénero (de `subs` = [(id, nombre, frase_es, frase_en)]) que elige el LLM para un libro ya clasificado en `genero`; None si no está disponible o responde algo inválido."""
+    if not disponible(carpeta):
+        return None
+    a = ajustes(carpeta)
+    ids = [x[0] for x in subs]
+    lista = "\n".join(f"- {x[0]}: {x[1]} ({x[2]})" for x in subs)
+    caps = "; ".join((c["titulo"] if isinstance(c, dict) else str(c)) for c in capitulos[:8]) or "(sin índice)"
+    ej = "".join(f'- «{v["titulo"]}»{" de " + v["autor"] if v["autor"] else ""} → {v["subgenero"]}\n' for v in (vecinos or []) if v.get("subgenero") in ids)
+    ej = f"Libros parecidos que el usuario ya clasificó:\n{ej}\n" if ej else ""
+    prompt = (f"Eres bibliotecario. El libro es de género «{genero}». Elige el subgénero que mejor lo describe.\nSubgéneros:\n{lista}\n\n{ej}"
+              f"Libro: «{titulo}»{' de ' + autor if autor else ''}. Capítulos o partes: {caps}. Principio del texto: {vista[:500]}\n\n"
+              'Responde solo con JSON: {"subgenero": "<id>", "motivo": "<una frase corta>"}.')
+    esquema = {"type": "object", "properties": {"subgenero": {"type": "string", "enum": ids}, "motivo": {"type": "string"}}, "required": ["subgenero", "motivo"]}
+    try:
+        r = _http(a["url"] + "/api/chat", {"model": a["modelo"], "stream": False, "format": esquema, "options": {"temperature": 0, "num_predict": 80, "num_ctx": 2048},
+                                           "messages": [{"role": "user", "content": prompt}]})
+        j = json.loads(re.sub(r"^```(?:json)?|```$", "", r["message"]["content"].strip()))
+        return j["subgenero"] if j.get("subgenero") in ids else None
     except Exception:
         return None
 :::END
@@ -15772,7 +16153,8 @@ TAXONOMIA: dict[str, list[tuple[str, str, str, str]]] = {
         ("derivados", "Derivados y riesgo", "Derivados financieros, opciones, futuros, gestión del riesgo, VaR y mercados de renta fija", "derivatives, options, futures, risk management, value at risk and fixed income markets"),
         ("negocios", "Empresa, emprendimiento y marketing", "Emprendimiento, estrategia empresarial, liderazgo, marketing, ventas y gestión de equipos", "entrepreneurship, business strategy, leadership, marketing, sales and management"),
         ("desarrollo", "Desarrollo, pobreza y desigualdad", "Desarrollo económico, pobreza, desigualdad, globalización, comercio internacional y países en desarrollo", "economic development, poverty, inequality, globalization, international trade"),
-        ("historia_eco", "Historia y pensamiento económico", "Historia del pensamiento económico, Adam Smith, Marx, Keynes, escuelas económicas y crisis históricas", "history of economic thought, Adam Smith, Marx, Keynes, schools of economics and historical crises"),
+        ("historia_eco", "Historia y pensamiento económico", "Historia del pensamiento económico, Adam Smith, Marx y crisis históricas, la evolución de la economía como disciplina", "history of economic thought, Adam Smith, Marx and historical crises, the evolution of economics as a discipline"),
+        ("teoria_eco", "Teoría y escuelas económicas", "Teoría económica y escuelas: economía austriaca, praxeología, capital e interés, ciclo económico, Mises, Hayek, keynesianismo y monetarismo", "economic theory and schools: Austrian economics, praxeology, capital and interest, business cycle theory, Mises, Hayek, Keynesianism and monetarism"),
         ("cripto", "Criptomonedas y fintech", "Bitcoin, criptomonedas, blockchain, finanzas descentralizadas y tecnología financiera", "Bitcoin, cryptocurrencies, blockchain, decentralized finance and fintech"),
         ("contabilidad", "Contabilidad y banca", "Contabilidad, balances, auditoría, banca, seguros y regulación financiera", "accounting, balance sheets, auditing, banking, insurance and financial regulation"),
     ],
@@ -16153,6 +16535,199 @@ def traer(item: dict, carpeta: Path = CARPETA) -> dict:
                    "etiquetas": ", ".join(item.get("materias", [])[:6] + [item["fuente"]])}], Path(carpeta))[0]
     f.unlink(missing_ok=True)                                              # la copia buena ya está en biblioteca/
     return r
+:::END
+:::BEGIN py/conocimiento/webinfo.py|text
+"""Información de una obra desde Wikipedia y Wikidata, con sus APIs oficiales (no se rascan páginas): descripción corta, tipo («novela», «obra literaria») y género
+(«fantasía», «ciencia ficción»…). Sirve de apoyo a la clasificación: un libro moderno que el texto no deja claro casi siempre tiene su ficha.
+
+Es optativo (`clasificador.WIKI`, o `ARBOL_WIKI=no`): sin red o con la red apagada todo sigue como antes. Respeta a los servidores: una petición cada `INTERVALO` s,
+reintentos con espera si responden 429, descanso de 2 minutos tras varios fallos seguidos y caché en disco (`conocimiento/webinfo_cache.json`), así que cada obra se pregunta una sola vez.
+Solo sale el título y el autor.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import threading
+import time
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+from . import CARPETA, _norm
+
+INTERVALO = 1.0                  # segundos mínimos entre dos peticiones (todas las de este módulo)
+ESPERA = 10                      # segundos de espera por petición
+UA = "ArbolEstadistica/1.11 (https://github.com/Kuerb0/Arbol_de_la_estadistica; biblioteca personal que clasifica libros) python-urllib"      # Wikimedia pide nombre de la herramienta y un contacto
+_cerrojo, _cache_lock = threading.Lock(), threading.Lock()
+_estado: dict = {"ultimo": 0.0, "fallos": 0, "descanso": 0.0, "cache": None, "nuevos": 0}
+_etiq: dict = {}                    # Q-id -> nombre (se repiten mucho: «literary work», «novel»…)
+
+# Tipo/género según Wikidata o el resumen → subgénero de novela (id de taxonomia.py). El primero que case gana.
+SUB_NOVELA = [("historica", r"historical (?:novel|fiction)|novela historica"), ("negra", r"detective|crime|mystery|noir|novela negra|policiaca"), ("thriller", r"thriller|espionage|spy"),
+              ("scifi", r"science fiction|ciencia ficcion|dystopi|space opera|cyberpunk"), ("fantasia", r"fantasy|fantasia|sword and sorcery"), ("terror", r"horror|gothic|terror|vampire"),
+              ("romance", r"romance|romantic|romantica"), ("juvenil", r"children|young adult|juvenil|infantil|bildungsroman")]
+
+
+def _ruta(carpeta: Path | str | None = None) -> Path:
+    return Path(carpeta or CARPETA) / "webinfo_cache.json"
+
+
+def _cargar(carpeta: Path | str | None) -> dict:
+    if _estado["cache"] is None:
+        try:
+            _estado["cache"] = json.loads(_ruta(carpeta).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            _estado["cache"] = {}
+    return _estado["cache"]
+
+
+def guardar(carpeta: Path | str | None = None) -> None:        # (los tests sustituyen _estado y no llevan «nuevos»: por eso .get)
+    """Escribe la caché en disco (se llama al acabar una tanda; guardar en cada obra sería lento)."""
+    with _cache_lock:
+        if _estado["cache"] is None:                                  # no se ha leído ni usado: no hay nada que escribir (y no se pisa la caché que hay en disco)
+            return
+        try:
+            _ruta(carpeta).write_text(json.dumps(_estado["cache"], ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            pass
+
+
+def activo() -> bool:
+    return os.environ.get("ARBOL_WIKI", "").lower() not in ("no", "0", "off") and time.time() >= _estado["descanso"]
+
+
+def _get(url: str) -> dict:
+    """GET con ritmo máximo, reintentos ante 429/5xx y descanso tras fallos seguidos. Lanza la excepción si no hay forma."""
+    ultimo_error = None
+    for intento in range(4):
+        with _cerrojo:
+            time.sleep(max(0.0, _estado["ultimo"] + INTERVALO - time.time()))
+            _estado["ultimo"] = time.time()
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"}), timeout=ESPERA) as r:
+                _estado["fallos"] = 0
+                return json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            ultimo_error = e
+            if e.code in (429, 500, 502, 503, 504):
+                time.sleep(min(30.0, float(e.headers.get("Retry-After") or 0) or 2.0 ** (intento + 1)))
+                continue
+            break
+        except Exception as e:                                       # sin red, DNS…
+            ultimo_error = e
+            time.sleep(1.5)
+    _estado["fallos"] += 1
+    if _estado["fallos"] >= 3:
+        _estado["descanso"], _estado["fallos"] = time.time() + 120, 0
+    raise ultimo_error or RuntimeError("sin respuesta")
+
+
+def _api(lang_o_host: str, **params) -> dict:
+    host = "www.wikidata.org" if lang_o_host == "wikidata" else f"{lang_o_host}.wikipedia.org"
+    return _get(f"https://{host}/w/api.php?" + urllib.parse.urlencode({**params, "format": "json", "formatversion": 2}))
+
+
+def _apellido(autor: str) -> str:
+    partes = [p for p in _norm(autor).replace(",", " ").split() if len(p) > 2]
+    return partes[-1] if partes else ""
+
+
+def _etiquetas(ids: list[str]) -> dict:
+    if not ids:
+        return {}
+    nuevos = [i for i in ids if i not in _etiq]
+    if nuevos:
+        d = _api("wikidata", action="wbgetentities", ids="|".join(nuevos[:50]), props="labels", languages="en|es")["entities"]
+        _etiq.update({k: (v.get("labels", {}).get("en") or v.get("labels", {}).get("es") or {}).get("value", "") for k, v in d.items()})
+    return {i: _etiq.get(i, "") for i in ids}
+
+
+def _de_wikidata(qids: list[str]) -> dict:
+    """{qid: (tipos, géneros)} de varias entidades de Wikidata a la vez (2 peticiones en total), con los nombres en inglés (o español)."""
+    if not qids:
+        return {}
+    ents = _api("wikidata", action="wbgetentities", ids="|".join(qids), props="claims")["entities"]
+
+    def ids(e, p):
+        return [x["mainsnak"]["datavalue"]["value"]["id"] for x in e.get("claims", {}).get(p, []) if x.get("mainsnak", {}).get("datavalue")]
+    crudo = {q: (ids(e, "P31"), ids(e, "P136")) for q, e in ents.items()}
+    lab = _etiquetas(sorted({i for t, g in crudo.values() for i in t + g}))
+    return {q: ([lab[i] for i in t if lab.get(i)], [lab[i] for i in g if lab.get(i)]) for q, (t, g) in crudo.items()}
+
+
+def es_obra(tipos: list[str]) -> bool:
+    """¿Wikidata dice que es una obra escrita (novela, ensayo, libro…) y no una persona, una película o un personaje?"""
+    t = " ".join(tipos).lower()
+    return bool(re.search(r"literary work|novel|book|essay|treatise|short story|written work|publication|poem|play\b|writing|text\b|non-fiction|scholarly|monograph", t)) and not re.search(r"\bhuman\b|film|fictional|television|taxon|album|musical", t)
+
+
+def genero_de(tipos: list[str], generos: list[str], resumen: str) -> str:
+    """Género (clave de GENEROS) que sugieren el tipo, el género y la descripción de una obra; "" si no dice nada. Las obras de ficción son «novela»."""
+    from .telescopio import genero_desde_materias
+    t = _norm(" ".join(tipos + generos) + " " + resumen[:200])
+    if re.search(r"\bnovel|\bfiction\b|\bnovela|\bcuento|short story|\bfantasy|\bnovella", t):
+        return "novela"
+    g = genero_desde_materias(tipos + generos + [resumen[:200]])
+    return "" if g == "otro" else g
+
+
+def subgenero_novela(texto: str) -> str:
+    """Subgénero de novela que sugiere un texto («novela de fantasía de 1990…»); "" si no dice nada."""
+    t = _norm(texto)
+    for sid, patron in SUB_NOVELA:
+        if re.search(patron, t):
+            return sid
+    return ""
+
+
+def buscar(titulo: str, autor: str = "", idiomas: tuple = ("en", "es"), carpeta: Path | str | None = None) -> dict | None:
+    """{'pagina', 'lang', 'resumen', 'tipos', 'generos', 'subgenero'} de la obra en Wikipedia/Wikidata, o None si no la encuentra (o no hay red).
+    Se busca «título autor» y se acepta la página cuya introducción nombra al autor (así «Niebla» no se confunde con un hongo)."""
+    if not activo() or not titulo.strip():
+        return None
+    clave = _norm(titulo).strip() + "|" + _norm(autor).strip()
+    with _cache_lock:
+        cache = _cargar(carpeta)
+        if clave in cache:
+            return cache[clave] or None
+    ap, res = _apellido(autor), None
+    try:
+        for lang in idiomas:
+            d = _api(lang, action="query", generator="search", gsrsearch=f"{titulo} {autor}".strip(), gsrlimit=5, gsrnamespace=0, prop="extracts|pageprops", exintro=1, explaintext=1,
+                     exsentences=4, exlimit="max", ppprop="wikibase_item")
+            paginas = sorted(d.get("query", {}).get("pages", []), key=lambda p: p.get("index", 99))
+            cands = []
+            for p in paginas:
+                ext = p.get("extract") or ""
+                if not ext or re.search(r"may refer to|puede referirse|disambiguation|desambiguaci", ext[:200], re.I):
+                    continue
+                if ap and ap not in _norm(ext):                      # sin el autor en la introducción no es esa obra
+                    continue
+                if not ap and _norm(titulo) not in _norm(p.get("title", "")):
+                    continue
+                cands.append(p)
+            wd = _de_wikidata([p["pageprops"]["wikibase_item"] for p in cands if p.get("pageprops", {}).get("wikibase_item")])
+            for p in cands:
+                tipos, gens = wd.get(p.get("pageprops", {}).get("wikibase_item"), ([], []))
+                if tipos and not es_obra(tipos):                     # su ficha, la de una película o la de un personaje: no es el libro
+                    continue
+                ext = p["extract"]
+                res = {"pagina": p["title"], "lang": lang, "resumen": re.sub(r"\s+", " ", ext).strip()[:500], "tipos": tipos, "generos": gens,
+                       "subgenero": subgenero_novela(" ".join(gens + [ext[:240]])), "genero": genero_de(tipos, gens, ext)}
+                break
+            if res:
+                break
+    except Exception:
+        return None                                                  # sin red o caído: no se guarda (se volverá a intentar)
+    with _cache_lock:
+        _cargar(carpeta)[clave] = res or {}
+        _estado["nuevos"] = _estado.get("nuevos", 0) + 1
+        guardar_ya = _estado["nuevos"] % 10 == 0
+    if guardar_ya:
+        guardar(carpeta)
+    return res
 :::END
 :::BEGIN py/cuaderno/__init__.py|text
 """Mini-cuaderno del visor: ejemplos ejecutables por celdas (ejemplos.py) y el ejecutor (ejecutor.py)."""
@@ -31986,6 +32561,7 @@ def _sin_modelo_de_embeddings(monkeypatch):
     from conocimiento import clasificador
     monkeypatch.setattr(clasificador, "ACTIVO", False)
     monkeypatch.setattr(clasificador, "WEB", False)
+    monkeypatch.setattr(clasificador, "WIKI", False)
     from conocimiento import llm
     monkeypatch.setattr(llm, "ACTIVO", False)
 :::END
@@ -32329,6 +32905,25 @@ def test_clasificar_usa_el_parecido_cuando_las_reglas_no_saben(monkeypatch, tmp_
     monkeypatch.setattr(c, "ACTIVO", True)
     r = im.clasificar(f, tmp_path)
     assert r["genero"] == "historia" and r["metodo"] in ("reglas", "parecido") and solo_reglas["metodo"] == "reglas"
+
+
+def test_autor_de_y_sesgo_por_autor(tmp_path):
+    from conocimiento import clasificador as c
+    assert c.autor_de("Niebla - Jose Ortega") == "jose ortega"
+    assert c.autor_de("Pratchett, Terry - Good Omens - Terry Pratchett") == "terry pratchett"
+    assert c.autor_de("regresion_logistica") == "" and c.autor_de("Informe - 2024") == ""
+    import json
+    b = tmp_path / "biblioteca"; b.mkdir()
+    (b / "metadatos.json").write_text(json.dumps({f"l/{i}.epub": {"origen": f"x/Libro {i} - Terry Pratchett.epub", "genero": "novela", "subgenero": "fantasia", "titulo": f"Libro {i}"} for i in range(3)}), encoding="utf-8")
+    s = c._sesgo_autor("terry pratchett", "subgenero", tmp_path)
+    assert abs(s["fantasia"] - c.PESO_AUTOR * 3 / 4) < 1e-9 and c._sesgo_autor("otro autor", "subgenero", tmp_path) == {}
+
+
+def test_la_cabeza_supervisada_se_fia_segun_los_ejemplos_propios():
+    from conocimiento import clasificador as c
+    ini, pleno = c.LIBROS_CABEZA
+    assert c.fuerza(0, c.LIBROS_CABEZA) == 0 and c.fuerza(ini, c.LIBROS_CABEZA) == 0 and c.fuerza(pleno, c.LIBROS_CABEZA) == 1 and c.fuerza(10 * pleno, c.LIBROS_CABEZA) == 1
+    assert 0 < c.fuerza((ini + pleno) // 2, c.LIBROS_CABEZA) < 1
 :::END
 :::BEGIN py/tests/test_clustering_contrastes.py|text
 import numpy as np
@@ -32429,6 +33024,68 @@ def test_aviso_n_grande_y_errores():
     assert any("tamaño del efecto" in a for a in r["avisos"])
     with pytest.raises(ValueError):
         elegir_contraste(pd.DataFrame({"v": [1, 2, 3], "g": "A"}), "v", "g")
+:::END
+:::BEGIN py/tests/test_cola_revision.py|text
+"""Cola de revisión: lo que el clasificador no ve claro se marca para que lo revise una persona."""
+import json
+
+from conocimiento import clasificador, importar
+
+
+def test_seguridad_sin_modelo_marca_pocas_pistas():
+    margen, msub, motivos = importar._seguridad({"historia": 2, "novela": 1}, None, None, "historia", None, None, "x" * 500, "libro", False)
+    assert any("pocas pistas" in m for m in motivos) and msub is None
+
+
+def test_seguridad_con_parecido_claro_no_marca_y_con_empate_si():
+    claro = {"puntos": {"novela": 0.9, "historia": 0.2}, "confianza": 0.7, "genero": "novela"}
+    _, _, ninguno = importar._seguridad({"novela": 30}, claro, None, "novela", None, None, "x" * 500, "libro", False)
+    assert ninguno == []
+    empate = {"puntos": {"novela": 0.50, "historia": 0.49}, "confianza": 0.01, "genero": "novela"}
+    _, _, motivos = importar._seguridad({"novela": 1, "historia": 1}, empate, None, "novela", None, None, "x" * 500, "libro", False)
+    assert any("poco claro" in m for m in motivos)
+
+
+def test_seguridad_avisa_de_poco_texto_discrepancia_del_llm_y_lo_corregido_por_ti():
+    p = {"puntos": {"novela": 0.9, "historia": 0.1}, "confianza": 0.8, "genero": "novela"}
+    assert any("casi no hay texto" in m for m in importar._seguridad({"novela": 30}, p, None, "novela", None, None, "corto", "libro", False)[2])
+    sg = {"id": "fantasia", "puntos": {"fantasia": 1.0, "negra": 0.2}, "confianza": 0.8, "nombre": "Fantasía"}
+    assert any("LLM y el parecido" in m for m in importar._seguridad({"novela": 30}, p, None, "novela", sg, "negra", "x" * 500, "libro", False)[2])
+    assert importar._seguridad({"novela": 1}, None, None, "otro", None, None, "x" * 500, "libro", True)[2] == []          # ya lo corregiste: se respeta
+    assert importar._seguridad({}, None, None, "otro", None, None, "x" * 500, "codigo", False)[2] == []                   # el «género» de un código no es lo importante
+
+
+def _biblioteca(tmp_path):
+    m = {"libros/a.epub": {"titulo": "Libro A", "galaxia": "libros", "genero": "novela", "subtema": "General", "subgenero": "", "tipo": "libro", "hash": "1", "revisar": True, "margen": 0.1, "motivos_revisar": ["género poco claro"]},
+         "libros/b.epub": {"titulo": "Libro B", "galaxia": "libros", "genero": "historia", "subtema": "General", "subgenero": "", "tipo": "libro", "hash": "2", "revisar": True, "margen": 0.5, "motivos_revisar": ["subgénero poco claro"]},
+         "libros/c.epub": {"titulo": "Libro C", "galaxia": "libros", "genero": "ensayo", "subtema": "General", "subgenero": "", "tipo": "libro", "hash": "3"}}
+    (tmp_path / "biblioteca").mkdir()
+    (tmp_path / "biblioteca" / "metadatos.json").write_text(json.dumps(m), encoding="utf-8")
+
+
+def test_por_revisar_ordena_por_lo_menos_claro_y_confirmar_lo_quita(tmp_path):
+    _biblioteca(tmp_path)
+    cola = importar.por_revisar(tmp_path)
+    assert [x["titulo"] for x in cola] == ["Libro A", "Libro B"] and cola[0]["motivos"] == ["género poco claro"]
+    ficha = importar.confirmar("libros/a.epub", tmp_path)
+    assert ficha["revisar"] is False and [x["titulo"] for x in importar.por_revisar(tmp_path)] == ["Libro B"]
+    assert (tmp_path / "biblioteca" / "correcciones.json").exists()               # confirmar = corrección tuya: lo parecido se clasificará igual
+
+
+def test_editar_cuenta_como_revisado(tmp_path):
+    _biblioteca(tmp_path)
+    importar.editar("libros/b.epub", {"genero": "politica"}, tmp_path, db=tmp_path / "i.db")
+    assert importar.por_revisar(tmp_path) != [] and all(x["titulo"] != "Libro B" for x in importar.por_revisar(tmp_path))
+
+
+def test_umbrales_por_defecto_son_positivos():
+    assert clasificador.MARGEN_REVISAR > 0 and clasificador.MARGEN_SUB_REVISAR > 0
+
+
+def test_si_el_parecido_dudaba_y_el_llm_decidio_no_hay_aviso_de_discrepancia():
+    p = {"puntos": {"novela": 0.9, "historia": 0.1}, "confianza": 0.8, "genero": "novela"}
+    dudoso = {"id": "fantasia", "puntos": {"fantasia": 1.0, "negra": 0.99}, "confianza": 0.01, "nombre": "Fantasía"}
+    assert not any("LLM y el parecido" in m for m in importar._seguridad({"novela": 30}, p, None, "novela", dudoso, "negra", "x" * 500, "libro", False)[2])
 :::END
 :::BEGIN py/tests/test_conocimiento.py|text
 """Gestor de conocimiento: índice incremental, acentos, filtros, sinónimos del catálogo y formatos."""
@@ -33222,6 +33879,51 @@ def test_metaanalisis_dl_reml_y_fijo():
     assert hk["efecto"] == pytest.approx(dl["efecto"]) and hk["ee"] >= dl["ee"] and hk["metodo"] == "dl+HK"
     with pytest.raises(ValueError):
         metaanalisis([1], [0.1])
+:::END
+:::BEGIN py/tests/test_enlaces.py|text
+"""Vídeos de YouTube/Vimeo como accesos directos .url: título y canal por oEmbed (simulado), clasificación e importación sin red."""
+from conocimiento import enlaces, importar
+
+
+def _atajo(tmp_path, url="https://www.youtube.com/watch?v=abc123", nombre="atajo"):
+    f = tmp_path / f"{nombre}.url"
+    f.write_text(f"[InternetShortcut]\nURL={url}\n", encoding="utf-8")
+    return f
+
+
+def _oembed(monkeypatch, titulo="La caída del Imperio romano: documental", canal="Historia en Vídeo"):
+    monkeypatch.setattr(enlaces, "_memo", {})
+    monkeypatch.setattr(enlaces.urllib.request, "urlopen", lambda *a, **k: (_ for _ in ()).throw(OSError("sin red")))
+    enlaces._memo["https://www.youtube.com/watch?v=abc123"] = {"url": "https://www.youtube.com/watch?v=abc123", "plataforma": "youtube", "titulo": titulo, "canal": canal, "miniatura": ""}
+
+
+def test_url_y_plataforma(tmp_path):
+    assert enlaces.url_de(_atajo(tmp_path)) == "https://www.youtube.com/watch?v=abc123"
+    assert enlaces.plataforma("https://youtu.be/xyz") == "youtube" and enlaces.plataforma("https://vimeo.com/123") == "vimeo" and enlaces.plataforma("https://ejemplo.com/v") == ""
+    assert enlaces.url_de(tmp_path / "no_existe.url") == ""
+
+
+def test_sin_red_el_nombre_del_atajo_hace_de_titulo(tmp_path, monkeypatch):
+    monkeypatch.setattr(enlaces, "_memo", {})
+    monkeypatch.setattr(enlaces.urllib.request, "urlopen", lambda *a, **k: (_ for _ in ()).throw(OSError("sin red")))
+    f = _atajo(tmp_path, nombre="Documental Roma")
+    assert enlaces.texto(f).startswith("Documental Roma") and enlaces.info(tmp_path / "otro.url") is None
+
+
+def test_clasifica_un_video_como_tipo_video_en_libros(tmp_path, monkeypatch):
+    _oembed(monkeypatch)
+    f = _atajo(tmp_path)
+    c = importar.clasificar(f, tmp_path)
+    assert c["tipo"] == "video" and c["galaxia"] == "libros" and c["titulo"].startswith("La caída del Imperio romano") and c["url"].startswith("https://www.youtube.com")
+    assert c["genero"] == "historia"                                          # «imperio romano» lo dice el título
+
+
+def test_importa_el_video_y_guarda_la_url(tmp_path, monkeypatch):
+    _oembed(monkeypatch)
+    r = importar.importar([_atajo(tmp_path)], tmp_path, indexar_ahora=False)[0]
+    assert r["estado"] == "ok" and r["tipo"] == "video"
+    meta = importar.leer_metadatos(tmp_path)
+    assert list(meta.values())[0]["url"].startswith("https://www.youtube.com")
 :::END
 :::BEGIN py/tests/test_extras_010.py|text
 """Funciones añadidas en 0.10 a ramas existentes: regresión, interpretación, aplicabilidad, multinivel, diccionario,
@@ -34343,14 +35045,30 @@ def test_dudoso():
     assert c.dudoso({"historia": 3}, None) and not c.dudoso({"historia": 30}, None)
 
 
-def test_clasificar_pregunta_al_llm_solo_si_es_dudoso(ollama_falso, monkeypatch, tmp_path):
+def test_clasificar_pregunta_al_llm_siempre_o_solo_si_es_dudoso(ollama_falso, monkeypatch, tmp_path):
     f = tmp_path / "Zorrotz Quimbaya.epub"
     with zipfile.ZipFile(f, "w") as z:
         z.writestr("mimetype", "application/epub+zip"); z.writestr("c.xhtml", "<p>" + "texto generico sin pistas " * 300 + "</p>")
     r = im.clasificar(f, tmp_path)                                                           # reglas flojas, sin parecido: dudoso -> LLM
     assert r["genero"] == "novela" and r["metodo"] == "llm" and "LLM" in r["motivo"]
     monkeypatch.setattr(c, "dudoso", lambda *a, **k: False)
-    assert im.clasificar(f, tmp_path)["metodo"] == "reglas"                                  # si no es dudoso no se pregunta
+    assert im.clasificar(f, tmp_path)["metodo"] == "llm"                                     # por defecto («siempre») se pregunta aunque no sea dudoso
+    (tmp_path / "ajustes.json").write_text('{"llm": {"siempre": false}}', encoding="utf-8")
+    assert im.clasificar(f, tmp_path)["metodo"] == "reglas"                                  # con «siempre»: false, si no es dudoso no se pregunta
+
+
+def test_ajuste_siempre_y_subgenero_con_ollama_falso(tmp_path, monkeypatch):
+    import json
+    from conocimiento import llm
+    (tmp_path / "ajustes.json").write_text(json.dumps({"llm": {"siempre": True}}), encoding="utf-8")
+    assert llm.ajustes(tmp_path)["siempre"] is True
+    monkeypatch.setattr(llm, "ACTIVO", True)
+    monkeypatch.setattr(llm, "disponible", lambda carpeta=None: True)
+    monkeypatch.setattr(llm, "_http", lambda url, datos=None, espera=0: {"message": {"content": '{"subgenero": "fantasia", "motivo": "x"}'}})
+    subs = [("fantasia", "Fantasía", "magia", "magic"), ("negra", "Negra", "crimen", "crime")]
+    assert llm.subgenero("Mort", [], "", "Novela", subs, "terry pratchett", tmp_path) == "fantasia"
+    monkeypatch.setattr(llm, "_http", lambda url, datos=None, espera=0: {"message": {"content": '{"subgenero": "inventado", "motivo": "x"}'}})
+    assert llm.subgenero("Mort", [], "", "Novela", subs, "", tmp_path) is None
 :::END
 :::BEGIN py/tests/test_ml.py|text
 """Rama ML (0.9): salida común, los modelos flexibles captan lo no lineal y la explicabilidad funciona."""
@@ -35968,6 +36686,74 @@ def test_el_genero_del_codigo_sale_de_su_contenido_y_el_llm_no_inventa(tmp_path,
     eventos = {}
     out = im.clasificar(f, tmp_path, etapa=lambda n, d: eventos.update({n: d}))
     assert out["genero"] == "estadistica" and out["metodo"] != "llm" and "no estaba entre los 3 más probables" in eventos["llm"]["omitido"]
+:::END
+:::BEGIN py/tests/test_webinfo.py|text
+"""webinfo: Wikipedia/Wikidata por título y autor, sin red (las respuestas se simulan)."""
+import json
+
+from conocimiento import webinfo
+
+
+def _falso(monkeypatch, paginas, entidades):
+    llamadas = []
+
+    def api(que, **p):
+        llamadas.append((que, p.get("action")))
+        if p.get("action") == "query":
+            return {"query": {"pages": paginas}}
+        if p.get("action") == "wbgetentities" and p.get("props") == "claims":
+            return {"entities": entidades}
+        return {"entities": {"Q1": {"labels": {"en": {"value": "literary work"}}}, "Q2": {"labels": {"en": {"value": "fantasy"}}}, "Q9": {"labels": {"en": {"value": "human"}}}}}
+    monkeypatch.setattr(webinfo, "_api", api)
+    monkeypatch.setattr(webinfo, "_estado", {"ultimo": 0.0, "fallos": 0, "descanso": 0.0, "cache": None})
+    return llamadas
+
+
+def _ent(tipo, genero=None):
+    c = {"P31": [{"mainsnak": {"datavalue": {"value": {"id": tipo}}}}]}
+    if genero:
+        c["P136"] = [{"mainsnak": {"datavalue": {"value": {"id": genero}}}}]
+    return {"claims": c}
+
+
+def test_encuentra_la_obra_por_titulo_y_autor_y_deduce_genero(tmp_path, monkeypatch):
+    pag = [{"index": 1, "title": "Mort", "extract": "Mort is a fantasy novel by British writer Terry Pratchett.", "pageprops": {"wikibase_item": "Q5"}}]
+    _falso(monkeypatch, pag, {"Q5": _ent("Q1", "Q2")})
+    r = webinfo.buscar("Mort", "terry pratchett", ("en",), tmp_path)
+    assert r["pagina"] == "Mort" and r["genero"] == "novela" and r["subgenero"] == "fantasia" and r["generos"] == ["fantasy"]
+
+
+def test_rechaza_la_ficha_del_autor_y_la_que_no_nombra_al_autor(tmp_path, monkeypatch):
+    pag = [{"index": 1, "title": "Terry Pratchett", "extract": "Terry Pratchett was an English author. Mort is one of his works.", "pageprops": {"wikibase_item": "Q7"}},
+           {"index": 2, "title": "Mort (album)", "extract": "Mort is an album by some band.", "pageprops": {"wikibase_item": "Q8"}}]
+    _falso(monkeypatch, pag, {"Q7": _ent("Q9")})
+    assert webinfo.buscar("Mort", "terry pratchett", ("en",), tmp_path) is None
+
+
+def test_la_cache_evita_repetir_peticiones_y_se_guarda_en_disco(tmp_path, monkeypatch):
+    pag = [{"index": 1, "title": "Mort", "extract": "Mort is a fantasy novel by Terry Pratchett.", "pageprops": {"wikibase_item": "Q5"}}]
+    llamadas = _falso(monkeypatch, pag, {"Q5": _ent("Q1", "Q2")})
+    webinfo.buscar("Mort", "Terry Pratchett", ("en",), tmp_path)
+    n = len(llamadas)
+    webinfo.buscar("Mort", "Terry Pratchett", ("en",), tmp_path)
+    assert len(llamadas) == n
+    webinfo.guardar(tmp_path)
+    assert "mort|terry pratchett" in json.loads((tmp_path / "webinfo_cache.json").read_text(encoding="utf-8"))
+
+
+def test_sin_red_devuelve_none_y_no_cachea_el_fallo(tmp_path, monkeypatch):
+    def roto(*a, **k):
+        raise OSError("sin red")
+    monkeypatch.setattr(webinfo, "_api", roto)
+    monkeypatch.setattr(webinfo, "_estado", {"ultimo": 0.0, "fallos": 0, "descanso": 0.0, "cache": None})
+    assert webinfo.buscar("Mort", "Terry Pratchett", ("en",), tmp_path) is None
+    assert "mort|terry pratchett" not in (webinfo._estado["cache"] or {})
+
+
+def test_es_obra_y_subgenero_de_novela():
+    assert webinfo.es_obra(["literary work"]) and webinfo.es_obra(["novel"]) and not webinfo.es_obra(["human"]) and not webinfo.es_obra(["film"])
+    assert webinfo.subgenero_novela("a science fiction novel") == "scifi" and webinfo.subgenero_novela("una novela histórica") == "historica" and webinfo.subgenero_novela("un ensayo") == ""
+    assert webinfo.genero_de(["literary work"], ["fantasy"], "a novel") == "novela" and webinfo.genero_de(["literary work"], ["essay"], "treatise on economics") != "novela"
 :::END
 :::BEGIN py/visor/agujero.js|text
 /* agujero.js — el agujero negro de la pestaña «Importar»: disco de acreción en órbita, anillo de luz y halo curvado por la gravedad (como en Interstellar).
@@ -38419,7 +39205,9 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 .bib-barra input{flex:1 1 280px} .bib-n{color:#8ea0c0;font-size:12.5px}
 .bib-lista{width:100%;max-width:1040px;display:grid;gap:8px}
 .bib-card{display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:6px 14px;align-items:start;padding:10px;border:1px solid #1d2742;border-radius:10px;background:rgba(14,20,38,.7)}
-.bib-card.nuevo{border-color:#2f6b3a} .bib-card.borrando{border-color:#8a3a2c}
+.bib-card.nuevo{border-color:#2f6b3a} .bib-card.borrando{border-color:#8a3a2c} .bib-card.dudoso{border-color:#b8860b;box-shadow:0 0 0 1px rgba(184,134,11,.35)}
+.bib-dudoso{grid-column:1/-1;display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:6px 10px;border-radius:8px;background:rgba(184,134,11,.14);color:#f3d58a;font-size:12.5px} .bib-dudoso b{color:#ffd978}
+.pest .insignia{display:inline-block;min-width:18px;margin-left:6px;padding:0 6px;border-radius:99px;background:#d99a1c;color:#1a1304;font:700 11px var(--mono);text-align:center}
 .bib-portada{width:62px;height:86px;border-radius:4px;overflow:hidden;background:#131c35;display:grid;place-items:center;box-shadow:0 1px 5px rgba(0,0,0,.5);font:700 11px var(--mono);color:#8ea0c0}
 .bib-portada img{width:100%;height:100%;object-fit:cover}
 .bib-campos{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
@@ -38560,7 +39348,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
   </section>
   <section class="biblioteca" id="biblioteca" hidden aria-label="Observatorio">
     <div class="imp-cabeza"><h2>Observatorio</h2><p>Todo lo que has importado. Cambia título, galaxia, género, subtema, tipo o etiquetas: se guarda al momento y el universo se actualiza al volver a él. Al borrar solo se quita la copia del observatorio; el original no se toca.</p></div>
-    <div class="bib-barra"><input id="bibQ" type="search" placeholder="Filtrar por título, género, subtema, etiqueta…" aria-label="Filtrar el observatorio"><select id="bibGal" aria-label="Galaxia"></select><select id="bibOrden" aria-label="Orden"><option value="fecha">Más recientes primero</option><option value="gal">Por galaxia y título</option></select><label class="bib-n" for="bibDesde">Importados desde</label><input id="bibDesde" type="date" aria-label="Importados desde esta fecha">
+    <div class="bib-barra"><input id="bibQ" type="search" placeholder="Filtrar por título, género, subtema, etiqueta…" aria-label="Filtrar el observatorio"><select id="bibGal" aria-label="Galaxia"></select><select id="bibOrden" aria-label="Orden"><option value="fecha">Más recientes primero</option><option value="gal">Por galaxia y título</option></select><label class="bib-n" for="bibDesde">Importados desde</label><input id="bibDesde" type="date" aria-label="Importados desde esta fecha"><label class="bib-n" for="bibRev" title="Lo que el clasificador no vio claro y aún no has mirado"><input id="bibRev" type="checkbox"> ⚠ Solo por revisar <span id="bibRevN"></span></label>
       <span id="bibN" class="bib-n"></span><button class="btn primario" id="bibAplicar" type="button" hidden>Actualizar el universo ahora</button></div>
     <div class="bib-lista" id="bibLista"></div>
   </section>
@@ -39566,7 +40354,9 @@ async function impImportar() {
   if (n) {
     impAviso('Actualizando el universo con lo nuevo…'); impRender();
     var v = await api.actualizar_visor();                          /* regenera visor_arbol.html (Libros: género › libro › capítulo) y se recarga */
-    var msg = n + ' de ' + hechos.length + ' importado' + (n === 1 ? '' : 's') + (imp.modo === 'mover' ? ' (los originales se han movido)' : '') + '. El universo ya incluye lo nuevo y se puede buscar.';
+    var dud = hechos.filter(function (x) { return x.estado === 'ok' && x.revisar; }).length;
+    var msg = n + ' de ' + hechos.length + ' importado' + (n === 1 ? '' : 's') + (imp.modo === 'mover' ? ' (los originales se han movido)' : '') + '. El universo ya incluye lo nuevo y se puede buscar.' +
+      (dud ? ' ⚠ ' + dud + ' ' + (dud === 1 ? 'no se ha clasificado con seguridad' : 'no se han clasificado con seguridad') + ': revísalos en 🔭 Observatorio (casilla «Solo por revisar»).' : '');
     if (!(v && v.error)) { try { sessionStorage.setItem('arbol-tras-importar', msg); } catch (e) {} setTimeout(function () { location.reload(); }, 1400); impAviso(msg); return; }
     impAviso(msg + ' (no se pudo regenerar el visor: ' + v.error + ')');
   } else impAviso('No se importó nada.');
@@ -39574,7 +40364,7 @@ async function impImportar() {
 }
 
 /* ---------- Observatorio (la pestaña; internamente «biblioteca»): editar, reclasificar o borrar lo importado ---------- */
-var bib = {lista: null, sucio: false, filtro: '', gal: '', borrando: null};
+var bib = {lista: null, sucio: false, filtro: '', gal: '', borrando: null, rev: false};
 /* ---------- telescopio: busca obras abiertas y las trae a la biblioteca (py/conocimiento/telescopio.py) ---------- */
 var tel = {lista: []};
 async function telBuscar() {
@@ -39638,13 +40428,14 @@ async function bibCargar() {
 function bibVista() {
   var f = norm(bib.filtro);
   return (bib.lista || []).filter(function (x) {
-    return (!bib.gal || x.galaxia === bib.gal) && (!bib.desde || (x.fecha_hora || '').slice(0, 10) >= bib.desde) && (!f || norm([x.titulo, x.titulo_largo, x.genero, GENEROS_NOM[x.genero], x.subgenero_nombre, x.subtema, x.etiquetas, x.tipo, x.galaxia].join(' ')).indexOf(f) >= 0);
+    return (!bib.gal || x.galaxia === bib.gal) && (!bib.rev || x.revisar) && (!bib.desde || (x.fecha_hora || '').slice(0, 10) >= bib.desde) && (!f || norm([x.titulo, x.titulo_largo, x.genero, GENEROS_NOM[x.genero], x.subgenero_nombre, x.subtema, x.etiquetas, x.tipo, x.galaxia].join(' ')).indexOf(f) >= 0);
   }).sort(function (a, b) { return bib.orden === 'gal' ? 0 : String(b.fecha_hora || '').localeCompare(String(a.fecha_hora || '')); });
 }
 function bibTarjeta(x) {
   var o = imp.opciones || {galaxias: GALAXIAS, generos: [], tipos: []}, nuevo = x.automatico ? '' : ' · ajustado por ti';
   function opts(lista, v) { return lista.map(function (g) { return '<option value="' + esc(g.id) + '"' + (g.id === v ? ' selected' : '') + '>' + esc(g.nombre) + '</option>'; }).join(''); }
-  return '<div class="bib-card' + (bib.borrando === x.rel ? ' borrando' : '') + '" data-rel="' + esc(x.rel) + '">' +
+  return '<div class="bib-card' + (bib.borrando === x.rel ? ' borrando' : '') + (x.revisar ? ' dudoso' : '') + '" data-rel="' + esc(x.rel) + '">' +
+    (x.revisar ? '<div class="bib-dudoso"><span>⚠ <b>Revísalo:</b> ' + esc((x.motivos_revisar || []).join(' · ') || 'el clasificador no estaba seguro') + '</span><button class="btn primario" data-a="confirmar" type="button" title="Das por buena esta clasificación; se recuerda como corrección tuya">✓ Está bien</button></div>' : '') +
     '<div class="bib-portada">' + (x.portada ? '<img alt="" src="' + x.portada + '">' : esc((x.extension || '').toUpperCase())) + '</div>' +
     '<div class="bib-campos"><label class="ancho">Título<input type="text" data-c="titulo" value="' + esc(x.titulo) + '" title="' + esc(x.titulo_largo) + '"></label>' +
     '<label>Galaxia<select data-c="galaxia">' + opts(o.galaxias, x.galaxia) + '</select></label><label>Género<select data-c="genero">' + opts(o.generos, x.genero) + '</select></label>' +
@@ -39660,17 +40451,27 @@ function bibTarjeta(x) {
 function bibRender() {
   var v = bibVista(), cont = $('#bibLista');
   var sel = $('#bibGal'); if (!sel.options.length) sel.innerHTML = '<option value="">Todas las galaxias</option>' + ((imp.opciones && imp.opciones.galaxias) || GALAXIAS).map(function (g) { return '<option value="' + esc(g.id) + '">' + esc(g.nombre) + '</option>'; }).join('');
+  var nRev = (bib.lista || []).filter(function (x) { return x.revisar; }).length; $('#bibRevN').textContent = nRev ? '(' + nRev + ')' : ''; insigniaRevisar(nRev);
   $('#bibN').textContent = v.length + ' de ' + (bib.lista || []).length + ' documentos';
   $('#bibAplicar').hidden = !bib.sucio;
   var subs = {}; Object.keys((imp.opciones || {subtemas: {}}).subtemas).forEach(function (g) { imp.opciones.subtemas[g].forEach(function (s) { subs[s] = 1; }); });
   cont.innerHTML = '<datalist id="impSub">' + Object.keys(subs).map(function (s) { return '<option value="' + esc(s) + '">'; }).join('') + '</datalist>' +
     (v.length ? v.map(bibTarjeta).join('') : '<p class="imp-msg">' + ((bib.lista || []).length ? 'Nada coincide con el filtro.' : 'Todavía no has importado nada: usa la pestaña ⚫ Importar.') + '</p>');
 }
+function insigniaRevisar(n) {                                    /* el número de documentos por revisar, en la pestaña 🔭 */
+  var b = $('#pestBiblioteca'), i = b.querySelector('.insignia');
+  if (!n) { if (i) i.remove(); return; }
+  if (!i) { i = document.createElement('span'); i.className = 'insignia'; b.appendChild(i); }
+  i.textContent = n; i.title = n + ' documento' + (n === 1 ? '' : 's') + ' por revisar: el clasificador no estaba seguro';
+}
+async function revisarInsignia() { var a = impApi(); if (a && a.biblioteca_por_revisar) { try { var r = await a.biblioteca_por_revisar(); if (r && r.n) insigniaRevisar(r.n); } catch (e) {} } }
+revisarInsignia(); window.addEventListener('pywebviewready', revisarInsignia);       /* la API de la app puede tardar un momento en estar lista */
 function bibFicha(rel) { return (bib.lista || []).filter(function (x) { return x.rel === rel; })[0]; }
 function bibMarca(card, txt) { var s = card && card.querySelector('.bib-ok'); if (s) { s.textContent = txt; setTimeout(function () { if (s) s.textContent = ''; }, 2200); } }
 $('#bibQ').addEventListener('input', function () { bib.filtro = this.value; bibRender(); });
 $('#bibGal').addEventListener('change', function () { bib.gal = this.value; bibRender(); });
 $('#bibOrden').addEventListener('change', function () { bib.orden = this.value; bibRender(); });
+$('#bibRev').addEventListener('change', function () { bib.rev = this.checked; bibRender(); });
 $('#bibDesde').addEventListener('change', function () { bib.desde = this.value; bibRender(); });
 $('#biblioteca').addEventListener('change', async function (ev) {
   var card = ev.target.closest('.bib-card'), c = ev.target.dataset.c; if (!card || !c) return;
@@ -39685,6 +40486,7 @@ $('#biblioteca').addEventListener('click', async function (ev) {
   var b = ev.target.closest('button[data-a]'), card = ev.target.closest('.bib-card'); if (!b || !card) return;
   var rel = card.dataset.rel, x = bibFicha(rel), a = impApi();
   if (b.dataset.a === 'abrir') a.abrir_fuente(x.ruta, '');
+  else if (b.dataset.a === 'confirmar') { var rc = await a.biblioteca_confirmar(rel); if (rc.error) bibMarca(card, '✗ ' + rc.error); else { bib.lista[bib.lista.indexOf(x)] = rc; bibRender(); } }
   else if (b.dataset.a === 'recl') { var r = await a.biblioteca_reclasificar(rel); if (r.error) bibMarca(card, '✗ ' + r.error); else { bib.lista[bib.lista.indexOf(x)] = r; bib.sucio = true; bibRender(); } }
   else if (b.dataset.a === 'borrar') {
     if (bib.borrando !== rel) { bib.borrando = rel; bibRender(); return; }                 /* hace falta pulsar dos veces */
@@ -40944,6 +41746,10 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 5q. **Importar en masa y revisar por fecha:** la casilla «Importar sin revisar (clasifica solo)» de la pestaña Importar clasifica e importa todo lo que sueltes sin pasar por las tarjetas (se recuerda en el navegador). Cada archivo guarda en `metadatos.json` cuándo se importó (`fecha`, con hora), cómo se clasificó (`metodo`: `reglas` | `parecido` | `web`, `motivo`, `materias_web`) y la `propuesta` automática original; así se ve qué corregiste a mano. **Para revisar con Claude:** `python -m conocimiento revisar [--desde AAAA-MM-DD] [--hasta …] [--json]` lista lo importado de más reciente a más antiguo con `corregido` (distinto de la propuesta); el Observatorio ordena por fecha y filtra «importados desde». Claude lee ese JSON, propone la clasificación que él habría hecho y se comparan los desacuerdos para mejorar reglas, frases semilla (`clasificador.SEMILLAS`) o pesos. **Materias web:** para libros y artículos, `importar._materias_web` consulta Open Library por el título (timeout de 6 s; si falla una vez, no se reintenta en la sesión) y el género de esas materias suma `PESO_WEB` en `clasificador.decidir` (o decide si todo lo demás da «otro»). No se hace scraping de páginas: solo APIs de metadatos. Las pruebas desactivan la red con `clasificador.WEB = False`. Tests: `tests/test_revisar.py`.
 5n. **Búsqueda por tipo de archivo y por título/autor:** en el buscador principal los prefijos `pdf:`, `epub:`, `docx:`, `md:`, `txt:` filtran lo que sale de tu conocimiento por formato (`conocimiento.buscar(..., formato=)`; con un prefijo de formato no se listan nodos del mapa). En el Telescopio, «Qué buscamos» (Todo / Un libro / Un artículo) muestra casillas de **Título** y **Autor** (el autor se comprueba en cada resultado), el selector de tipo elige las fuentes (libro: Google Books, Open Library, Gutenberg, Internet Archive; artículo: arXiv, OpenAlex) y «Solo PDF / Solo EPUB» filtra por formato descargable. Consola: `python -m conocimiento telescopio -T título -a autor --tipo libro --formato pdf`.
 5o. **Clasificador por parecido (embeddings locales):** `py/conocimiento/clasificador.py`. El importador mezcla las reglas de palabras clave con el parecido del libro (título + capítulos + principio) a unas frases semilla por género y a lo que ya hay en tu biblioteca (lo que corregiste a mano pesa más); `decidir` suma parecido + cuota de las reglas × su seguridad, y si nada se parece (`MIN_PARECIDO`) respeta a las reglas. Corre en local con `fastembed` (ONNX, sin PyTorch; **opcional**: `pip install fastembed`; sin él o sin el modelo todo sigue con las reglas). Los modelos se guardan en `conocimiento/modelos/` (no se publican). Modelo por defecto `paraphrase-multilingual-MiniLM-L12-v2` (0,2 GB; sirve en un portátil de 8 GB); para otro, `conocimiento/ajustes.json` {"modelo_embeddings": "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"} o la variable ARBOL_MODELO. **Medido con `python herramientas/comparar_clasificadores.py`** (66 libros de prueba): reglas solas 42 %; con MiniLM 86 %, con mpnet 89 % (1 GB, algo más lento), con potion-multilingual-128M 82 %; ~0,1 s por libro una vez cargado el modelo. Al añadir géneros o frases semilla, vuelve a medir. El resultado de `clasificar` trae `metodo` (`reglas` | `parecido`) y el motivo lo explica. Tests: `tests/test_clasificador.py` (con un modelo falso; la suite desactiva el real).
+5v. **Cómo se mide y se entrena el clasificador (1.11.0):** `herramientas/evaluar_corpus.py CARPETA NOMBRE [--sin-llm] [--val] [--n N] [--hilos N] [--set modulo.ATRIBUTO=valor]` clasifica una muestra de PRUEBA (25 %, estratificada, semilla fija, `split.json`) con ejemplos solo de entrenamiento y guarda las predicciones en `resultados/`; `--val` reparte el entrenamiento otra vez (validación: ajustar parámetros sin mirar la prueba). `herramientas/estadisticas_clasificacion.py` da acierto con IC de Wilson, F1 macro, calibración, confusiones, cola de revisión y McNemar entre configuraciones; `herramientas/panel_progreso.py RAIZ` abre un panel en `localhost:8765` (progreso en vivo, gráfica por versión desde `enes/progreso.json`, GPU/VRAM/RAM). El corpus se monta con `herramientas/corpus/` (EPUB de Gutenberg en inglés y español con la etiqueta de su estantería, arXiv, código y datos de paquetes instalados) y NO se publica. `herramientas/evaluar_biblioteca.py` mide dejando uno fuera con tu biblioteca. **Medido sobre 232 obras de validación (inglés/español, 19 géneros):** 1.10.1 50 % género / 27 % subgénero → autor, licencia y capítulos limpios 53/28 → cabeza supervisada 67/36 → con cabeza en subgénero 68/39 → LLM 7b con ejemplos parecidos 75/42 (McNemar p = 0,005 en el género). mpnet no mejora a MiniLM; el LLM sin ejemplos parecidos no ayuda; «solo si hay duda» no cambia nada. Con libros nuevos (distribución distinta a la de tu biblioteca) el acierto real es mucho menor que el 94 % que daba dejando uno fuera con tus propios libros: **siempre mide con un conjunto separado.** `clasificador.PESO_CABEZA`/`PESO_CABEZA_SUB` (regresión logística sobre los embeddings de todos los ejemplos), `PESO_AUTOR`, `PESO_WIKI`, `llm.VECINOS`, `llm.ajustes()["siempre"]` y los umbrales `MARGEN_*` son los mandos; cualquier cambio de peso se valida con `--val` y se confirma con `--set` en la prueba. Trampas ya vividas: la licencia de Gutenberg al principio del EPUB se leía como texto de la obra (`importar.sin_licencia`); los hilos de `evaluar_corpus` exigen el candado de `clasificador._candado`; `ARBOL_PY=otra/py` mide otra versión del código.
+5w. **Cola de revisión («no estoy seguro»):** `importar._seguridad` mide el margen entre el género ganador y el segundo (y lo mismo en el subgénero), si el LLM y el parecido discrepan, si casi no hay texto o si no encaja en ningún género; `clasificar` devuelve `revisar`, `motivos_revisar` y `margen`, `importar()` los guarda en `metadatos.json`. El Observatorio muestra ⚠ con el motivo y «✓ Está bien» (`Api.biblioteca_confirmar` → `importar.confirmar`, que además lo recuerda como corrección tuya), la casilla «Solo por revisar» y un contador en la pestaña 🔭 (`Api.biblioteca_por_revisar`); tocar cualquier campo cuenta como revisado; al terminar una importación se avisa de cuántos hay. Consola: `python -m conocimiento revisar --dudosos`. Umbrales calibrados con datos (`MARGEN_REVISAR`, `MARGEN_SUB_REVISAR`): ~44 % marcado recoge ~67 % de los errores de género; subirlos avisa más. Tests: `tests/test_cola_revision.py`.
+5x. **Información web (Wikipedia/Wikidata) y vídeos:** `py/conocimiento/webinfo.py` busca «título autor» en Wikipedia (APIs oficiales, nada de rascar HTML), exige que la introducción nombre al autor y que Wikidata diga que es una obra escrita (no una persona, película o personaje) y devuelve descripción, tipo, género y subgénero de novela; entra al clasificador como descripción (para el parecido y el LLM) y como pista de género (`PESO_WIKI`). Respeta a los servidores: 1 petición por segundo, reintentos con espera ante 429 (Wikimedia limita de verdad), descanso tras fallos y caché en `conocimiento/webinfo_cache.json`; solo sale el título y el autor; `clasificador.WIKI = "auto"` (por defecto) la usa solo cuando el LLM no está disponible, porque con LLM no suma; `True` = siempre, `False` o `ARBOL_WIKI=no` = nunca (los tests la apagan). Medido en 73 obras conocidas (dejando uno fuera): sin LLM 75/49 → con Wikipedia 79/56; con LLM 7b y ejemplos parecidos 86/68, y 86/66 si además se usa Wikipedia. **Vídeos:** `py/conocimiento/enlaces.py` acepta accesos directos `.url` de YouTube/Vimeo: título, canal y miniatura (portada) salen del oEmbed oficial, sin transcripciones; tipo `video`, galaxia Libros, se clasifican por título y canal (+ Wikipedia si es un documental con ficha). Tests: `tests/test_webinfo.py`, `tests/test_enlaces.py`.
+5y. **LLM por defecto (1.11.0):** `llm.py` pregunta por TODAS las obras (`siempre`) y le enseña los `VECINOS = 8` libros más parecidos ya clasificados; el modelo por defecto depende de la RAM (`qwen2.5:7b` con 12 GB o más, `qwen2.5:3b` con menos; si falta el elegido usa el otro), y el instalador (`motor.ps1`) baja el que corresponda. Se cambia con `ajustes.json` o `ARBOL_LLM`.
 6. **Conceptos:** `conceptos/catalogo.json` lista los conceptos del temario del máster y de Very Normal con las funciones que los implementan. Organización: `temas` (ramas del mapa, con color) > `areas` (módulos, con `ambito`) > conceptos (`area`, `prioridad` opcional, `area_fija` para que la actualización no lo mueva). La migración de 0.6.0 está en `herramientas/reorganizar_catalogo.py`.
    Si un concepto no tiene función (*hueco*), es que el árbol aún no lo cubre: impleméntalo (módulo + test), enlázalo en el catálogo (`funciones`) y regenera el visor.
    Al añadir una función nueva, enlázala al menos a un concepto (hay un test que lo exige).
