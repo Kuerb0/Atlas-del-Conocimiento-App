@@ -36,13 +36,14 @@ _GEN_PALABRAS = {
     "economia": r"economics|economy|economia|economist|market|mercado|capitalism|capitalismo|trade|comercio|inflation|inflacion|monetary|monetaria|fiscal|growth|crecimiento|bank|banco|poverty|pobreza|wealth|riqueza|gdp|pib|labor|empresa|business|inversion|invest|finanzas|finance",
     "estadistica": r"statistic\w*|estadistic\w*|regression|regresion|probability|probabilidad|estimat\w*|hypothesis|hipotesis|bayes\w*|variance|varianza|econometric\w*|machine learning|theorem|teorema|calculus|algebra|matrix|matriz|likelihood|verosimilitud",
     "ciencia": r"physics|fisica|biology|biologia|chemistry|quimica|universe|universo|evolution|evolucion|neuroscience|neurociencia|quantum|cuantic\w*|genome|genoma|climate|clima|cosmos|astronomy|astronomia|scientific|cientific\w*|science|ciencia",
-    "novela": r"novel|novela|cuento|thriller|mystery|misterio|detective|fantasy|fantasia|romance|once upon|chapter one|capitulo uno|he said|she said|dijo",
+    "novela": r"novel|novela|thriller|mystery|misterio|detective|fantasy|fantasia|romance|once upon|chapter one|capitulo uno|he said|she said|dijo",
     "ensayo": r"philosoph\w*|filosof\w*|essay|ensayo|ethic\w*|etic\w*|metaphysic\w*|stoic\w*|estoic\w*|reason|razon|liberty|libertad|freedom|truth|verdad|meaning|sentido|virtue|virtud|moral\w*",
     "biografia": r"biograph\w*|memoir\w*|memorias|autobiograph\w*|life of|vida de|my life|mi vida",
     "politica": r"politic\w*|democracy|democracia|government|gobierno|election|eleccion\w*|geopolit\w*|society|sociedad|social|state|estado|policy|nationalism|nacionalismo",
     "tecnologia": r"software|programming|programacion|python|algorithm\w*|algoritmo\w*|computer|ordenador|internet|artificial intelligence|inteligencia artificial|data science|linux|codigo|developer",
     "psicologia": r"psycholog\w*|psicolog\w*|behavior|conducta|cognitive|cognitiv\w*|therapy|terapia|emotion\w*|emocion\w*|health|salud|mental",
-    "arte": r"art|arte|music|musica|painting|pintura|film|cine|literature|literatura|architecture|arquitectura|poetry|poesia|theatre|teatro|museum|museo"}
+    "arte": r"art|arte|music|musica|painting|pintura|film|cine|architecture|arquitectura|museum|museo",
+    "literatura": r"poem|poems|poetry|poesia|poemas?|verse|verso|versos|sonnet|soneto|ode|oda|ballad|romancero|poet|poeta|poetas|play|plays|drama|dramas|comedy|comedia|tragedy|tragedia|act i|acto|escena|scene|dramatis personae|short stories|short story|tales|cuentos?|relatos?|fables?|fabulas?|literature|literatura|literary|literario|literaria"}
 _GEN_RE = {g: re.compile(r"\b(?:" + p + r")\b") for g, p in _GEN_PALABRAS.items()}
 _ES = set("el la de que y en los las un una por con para es se del al lo como mas pero sus le ya o este si porque esta entre cuando muy sin sobre tambien me hasta hay donde quien desde todo nos durante".split())
 _EN = set("the of and to in is that for with as on by it this are was be at from or an which have has not but they their its been were all more can will one also".split())
@@ -157,7 +158,7 @@ def titulo_corto(nombre: str, n: int = 60) -> str:
 _COLOR_GENERO = {"historia": (150, 90, 50), "economia": (40, 120, 80), "ensayo": (110, 80, 150), "estadistica": (40, 90, 170), "ciencia": (30, 130, 150), "novela": (160, 60, 90),
                  "biografia": (140, 110, 40), "politica": (150, 60, 50), "tecnologia": (60, 70, 90), "psicologia": (130, 70, 130), "arte": (170, 90, 120), "otro": (80, 90, 110),
                  "derecho": (90, 90, 120), "cocina": (190, 110, 50), "salud": (50, 140, 110), "viajes": (60, 130, 170), "idiomas": (120, 100, 60), "educacion": (100, 120, 160),
-                 "religion": (120, 90, 70), "deporte": (60, 150, 80), "hogar": (130, 100, 80)}
+                 "religion": (120, 90, 70), "deporte": (60, 150, 80), "hogar": (130, 100, 80), "literatura": (125, 70, 105)}
 
 
 def _imagen_epub(f: Path) -> bytes | None:

@@ -14,7 +14,7 @@ ROMA = "Roma antigua: Julio César, la república romana, las legiones, Augusto 
 
 
 def test_los_datos_de_la_taxonomia_son_coherentes():
-    assert sum(len(v) for v in tx.TAXONOMIA.values()) >= 100 and len(tx.GENEROS_NUEVOS) == 9
+    assert sum(len(v) for v in tx.TAXONOMIA.values()) >= 100 and len(tx.GENEROS_NUEVOS) == 10
     for g, subs in tx.TAXONOMIA.items():
         assert g in im.GENEROS and subs, g
         ids = [s[0] for s in subs]
