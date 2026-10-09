@@ -26,7 +26,7 @@ from pathlib import Path
 from . import CARPETA, CODIGO_EXT, DATOS_EXT, DB, EXT_IMPORTABLE, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, enlaces, indexar, llm, taxonomia, webinfo
 
 GALAXIAS = {"codigo": "Código", "conceptos": "Conceptos", "demos": "Demos y guías", "finanzas": "Finanzas", "libros": "Libros", "notas": "Notas y enlaces"}
-TIPOS = {"libro": "Libro", "video": "Vídeo", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "codigo": "Código", "datos": "Datos", "otro": "Otro"}
+TIPOS = {"libro": "Libro", "video": "Vídeo", "articulo": "Artículo", "apuntes": "Apuntes", "ejercicios": "Ejercicios", "examen": "Examen", "nota": "Nota", "codigo": "Código", "datos": "Datos", "otro": "Otro"}
 _GENEROS_BASE = {"historia": "Historia", "economia": "Economía y finanzas", "ensayo": "Ensayo y filosofía", "estadistica": "Estadística y matemáticas", "ciencia": "Ciencia y divulgación",
                  "novela": "Novela y ficción", "biografia": "Biografía y memorias", "politica": "Política y sociedad", "tecnologia": "Tecnología e informática",
                  "psicologia": "Psicología y salud", "arte": "Arte, música y cultura"}
@@ -43,6 +43,8 @@ _GEN_PALABRAS = {
     "tecnologia": r"software|programming|programacion|python|algorithm\w*|algoritmo\w*|computer|ordenador|internet|artificial intelligence|inteligencia artificial|data science|linux|codigo|developer",
     "psicologia": r"psycholog\w*|psicolog\w*|behavior|conducta|cognitive|cognitiv\w*|therapy|terapia|emotion\w*|emocion\w*|health|salud|mental",
     "arte": r"art|arte|music|musica|painting|pintura|film|cine|architecture|arquitectura|museum|museo",
+    "actuarial": r"actuari\w*|seguros?|insurance|mortalidad|mortality|demograf\w*|pension\w*|jubilacion|seguridad social|social security|siniestr\w*|reaseguro|solvencia|supervivencia|esperanza de vida|life tables?|renta vitalicia|asegurad\w*",
+    "burocracia": r"solicitud|notificacion|becas?|matricula|certificado|formulario|facturas?|nominas?|contrato|escritura|resolucion|expediente|nif|dni|justificante|registro civil|curriculum|carta de presentacion|instancia|tramite\w*",
     "literatura": r"poem|poems|poetry|poesia|poemas?|verse|verso|versos|sonnet|soneto|ode|oda|ballad|romancero|poet|poeta|poetas|play|plays|drama|dramas|comedy|comedia|tragedy|tragedia|act i|acto|escena|scene|dramatis personae|short stories|short story|tales|cuentos?|relatos?|fables?|fabulas?|literature|literatura|literary|literario|literaria"}
 _GEN_RE = {g: re.compile(r"\b(?:" + p + r")\b") for g, p in _GEN_PALABRAS.items()}
 _ES = set("el la de que y en los las un una por con para es se del al lo como mas pero sus le ya o este si porque esta entre cuando muy sin sobre tambien me hasta hay donde quien desde todo nos durante".split())
@@ -144,6 +146,44 @@ def capitulos(ruta: str | Path) -> tuple[list[dict], int]:
     return (caps or [{"titulo": f.stem, "pagina": 1 if ext == ".pdf" else None}]), paginas
 
 
+_FIN = r"(?![a-záéíóúüñ])"           # final de palabra que admite dígitos pegados («Tareas1», «Examen20180523»)
+_RE_EXAMEN = re.compile(r"(?i)\bex[aá]men(?:es)?" + _FIN + r"|\bexam" + _FIN + r"|\bconvocatoria" + _FIN + r"|\bparcial" + _FIN)
+_RE_EJERCICIOS = re.compile(r"(?i)\bejercicios?" + _FIN + r"|\bhojas?" + _FIN + r"|\brelaci[oó]n" + _FIN + r"|\btareas?" + _FIN + r"|\bproblemas?" + _FIN
+                            + r"|\bpr[aá]cticas?" + _FIN + r"(?! (?:curriculares|extracurriculares))|\benunciados?" + _FIN + r"|\bsoluciones" + _FIN + r"|\bentregas?" + _FIN)
+_RE_APUNTES = re.compile(r"(?i)\btemas?\s*\d|\blecci[oó]n" + _FIN + r"|\bcap[ií]tulo" + _FIN + r"|\bapuntes" + _FIN + r"|\bpresentaci[oó]n" + _FIN + r"|\bdiapositivas" + _FIN + r"|\bresumen" + _FIN + r"|\btrasp\w*")
+_RE_PAPER = re.compile(r"(?i)\babstract\b|\bdoi\b|\bkeywords?\b|\bpalabras clave\b|\barxiv\b|\bissn\b")
+
+
+def tipo_docente(nombre: str, texto: str = "") -> str | None:
+    """'examen' | 'ejercicios' | 'apuntes' si el documento es material de estudio por su nombre y su principio (y no un artículo con resumen y palabras clave); None si no lo parece.
+    Un examen se reconoce antes que un ejercicio, y las hojas de ejercicios antes que los apuntes."""
+    cabeza = re.sub(r"\s+", " ", texto[:300])
+    if _RE_PAPER.search(texto[:1500]):
+        return None
+    for tipo, patron in (("examen", _RE_EXAMEN), ("ejercicios", _RE_EJERCICIOS), ("apuntes", _RE_APUNTES)):
+        if patron.search(nombre) or patron.search(cabeza):
+            return tipo
+    return None
+
+
+_RE_TEMA = re.compile(r"(?i)\b(tema|lecci[oó]n|cap[ií]tulo|unidad)\s*(\d+(?:\.\d+)?)\s*[.:\-–—]?\s*(.{0,140})")
+
+
+def titulo_estandar(texto: str, nombre: str = "") -> str:
+    """Título descriptivo de unos apuntes sacado de su cabecera («Tema 4 · Tablas de mortalidad»); si no hay cabecera de tema, el nombre del fichero limpio."""
+    t = re.sub(r"\s+", " ", texto[:900])
+    m = _RE_TEMA.search(t)
+    if not m:
+        return titulo_corto(nombre)
+    etiqueta = {"tema": "Tema", "leccion": "Lección", "lección": "Lección", "capitulo": "Capítulo", "capítulo": "Capítulo", "unidad": "Unidad"}[m.group(1).lower()]
+    resto = re.split(r"\s\d+(?:\.\d+)*\.?\s|\s[•·]\s|\.\s[A-ZÁÉÍÓÚ]", m.group(3) + " ")[0].strip(" .:-–—")
+    if len(resto) > 80:
+        resto = resto[:80].rsplit(" ", 1)[0].rstrip(" ,;:-") + "…"
+    if resto.isupper():
+        resto = resto.capitalize()
+    return f"{etiqueta} {m.group(2)}" + (f" · {resto}" if len(resto) >= 3 else "")
+
+
 def titulo_corto(nombre: str, n: int = 60) -> str:
     """Recorta nombres largos de fichero («3. Regression Modeling Strategies_ With Applications -- Autor -- 2016 -- Springer -- isbn… -- Anna's Archive»):
     primer tramo antes de « -- », sin numeración inicial, sin guiones bajos y como mucho `n` caracteres (corta en una palabra y añade «…»)."""
@@ -158,7 +198,7 @@ def titulo_corto(nombre: str, n: int = 60) -> str:
 _COLOR_GENERO = {"historia": (150, 90, 50), "economia": (40, 120, 80), "ensayo": (110, 80, 150), "estadistica": (40, 90, 170), "ciencia": (30, 130, 150), "novela": (160, 60, 90),
                  "biografia": (140, 110, 40), "politica": (150, 60, 50), "tecnologia": (60, 70, 90), "psicologia": (130, 70, 130), "arte": (170, 90, 120), "otro": (80, 90, 110),
                  "derecho": (90, 90, 120), "cocina": (190, 110, 50), "salud": (50, 140, 110), "viajes": (60, 130, 170), "idiomas": (120, 100, 60), "educacion": (100, 120, 160),
-                 "religion": (120, 90, 70), "deporte": (60, 150, 80), "hogar": (130, 100, 80), "literatura": (125, 70, 105)}
+                 "religion": (120, 90, 70), "deporte": (60, 150, 80), "hogar": (130, 100, 80), "literatura": (125, 70, 105), "actuarial": (70, 120, 150), "burocracia": (110, 110, 110)}
 
 
 def _imagen_epub(f: Path) -> bytes | None:
@@ -479,6 +519,8 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
         tipo = "apuntes"
     else:
         tipo = "nota"
+    if tipo in ("articulo", "apuntes", "nota"):
+        tipo = tipo_docente(f.stem, texto) or tipo                       # apuntes, hojas de ejercicios y exámenes no son artículos
     tit = titulo_corto((inf_v or {}).get("titulo") or f.stem)             # (en los vídeos, el título real y no el nombre del acceso directo)
     aut = "" if tipo == "video" else clasificador.autor_de(f.stem)
     gp = {g: len(r.findall(t)) + 6 * len(r.findall(nombre)) for g, r in _GEN_RE.items()}
@@ -595,6 +637,9 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
     es, en = sum(w in _ES for w in palabras), sum(w in _EN for w in palabras)
     h = _sha1(f)
     dup = next((rel for rel, m in leer_metadatos(carpeta).items() if m.get("hash") == h), "")
+    if tipo in ("apuntes", "ejercicios", "examen") and tipo != "video":
+        tema = titulo_estandar(texto, f.stem)
+        tit = f"{sg['nombre']} · {tema}" if sg else tema                 # la asignatura delante distingue los «Tema 1» de materias distintas
     return {"galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "titulo": tit, "titulo_largo": (inf_v or {}).get("titulo") or f.stem, "url": (inf_v or {}).get("url", ""), "motivo": motivo, "metodo": metodo, "materias_web": materias[:8], "paginas": paginas,
             "subgenero": sg["id"] if sg else "", "subgenero_nombre": sg["nombre"] if sg else "",
             "subgeneros": [{"id": k, "nombre": taxonomia.nombre_sub(genero, k, carpeta), "puntos": v} for k, v in sg["puntos"].items()] if sg else [],
@@ -770,13 +815,16 @@ def reclasificar(carpeta: Path | None = None) -> list[tuple]:
 CAMPOS = ("titulo", "galaxia", "genero", "subgenero", "subtema", "tipo", "etiquetas")
 
 
+GENEROS_PRIVADOS = {"burocracia"}        # lo que se importa en estos géneros (becas, nóminas, contratos…) NUNCA entra en referencias.json, que es lo que viaja por GitHub
+
+
 def _guardar(carpeta: Path, meta: dict) -> None:
     """Escribe metadatos.json (lo de este equipo) y referencias.json (lo mismo sin rutas del equipo: es lo que viaja por GitHub, aunque los PDF/EPUB no)."""
     base = Path(carpeta) / "biblioteca"
     base.mkdir(parents=True, exist_ok=True)
     esc = lambda d: json.dumps(d, ensure_ascii=False, indent=1)
     (base / "metadatos.json").write_text(esc(meta), encoding="utf-8")
-    (base / "referencias.json").write_text(esc({rel: {k: v for k, v in m.items() if k != "origen"} for rel, m in sorted(meta.items())}), encoding="utf-8")
+    (base / "referencias.json").write_text(esc({rel: {k: v for k, v in m.items() if k != "origen"} for rel, m in sorted(meta.items()) if m.get("genero") not in GENEROS_PRIVADOS}), encoding="utf-8")
 
 
 def _ficha(carpeta: Path, rel: str, m: dict, con_portada: bool = True) -> dict:

@@ -13,6 +13,7 @@ GENEROS_NUEVOS = {
     "derecho": "Derecho y legislación", "cocina": "Cocina y gastronomía", "salud": "Salud y medicina", "viajes": "Viajes y geografía",
     "idiomas": "Idiomas y lingüística", "educacion": "Educación y pedagogía", "religion": "Religión y espiritualidad", "deporte": "Deporte y ocio",
     "hogar": "Hogar, jardín y bricolaje", "literatura": "Literatura (poesía, teatro, cuentos)",
+    "actuarial": "Actuarial y seguros", "burocracia": "Burocracia y documentos",
 }
 
 TAXONOMIA: dict[str, list[tuple[str, str, str, str]]] = {
@@ -138,6 +139,19 @@ TAXONOMIA: dict[str, list[tuple[str, str, str, str]]] = {
         ("teatro", "Teatro y dramaturgia", "Teatro, obras de teatro, comedias, tragedias, dramas, actos y escenas, dramaturgos y personajes que dialogan", "theatre, plays, comedies, tragedies, drama, acts and scenes, playwrights and dialogue between characters"),
         ("cuentos", "Cuentos y relatos breves", "Cuentos, relatos cortos, colecciones de narraciones breves, fábulas, leyendas y cuentos populares", "short stories, tales, collections of short fiction, fables, legends and folk tales"),
         ("critica", "Crítica y ensayo literario", "Crítica literaria, estudios sobre autores y obras, historia de la literatura, teoría literaria y ensayos sobre libros y lectura", "literary criticism, studies of authors and works, history of literature, literary theory and essays on books and reading"),
+    ],
+    "actuarial": [
+        ("demografia", "Demografía y tablas de mortalidad", "Demografía, población, censos, pirámides, natalidad, fecundidad, tablas de mortalidad, diagrama de Lexis y esperanza de vida", "demography, population, censuses, birth and fertility, mortality tables, Lexis diagram and life expectancy"),
+        ("vida", "Matemática actuarial de vida", "Matemática actuarial de los seguros de vida, rentas actuariales, primas, reservas matemáticas, valor actual actuarial y probabilidades de supervivencia", "actuarial mathematics of life insurance, annuities, premiums, policy reserves, actuarial present value and survival probabilities"),
+        ("no_vida", "Riesgo y seguros no vida", "Teoría del riesgo, proceso del riesgo, modelos individual y colectivo, tarificación, siniestralidad, precio del seguro y seguros no vida", "risk theory, collective and individual risk models, ratemaking, claims, insurance pricing and non-life insurance"),
+        ("pensiones", "Seguridad Social y pensiones", "Seguridad Social, sistemas de pensiones, reparto y capitalización, jubilación, protección social e informes de la AISS", "social security, pension systems, pay-as-you-go and funded schemes, retirement and social protection"),
+        ("solvencia", "Solvencia, reaseguro y riesgos", "Solvencia II, capital de solvencia, reaseguro, gestión de riesgos de las aseguradoras y regulación del seguro", "Solvency II, solvency capital, reinsurance, enterprise risk management of insurers and insurance regulation"),
+    ],
+    "burocracia": [
+        ("academico", "Trámites académicos y becas", "Matrícula, becas, solicitudes, notificaciones del ministerio, certificados académicos, expediente y trámites universitarios, prácticas curriculares", "enrolment, scholarships, applications, ministry notifications, academic certificates and university paperwork"),
+        ("legal", "Contratos y documentos legales", "Contratos, escrituras, poderes, estatutos, sentencias, documentos notariales y legales", "contracts, deeds, powers of attorney, statutes, judgments and legal documents"),
+        ("financiero", "Facturas, nóminas e impuestos", "Facturas, recibos, nóminas, extractos bancarios, declaración de la renta, impuestos y justificantes de pago", "invoices, receipts, payslips, bank statements, tax returns and proofs of payment"),
+        ("laboral", "Laboral y currículum", "Currículum, cartas de presentación, contratos de trabajo, ofertas de empleo, prácticas y vida laboral", "curriculum vitae, cover letters, employment contracts, job offers, internships and work history"),
     ],
     "derecho": [
         ("civil", "Derecho civil y mercantil", "Derecho civil, contratos, propiedad, sociedades mercantiles y obligaciones", "civil law, contracts, property, commercial companies and obligations"),
