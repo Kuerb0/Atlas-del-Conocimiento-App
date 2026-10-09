@@ -377,6 +377,10 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 .imp-bar{display:grid;grid-template-columns:minmax(80px,1.4fr) 1fr 28px;gap:6px;align-items:center;margin:2px 0;font-size:12px;cursor:pointer;border-radius:5px;padding:1px 3px}
 .imp-bar:hover,.imp-bar.sel{background:#16213f} .imp-bar.sel{outline:1px solid #6fa2ff}
 .imp-bar i{display:block;height:6px;border-radius:3px;background:#3b5bb5} .imp-bar em{font-style:normal;color:#8ea0c0;text-align:right}
+.et-chips{display:flex;flex-wrap:wrap;gap:5px;margin:3px 0 6px} .et-chip{padding:2px 9px;border-radius:999px;background:#0f1730;border:1px solid #26335a;color:#8ea0c0;font-size:11.5px;cursor:pointer;font-family:inherit}
+.et-chip:hover{border-color:#6fa2ff;color:#dfe8ff} .et-chip.on{background:#16264f;border-color:#4f7be0;color:#dfe8ff} .et-chip.pri{background:#274a9a;border-color:#8fb2ff;color:#fff;font-weight:600}
+.et-chip.sub.on{background:#2a1e4a;border-color:#8a6ae0} .et-chip.sub.pri{background:#4b2d96;border-color:#b9a0ff}
+.bib-et{grid-column:1/-1;font-size:12px;color:#8ea0c0} .bib-et select{font-size:11.5px;padding:2px 4px;margin-left:4px}
 .imp-prev{font-style:italic;color:#9fb0cc;font-size:12px;line-height:1.45;margin:0}
 .imp-caps{margin:0;padding-left:16px;font-size:12px;color:#b9c7e4} .imp-nota{font-size:11.5px;color:#8ea0c0;margin:4px 0 0}
 .imp-res{display:flex;gap:8px;align-items:baseline;padding:6px 8px;border-radius:8px;background:rgba(14,20,38,.6);font-size:13px}
@@ -1305,8 +1309,8 @@ function salaFicha(a, activa) {
   var d = e.decision;
   if (d && d.estado === 'fin') {
     var col = GAL[d.galaxia] ? 'rgb(' + GAL[d.galaxia].color.join(',') + ')' : '#9fb0cc';
-    h += '<div class="sala-final"><span style="border-color:' + col + ';color:' + col + '">' + esc(impNom(imp.opciones ? imp.opciones.galaxias : GALAXIAS, d.galaxia)) + '</span><span>' + esc(d.genero_nombre) + '</span>' +
-      (d.subgenero_nombre ? '<span>' + esc(d.subgenero_nombre) + '</span>' : '') + '<span>' + esc(d.tipo) + '</span><span title="' + esc(d.motivo) + '">por ' + esc(d.metodo) + '</span></div>';
+    h += '<div class="sala-final"><span style="border-color:' + col + ';color:' + col + '">' + esc(impNom(imp.opciones ? imp.opciones.galaxias : GALAXIAS, d.galaxia)) + '</span>' + (d.etiquetas_generos && d.etiquetas_generos.length ? d.etiquetas_generos.map(function (g, k) { return '<span title="' + (k ? 'Género secundario (peso ' + g.peso + ')' : 'Género principal') + '">' + (k ? '' : '★ ') + esc(g.nombre) + (k ? ' · ' + g.peso : '') + '</span>'; }).join('') : '<span>' + esc(d.genero_nombre) + '</span>') +
+      (d.etiquetas_subgeneros && d.etiquetas_subgeneros.length ? d.etiquetas_subgeneros.map(function (g, k) { return '<span title="Subgénero' + (k ? ' secundario' : '') + '">' + esc(g.nombre) + '</span>'; }).join('') : d.subgenero_nombre ? '<span>' + esc(d.subgenero_nombre) + '</span>' : '') + '<span>' + esc(d.tipo) + '</span><span title="' + esc(d.motivo) + '">por ' + esc(d.metodo) + '</span></div>';
   }
   return h + '</div>';
 }
@@ -1317,7 +1321,7 @@ function salaRender(v) {
   v.archivos.forEach(function (a, k) {
     if (a.estado === 'listo' && k !== v.actual && v.fase !== 'fin') {          /* los ya clasificados se resumen en una línea */
       var d = (a.etapas || {}).decision || {};
-      h += '<div class="sala-mini"><span>✓</span><b>' + esc(recorta(a.nombre, 50)) + '</b><span>→ ' + esc(d.genero_nombre || '') + (d.subgenero_nombre ? ' › ' + esc(d.subgenero_nombre) : '') + '</span></div>';
+      h += '<div class="sala-mini"><span>✓</span><b>' + esc(recorta(a.nombre, 50)) + '</b><span>→ ' + esc((d.etiquetas_generos && d.etiquetas_generos.length ? d.etiquetas_generos.map(function (g) { return g.nombre; }).join(' + ') : d.genero_nombre) || '') + (d.subgenero_nombre ? ' › ' + esc(d.subgenero_nombre) : '') + '</span></div>';
     } else if (a.estado === 'trabajando' || (a.estado === 'listo' && k === v.actual) || a.estado === 'error') h += salaFicha(a, a.estado === 'trabajando');
     else if (a.estado === 'espera') h += '<div class="sala-mini"><span>○</span><span>' + esc(recorta(a.nombre, 60)) + ' · en cola</span></div>';
   });
@@ -1339,7 +1343,7 @@ async function impAnadir(rutas) {
       if (a0.estado === 'error' || !a0.resultado) { impAviso(a0.error || 'No se pudo clasificar ' + a0.nombre); continue; }
       var c = a0.resultado;
       imp.archivos.push({ruta: c.ruta, nombre: c.ruta.split(/[\\/]/).pop(), auto: c, titulo: c.titulo, galaxia: 'auto', genero: 'auto', subtema: '', tipo: 'auto', etiquetas: '',
-        subgenero: 'auto', incluir: !c.duplicado, abierto: imp.archivos.length === 0, estado: '', res: null});
+        subgenero: 'auto', generos: null, subgeneros: null, incluir: !c.duplicado, abierto: imp.archivos.length === 0, estado: '', res: null});
     }
   } while (st.fase !== 'fin' || hechos < st.archivos.length);
   agujero.ocupado(false); impAviso('');
@@ -1352,18 +1356,47 @@ function impOpt(lista, val, autoTxt) {
     lista.map(function (g) { return '<option value="' + esc(g.id) + '"' + (val === g.id ? ' selected' : '') + '>' + esc(g.nombre) + '</option>'; }).join('');
 }
 function impNom(lista, id) { return ((lista || []).filter(function (g) { return g.id === id; })[0] || {}).nombre || id; }
+/* varias etiquetas: chips que se encienden y se apagan; la primera encendida es la principal (★). Máximo 3 de cada tipo. */
+function etChips(opciones, activos, tipo) {
+  return '<div class="et-chips">' + opciones.map(function (x) {
+    var k = activos.indexOf(x.v), cl = 'et-chip' + (tipo === 'subgeneros' ? ' sub' : '') + (k >= 0 ? ' on' : '') + (k === 0 ? ' pri' : '');
+    return '<button type="button" class="' + cl + '" data-et="' + tipo + '" data-v="' + esc(x.v) + '" title="' + (k === 0 ? 'Principal' : k > 0 ? 'Secundaria: pulsa para quitarla' : 'Pulsa para añadirla (máximo 3)') + '">' + (k === 0 ? '★ ' : '') + esc(x.nombre) + '</button>';
+  }).join('') + '</div>';
+}
+function impEtGen(a) {                       /* ids de género de un archivo en importación: lo fijado a mano, o lo que propuso el clasificador (con el principal elegido en el desplegable primero) */
+  var c = a.auto, l = (a.generos || (c.etiquetas ? c.etiquetas.generos.map(function (x) { return x.id; }) : [c.genero])).slice();
+  if (a.genero !== 'auto') l = [a.genero].concat(l.filter(function (x) { return x !== a.genero; }));
+  return l.slice(0, 3);
+}
+function impEtSub(a) {                       /* «género/subgénero» de un archivo en importación */
+  var c = a.auto, l = a.subgeneros || (c.etiquetas ? c.etiquetas.subgeneros.map(function (x) { return x.genero + '/' + x.id; }) : []), g = impEtGen(a);
+  l = l.filter(function (x) { return g.indexOf(x.split('/')[0]) >= 0; });
+  if (a.subgenero !== 'auto') { var p = g[0] + '/' + a.subgenero; l = [p].concat(l.filter(function (x) { return x !== p; })); }
+  return l.slice(0, 3);
+}
+function impEtNombres(a, o) {                /* {v, nombre} de los géneros y subgéneros que se pueden encender: los activos y los candidatos del clasificador */
+  var c = a.auto, g = impEtGen(a), vistos = {}, gs = [], ss = [], nombresSub = {};
+  g.concat((c.generos || []).map(function (x) { return x.id; })).forEach(function (id) { if (!vistos[id]) { vistos[id] = 1; gs.push({v: id, nombre: impNom(o.generos, id)}); } });
+  ((c.etiquetas || {}).subgeneros || []).forEach(function (x) { nombresSub[x.genero + '/' + x.id] = x.nombre; });
+  (c.subgeneros || []).forEach(function (x) { nombresSub[c.genero + '/' + x.id] = x.nombre; });
+  Object.keys(o.subgeneros || {}).forEach(function (gg) { (o.subgeneros[gg] || []).forEach(function (x) { if (!nombresSub[gg + '/' + x.id]) nombresSub[gg + '/' + x.id] = x.nombre; }); });
+  var vs = {};
+  impEtSub(a).concat(Object.keys(nombresSub).filter(function (k) { return g.indexOf(k.split('/')[0]) >= 0 && ((c.subgeneros || []).some(function (x) { return c.genero + '/' + x.id === k; }) || ((c.etiquetas || {}).subgeneros || []).some(function (x) { return x.genero + '/' + x.id === k; })); })).forEach(function (k) {
+    if (!vs[k]) { vs[k] = 1; ss.push({v: k, nombre: (nombresSub[k] || k.split('/')[1]) + (g.length > 1 ? ' (' + impNom(o.generos, k.split('/')[0]) + ')' : '')}); } });
+  return {gs: gs, ss: ss};
+}
 function impBarras(items, nombreKey, valKey, sel, tipo) {
   var max = Math.max.apply(null, items.map(function (x) { return x[valKey]; }).concat([1]));
   return items.map(function (x) { var nom = x[nombreKey];
     return '<div class="imp-bar' + (sel === nom || sel === x.id ? ' sel' : '') + '" data-fija="' + tipo + '" data-v="' + esc(x.id || nom) + '" title="Pulsa para fijarlo"><span>' + esc(nom) + '</span><span><i style="width:' + Math.round(100 * x[valKey] / max) + '%"></i></span><em>' + x[valKey] + '</em></div>'; }).join('');
 }
 function impTarjeta(a, i, o) {
-  var c = a.auto, G = o.galaxias, ga = a.galaxia === 'auto' ? c.galaxia : a.galaxia, ge = a.genero === 'auto' ? c.genero : a.genero, ti = a.tipo === 'auto' ? c.tipo : a.tipo, su = a.subtema || c.subtema, sgs = (o.subgeneros || {})[ge] || [], sg = a.subgenero === 'auto' ? c.subgenero : a.subgenero, sgNom = (sgs.filter(function (x) { return x.id === sg; })[0] || {}).nombre || '';
+  var c = a.auto, G = o.galaxias, ga = a.galaxia === 'auto' ? c.galaxia : a.galaxia, ge = impEtGen(a)[0], ti = a.tipo === 'auto' ? c.tipo : a.tipo, su = a.subtema || c.subtema, sgs = (o.subgeneros || {})[ge] || [], sg = a.subgenero === 'auto' ? (impEtSub(a).filter(function (x) { return x.split('/')[0] === ge; })[0] || '/').split('/')[1] : a.subgenero, sgNom = (sgs.filter(function (x) { return x.id === sg; })[0] || {}).nombre || '', et = impEtNombres(a, o);
   var col = GAL[ga] ? 'rgb(' + GAL[ga].color.join(',') + ')' : '#9fb0cc';
   var h = '<div class="imp-card' + (a.incluir ? '' : ' off') + (a.estado === 'listo' ? ' listo' : a.estado === 'error' ? ' error' : '') + '" data-i="' + i + '"><div class="imp-cab">' +
     '<input type="checkbox" data-c="incluir"' + (a.incluir ? ' checked' : '') + ' title="Incluir en la importación">' +
     '<input type="text" data-c="titulo" value="' + esc(a.titulo) + '" title="' + esc(c.titulo_largo || a.nombre) + '">' +
-    '<div class="imp-ins"><span class="gal" style="color:' + col + '">' + esc(impNom(G, ga)) + '</span><span>' + esc(impNom(o.generos, ge)) + '</span>' + (sgNom ? '<span>' + esc(sgNom) + '</span>' : '') + '<span>' + esc(su) + '</span><span>' + esc(impNom(o.tipos, ti)) + '</span>' +
+    '<div class="imp-ins"><span class="gal" style="color:' + col + '">' + esc(impNom(G, ga)) + '</span>' + impEtGen(a).map(function (id, k) { return '<span title="' + (k ? 'Género secundario' : 'Género principal') + '">' + (k ? '' : '★ ') + esc(impNom(o.generos, id)) + '</span>'; }).join('') + impEtSub(a).map(function (v, k) { var n = et.ss.filter(function (x) { return x.v === v; })[0]; return '<span title="Subgénero' + (k ? ' secundario' : '') + '">' + esc(n ? n.nombre : v.split('/')[1]) + '</span>'; }).join('') + '<span>' + esc(su) + '</span><span>' + esc(impNom(o.tipos, ti)) + '</span>' +
     '<span>' + esc(c.extension.toUpperCase()) + ' · ' + fmtTam(c.tamano) + (c.paginas ? ' · ' + c.paginas + ' págs.' : '') + (c.idioma ? ' · ' + c.idioma : '') + '</span>' +
     (c.duplicado ? '<span class="aviso">ya importado</span>' : '') + '</div>' +
     '<span class="imp-est" style="color:' + (a.estado === 'error' ? '#ff8a73' : '#7be08a') + '">' + (a.estado === 'hecho' ? '' : '') + esc(a.estadoTxt || '') + '</span>' +
@@ -1375,7 +1408,9 @@ function impTarjeta(a, i, o) {
     '<label>Subtema<input type="text" data-c="subtema" list="impSub" placeholder="Automático (' + esc(c.subtema) + ')" value="' + esc(a.subtema) + '"></label>' +
     '<label>Tipo<select data-c="tipo">' + impOpt(o.tipos, a.tipo, 'Automático (' + impNom(o.tipos, c.tipo) + ')') + '</select></label>' +
     '<label style="grid-column:1/-1">Etiquetas (separadas por comas)<input type="text" data-c="etiquetas" placeholder="p. ej. regresión, tfm, repaso" value="' + esc(a.etiquetas) + '"></label></div>' +
-    '<div class="imp-det"><h4>Género más probable</h4>' + (c.generos.length ? impBarras(c.generos, 'nombre', 'puntos', a.genero === 'auto' ? c.genero : a.genero, 'genero') : '<p class="imp-nota">Sin pistas claras: «Otros».</p>') +
+    '<div class="imp-det"><h4>Etiquetas de la obra (hasta 3 géneros y 3 subgéneros)</h4><p class="imp-nota" style="margin:0">Géneros: la ★ es la principal (la carpeta del archivo); pulsa uno para añadirlo o quitarlo.</p>' + etChips(et.gs, impEtGen(a), 'generos') +
+    '<p class="imp-nota" style="margin:0">Subgéneros</p>' + (et.ss.length ? etChips(et.ss, impEtSub(a), 'subgeneros') : '<p class="imp-nota">Sin subgéneros para estos géneros.</p>') +
+    '<h4 style="margin-top:8px">Género más probable</h4>' + (c.generos.length ? impBarras(c.generos, 'nombre', 'puntos', ge, 'genero') : '<p class="imp-nota">Sin pistas claras: «Otros».</p>') +
     '<h4 style="margin-top:8px">Subgénero más probable</h4>' + ((c.subgeneros || []).length ? impBarras(c.subgeneros, 'nombre', 'puntos', sg, 'subgenero') : '<p class="imp-nota">Sin subgéneros para este género.</p>') +
     '<h4 style="margin-top:8px">Temas de estadística detectados</h4>' + (c.temas.length ? impBarras(c.temas, 'tema', 'puntos', su, 'subtema') : '<p class="imp-nota">Ninguno del catálogo.</p>') + '</div>' +
     '<div class="imp-det"><h4>Capítulos detectados (' + c.n_capitulos + ')</h4>' + (c.capitulos.length ? '<ol class="imp-caps">' + c.capitulos.map(function (x) { return '<li>' + esc(recorta(x, 60)) + '</li>'; }).join('') + (c.n_capitulos > c.capitulos.length ? '<li>… y ' + (c.n_capitulos - c.capitulos.length) + ' más</li>' : '') + '</ol>' : '<p class="imp-nota">Sin índice: se importará como un solo bloque.</p>') +
@@ -1418,7 +1453,7 @@ $('#impPanel').addEventListener('input', function (ev) {         /* texto: solo 
 });
 $('#impPanel').addEventListener('change', function (ev) {
   var f = ev.target.closest('.imp-card'), c = ev.target.dataset.c;
-  if (f && c) { var a = imp.archivos[+f.dataset.i]; a[c] = ev.target.type === 'checkbox' ? ev.target.checked : ev.target.value; if (c === 'genero') a.subgenero = 'auto'; impRender(); return; }
+  if (f && c) { var a = imp.archivos[+f.dataset.i]; a[c] = ev.target.type === 'checkbox' ? ev.target.checked : ev.target.value; if (c === 'genero') { a.subgenero = 'auto'; a.subgeneros = null; if (a.generos && a.genero !== 'auto') a.generos = [a.genero].concat(a.generos.filter(function (x) { return x !== a.genero; })).slice(0, 3); } impRender(); return; }
   if (ev.target.id === 'gModo') { imp.modo = ev.target.value; return; }
   var m = {gGal: 'galaxia', gGen: 'genero', gSub: 'subtema', gTipo: 'tipo', gEti: 'etiquetas'}[ev.target.id]; if (!m) return;       /* «Para todos» */
   imp.archivos.forEach(function (a) { a[m] = ev.target.value; }); var g = {gGal: $('#gGal').value, gGen: $('#gGen').value, gSub: $('#gSub').value, gTipo: $('#gTipo').value, gEti: $('#gEti').value}; impRender();
@@ -1428,7 +1463,14 @@ $('#impPanel').addEventListener('click', function (ev) {
   var f = ev.target.closest('.imp-card'), a = f ? imp.archivos[+f.dataset.i] : null;
   if (ev.target.closest('[data-q]') && a) { imp.archivos.splice(+f.dataset.i, 1); impRender(); }
   else if (ev.target.closest('[data-ab]') && a) { a.abierto = !a.abierto; impRender(); }
-  else if (ev.target.closest('[data-fija]') && a) { var b = ev.target.closest('[data-fija]'); a[b.dataset.fija] = b.dataset.v; if (b.dataset.fija === 'genero') a.subgenero = 'auto'; impRender(); }      /* pulsar una barra fija ese género o subtema */
+  else if (ev.target.closest('[data-et]') && a) {                                      /* encender o apagar una etiqueta (máximo 3; la primera es la principal) */
+    var be = ev.target.closest('[data-et]'), te = be.dataset.et, cur = (te === 'generos' ? impEtGen(a) : impEtSub(a)).slice(), ke = cur.indexOf(be.dataset.v);
+    if (ke >= 0) { if (te === 'generos' && cur.length === 1) return; cur.splice(ke, 1); } else if (cur.length < 3) cur.push(be.dataset.v); else return;
+    if (te === 'generos') { a.generos = cur; a.genero = 'auto'; a.subgenero = 'auto'; a.subgeneros = impEtSub(a).filter(function (x) { return cur.indexOf(x.split('/')[0]) >= 0; }); }
+    else { a.subgeneros = cur; a.subgenero = 'auto'; }
+    impRender();
+  }
+  else if (ev.target.closest('[data-fija]') && a) { var b = ev.target.closest('[data-fija]'); a[b.dataset.fija] = b.dataset.v; if (b.dataset.fija === 'genero') { a.subgenero = 'auto'; a.subgeneros = null; a.generos = a.generos ? [b.dataset.v].concat(a.generos.filter(function (x) { return x !== b.dataset.v; })).slice(0, 3) : null; } impRender(); }      /* pulsar una barra fija ese género o subtema */
   else if (ev.target.id === 'impMas') impElegir();
   else if (ev.target.id === 'impTodo') { var abrir = !imp.archivos.every(function (x) { return x.abierto; }); imp.archivos.forEach(function (x) { x.abierto = abrir; }); impRender(); }
   else if (ev.target.id === 'impGo') impImportar();
@@ -1440,7 +1482,7 @@ async function impImportar() {
   for (var k = 0; k < cola.length; k++) {                          /* de uno en uno; cada archivo se importa en segundo plano y aquí se ve su avance real (copiar, leer páginas, indexar) */
     var a = cola[k]; a.estado = 'trabajando'; a.estadoTxt = '⏳ 0%'; impRender();
     var ini = await api.importar_archivos([{ruta: a.ruta, titulo: a.titulo, galaxia: a.galaxia === 'auto' ? null : a.galaxia, genero: a.genero === 'auto' ? null : a.genero,
-      subtema: a.subtema || null, subgenero: a.subgenero === 'auto' ? null : a.subgenero, tipo: a.tipo === 'auto' ? null : a.tipo, etiquetas: a.etiquetas, modo: imp.modo}]), st = {fase: 'fin', resultado: {error: ini && ini.error}};
+      subtema: a.subtema || null, subgenero: a.subgenero === 'auto' ? null : a.subgenero, generos: a.generos || null, subgeneros: a.subgeneros || null, tipo: a.tipo === 'auto' ? null : a.tipo, etiquetas: a.etiquetas, modo: imp.modo}]), st = {fase: 'fin', resultado: {error: ini && ini.error}};
     if (!ini.error) do {
       await espera(350); st = await api.estado_trabajo();
       var fr = (k + Math.min(st.frac || 0, 1)) / cola.length; var bar = $('#impProg'); if (bar) bar.style.width = Math.round(100 * fr) + '%';
@@ -1529,8 +1571,25 @@ async function bibCargar() {
 function bibVista() {
   var f = norm(bib.filtro);
   return (bib.lista || []).filter(function (x) {
-    return (!bib.gal || x.galaxia === bib.gal) && (!bib.rev || x.revisar) && (!bib.desde || (x.fecha_hora || '').slice(0, 10) >= bib.desde) && (!f || norm([x.titulo, x.titulo_largo, x.genero, GENEROS_NOM[x.genero], x.subgenero_nombre, x.subtema, x.etiquetas, x.tipo, x.galaxia].join(' ')).indexOf(f) >= 0);
+    return (!bib.gal || x.galaxia === bib.gal) && (!bib.rev || x.revisar) && (!bib.desde || (x.fecha_hora || '').slice(0, 10) >= bib.desde) && (!f || norm([x.titulo, x.titulo_largo, x.genero, GENEROS_NOM[x.genero], (x.generos || []).map(function (g) { return g.nombre; }).join(' '), (x.subgeneros || []).map(function (g) { return g.nombre; }).join(' '), x.subgenero_nombre, x.subtema, x.etiquetas, x.tipo, x.galaxia].join(' ')).indexOf(f) >= 0);
   }).sort(function (a, b) { return bib.orden === 'gal' ? 0 : String(b.fecha_hora || '').localeCompare(String(a.fecha_hora || '')); });
+}
+function bibEtiquetasHtml(x, o) {                              /* géneros y subgéneros de la obra: los activos como chips (✕ quita; la ★ es la principal) y un desplegable para añadir */
+  var gs = (x.generos || []), ss = (x.subgeneros || []);
+  function chip(t, v, nombre, k) { return '<button type="button" class="et-chip on' + (t === 'subgeneros' ? ' sub' : '') + (k === 0 ? ' pri' : '') + '" data-a="quitar" data-t="' + t + '" data-v="' + esc(v) + '" title="Pulsa para quitarla">' + (k === 0 ? '★ ' : '') + esc(nombre) + ' ✕</button>'; }
+  var ya = {}; gs.forEach(function (g) { ya[g.id] = 1; });
+  var addG = gs.length < 3 ? '<select data-c="addgen"><option value="">+ género…</option>' + (o.generos || []).filter(function (g) { return !ya[g.id] && g.id !== 'otro'; }).map(function (g) { return '<option value="' + esc(g.id) + '">' + esc(g.nombre) + '</option>'; }).join('') + '</select>' : '';
+  var ys = {}; ss.forEach(function (s) { ys[s.genero + '/' + s.id] = 1; });
+  var addS = ss.length < 3 ? '<select data-c="addsub"><option value="">+ subgénero…</option>' + gs.map(function (g) { return '<optgroup label="' + esc(g.nombre) + '">' + ((o.subgeneros || {})[g.id] || []).filter(function (s) { return !ys[g.id + '/' + s.id]; }).map(function (s) { return '<option value="' + esc(g.id + '/' + s.id) + '">' + esc(s.nombre) + '</option>'; }).join('') + '</optgroup>'; }).join('') + '</select>' : '';
+  return '<div class="bib-et"><b>Géneros</b> <span class="et-chips" style="display:inline-flex">' + gs.map(function (g, k) { return chip('generos', g.id, g.nombre, k); }).join('') + '</span>' + addG +
+    ' &nbsp; <b>Subgéneros</b> <span class="et-chips" style="display:inline-flex">' + ss.map(function (s, k) { return chip('subgeneros', s.genero + '/' + s.id, s.nombre, k); }).join('') + '</span>' + addS + '</div>';
+}
+async function bibEtiquetas(card, tipo, lista) {
+  var cambios = {}; cambios[tipo] = lista;
+  var r = await impApi().biblioteca_editar(card.dataset.rel, cambios);
+  if (r.error) { bibMarca(card, '✗ ' + r.error); return; }
+  var i = bib.lista.findIndex(function (y) { return y.rel === r.rel; }); if (i >= 0) bib.lista[i] = r;
+  bib.sucio = true; $('#bibAplicar').hidden = false; bibRender();
 }
 function bibTarjeta(x) {
   var o = imp.opciones || {galaxias: GALAXIAS, generos: [], tipos: []}, nuevo = x.automatico ? '' : ' · ajustado por ti';
@@ -1543,7 +1602,7 @@ function bibTarjeta(x) {
     '<label>Tipo<select data-c="tipo">' + opts(o.tipos, x.tipo) + '</select></label>' +
     '<label>Subgénero<select data-c="subgenero"><option value="">—</option>' + opts((o.subgeneros || {})[x.genero] || [], x.subgenero) + '</select></label>' +
     '<label>Subtema<input type="text" data-c="subtema" list="impSub" value="' + esc(x.subtema) + '"></label>' +
-    '<label class="ancho">Etiquetas<input type="text" data-c="etiquetas" value="' + esc(x.etiquetas) + '" placeholder="separadas por comas"></label></div>' +
+    '<label class="ancho">Etiquetas<input type="text" data-c="etiquetas" value="' + esc(x.etiquetas) + '" placeholder="separadas por comas"></label>' + bibEtiquetasHtml(x, o) + '</div>' +
     '<div class="bib-acc"><button class="btn primario" data-a="abrir" type="button"' + (x.existe ? '' : ' disabled') + '>Abrir</button>' +
     '<button class="btn" data-a="recl" type="button" title="Vuelve a decidir galaxia, género y subtema según el contenido y tus correcciones anteriores">Reclasificar</button>' +
     '<button class="btn" data-a="borrar" type="button" style="' + (bib.borrando === x.rel ? 'background:#8a3a2c;color:#fff' : '') + '">' + (bib.borrando === x.rel ? '¿Seguro? Pulsa otra vez' : 'Borrar') + '</button><span class="bib-ok"></span></div>' +
@@ -1576,6 +1635,13 @@ $('#bibRev').addEventListener('change', function () { bib.rev = this.checked; bi
 $('#bibDesde').addEventListener('change', function () { bib.desde = this.value; bibRender(); });
 $('#biblioteca').addEventListener('change', async function (ev) {
   var card = ev.target.closest('.bib-card'), c = ev.target.dataset.c; if (!card || !c) return;
+  if (c === 'addgen' || c === 'addsub') {                                           /* añadir una etiqueta a la lista de la obra */
+    if (!ev.target.value) return;
+    var xx = bibFicha(card.dataset.rel);
+    if (c === 'addgen') bibEtiquetas(card, 'generos', xx.generos.map(function (g) { return g.id; }).concat([ev.target.value]));
+    else bibEtiquetas(card, 'subgeneros', xx.subgeneros.map(function (s) { return s.genero + '/' + s.id; }).concat([ev.target.value]));
+    return;
+  }
   var r = await impApi().biblioteca_editar(card.dataset.rel, (function () { var o = {}; o[c] = ev.target.value; return o; })());
   if (r.error) { bibMarca(card, '✗ ' + r.error); return; }
   var i = bib.lista.findIndex(function (x) { return x.rel === r.rel; }); if (i >= 0) bib.lista[i] = r;
@@ -1586,6 +1652,11 @@ $('#biblioteca').addEventListener('click', async function (ev) {
   if (ev.target.id === 'bibAplicar') { bibAplicar(); return; }
   var b = ev.target.closest('button[data-a]'), card = ev.target.closest('.bib-card'); if (!b || !card) return;
   var rel = card.dataset.rel, x = bibFicha(rel), a = impApi();
+  if (b.dataset.a === 'quitar') {                                                   /* quitar una etiqueta (siempre queda al menos un género) */
+    if (b.dataset.t === 'generos') { if (x.generos.length > 1) bibEtiquetas(card, 'generos', x.generos.map(function (g) { return g.id; }).filter(function (g) { return g !== b.dataset.v; })); else bibMarca(card, 'Debe quedar al menos un género'); }
+    else bibEtiquetas(card, 'subgeneros', x.subgeneros.map(function (s) { return s.genero + '/' + s.id; }).filter(function (s) { return s !== b.dataset.v; }));
+    return;
+  }
   if (b.dataset.a === 'abrir') a.abrir_fuente(x.ruta, '');
   else if (b.dataset.a === 'confirmar') { var rc = await a.biblioteca_confirmar(rel); if (rc.error) bibMarca(card, '✗ ' + rc.error); else { bib.lista[bib.lista.indexOf(x)] = rc; bibRender(); } }
   else if (b.dataset.a === 'recl') { var r = await a.biblioteca_reclasificar(rel); if (r.error) bibMarca(card, '✗ ' + r.error); else { bib.lista[bib.lista.indexOf(x)] = r; bib.sucio = true; bibRender(); } }

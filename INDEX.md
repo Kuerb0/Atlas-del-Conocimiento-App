@@ -41,7 +41,7 @@ Arbol de la estadística/
 ├── teoria/                   guías de teoría, contrastes, tabla SAS ↔ Python
 ├── ejemplos/                 flujos completos de uso
 ├── assets/                   icono.ico / icono.png
-├── herramientas/             generar_instaladores.py, descargar_python.ps1, plantillas/
+├── herramientas/             generar_instaladores.py, descargar_python.ps1, plantillas/, entrenador/ (reentrenar el LLM: datos, QLoRA, exportar a Ollama), corpus/ + evaluar_corpus.py + panel_progreso.py (medir y ver el progreso)
 ├── instaladores/             "Arbol X.Y.Z - Instalador.bat" y "… - Actualizar.bat" (autoextraíbles)
 ├── anteriores/               copias de seguridad que hace el actualizador (py_anterior, estructura_plana)
 └── python/                   (opcional) Python propio descargado por el instalador si el equipo no tiene

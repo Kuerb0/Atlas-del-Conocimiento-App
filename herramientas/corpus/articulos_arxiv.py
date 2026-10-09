@@ -36,7 +36,10 @@ for cat, (g, sub) in CAT.items():
                     continue
                 f.write_bytes(d)
             autores = [a.findtext(A + "name") for a in e.findall(A + "author")]
-            out.append({"id": aid, "archivo": f.name, "titulo": re.sub(r"\s+", " ", e.findtext(A + "title")).strip(), "autor": autores[0] if autores else "", "cat": cat, "genero": g, "subgenero": sub})
+            cruzadas = [c.get("term") for c in e.findall(A + "category")]                       # las categorías cruzadas dan las etiquetas múltiples (stat.ML + cs.LG = estadística + tecnología)
+            pares = list(dict.fromkeys([(g, sub)] + [CAT[c] for c in cruzadas if c in CAT]))
+            out.append({"id": aid, "archivo": f.name, "titulo": " ".join(e.findtext(A + "title").split()), "autor": autores[0] if autores else "", "cat": cat, "genero": g, "subgenero": sub,
+                        "generos": list(dict.fromkeys(p[0] for p in pares)), "subgeneros": [list(p) for p in pares if p[1]]})
     except Exception as ex:
         print("fallo", cat, type(ex).__name__, str(ex)[:80], flush=True)
     print(cat, sum(1 for o in out if o["cat"] == cat), flush=True)

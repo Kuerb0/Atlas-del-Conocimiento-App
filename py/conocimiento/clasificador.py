@@ -16,7 +16,7 @@ import threading
 
 import numpy as np
 
-from . import CARPETA, _norm
+from . import CARPETA, _norm, etiquetas
 
 MODELO = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 ACTIVO = True            # False: solo reglas (los tests y el script de comparación lo usan)
@@ -233,7 +233,10 @@ def _ejemplos(carpeta: Path | str) -> list[tuple[str, str, float]]:
         from .importar import GENEROS, leer_metadatos
         for m in leer_metadatos(Path(carpeta)).values():
             if m.get("genero") in GENEROS and m.get("genero") != "otro":
-                ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), m["genero"], 1.5 if m.get("automatico") else 2.5, m.get("hash")))
+                base, texto, pesos = 1.5 if m.get("automatico") else 2.5, texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), etiquetas.pesos_genero(m)
+                for g in etiquetas.generos_de(m):                       # una obra con varios géneros es ejemplo de cada uno (la principal pesa lo de siempre; las demás, según su peso y la mitad)
+                    if g in GENEROS and g != "otro":
+                        ej.append((texto, g, base if g == m["genero"] else base * .5 * pesos.get(g, 1.0), m.get("hash")))
     except Exception:
         pass
     return ej
@@ -251,7 +254,8 @@ def vecinos(texto: str, carpeta: Path | str, k: int = 6, cuerpo=None) -> list[di
         emb = _embedder(modelo(carpeta), carpeta)
         X = _matriz([(texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), None, 1.0, m.get("hash")) for m in ms], emb, carpeta)
         orden = np.argsort(-(X @ mezcla(emb([texto])[0], cuerpo)))[:k]
-        return [{"titulo": ms[i].get("titulo", ""), "autor": autor_de(Path(ms[i].get("origen", "")).stem), "genero": ms[i]["genero"], "subgenero": ms[i].get("subgenero", "")} for i in orden]
+        return [{"titulo": ms[i].get("titulo", ""), "autor": autor_de(Path(ms[i].get("origen", "")).stem), "genero": ms[i]["genero"], "subgenero": ms[i].get("subgenero", ""),
+                 "generos": etiquetas.generos_de(ms[i]), "subgeneros": [s for _, s in etiquetas.subgeneros_de(ms[i])]} for i in orden]
     except Exception:
         return []
 
@@ -261,7 +265,7 @@ _cabezas: dict = {}
 
 def _cabeza(ej: list, X, extra: int = 0):
     """Regresión logística multinomial entrenada con los ejemplos (semillas + biblioteca). Se guarda por contenido: con los mismos ejemplos no se vuelve a entrenar."""
-    clave = hash((tuple(e[0] for e in ej), extra))
+    clave = hash((tuple((e[0], e[1]) for e in ej), extra))
     with _candado:
         return _cabeza_(clave, ej, X)
 
@@ -319,7 +323,7 @@ def sugerir(texto: str, carpeta: Path | str | None = None, autor: str = "", pist
         if g in puntos:
             puntos[g] += PESO_WIKI * w
     orden = sorted(puntos, key=puntos.get, reverse=True)
-    return {"genero": orden[0], "confianza": puntos[orden[0]] - puntos[orden[1]], "puntos": {g: round(puntos[g], 3) for g in orden}}
+    return {"genero": orden[0], "confianza": puntos[orden[0]] - puntos[orden[1]], "puntos": {g: round(puntos[g], 3) for g in orden}, "escala": 1.0 + peso}     # escala: lo que puede valer la diferencia entre dos géneros (1 del parecido + el peso con que cuenta la cabeza supervisada ahora)
 
 
 _PARADA = set("para como pero sobre entre desde hasta este esta estos estas the and for with from that this their about which sus los las del una por con".split())
@@ -337,7 +341,7 @@ def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor:
     subs = taxonomia.subgeneros(genero, carpeta)
     if not subs:
         return None
-    puntos = None
+    puntos, peso_sub = None, 0.0
     if ACTIVO and not _cache.get("fallo"):
         try:
             emb = _embedder(modelo(carpeta), carpeta)
@@ -346,8 +350,9 @@ def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor:
                 from .importar import leer_metadatos
                 ids = {s[0] for s in subs}
                 for m in leer_metadatos(carpeta).values():
-                    if m.get("genero") == genero and m.get("subgenero") in ids:
-                        ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), m["subgenero"], 1.5 if m.get("automatico") else 2.5, m.get("hash")))
+                    for g, sid in etiquetas.subgeneros_de(m):                  # una obra con varios subgéneros es ejemplo de cada uno (los secundarios, a mitad de peso)
+                        if g == genero and sid in ids:
+                            ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), sid, (1.5 if m.get("automatico") else 2.5) * (1 if sid == m.get("subgenero") else .5), m.get("hash")))
             except Exception:
                 pass
             X, q = _matriz(ej, emb, carpeta), mezcla(emb([texto])[0], cuerpo)
@@ -356,7 +361,7 @@ def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor:
             for sid in ids:
                 v = sorted((s + .04 * (e[2] - 1) for s, e in zip(sims, ej) if e[1] == sid), reverse=True)[:2]
                 puntos[sid] = float(np.mean(v))
-            peso = PESO_CABEZA_SUB * fuerza(sum(e[2] > 1 for e in ej), LIBROS_CABEZA_SUB)
+            peso = peso_sub = PESO_CABEZA_SUB * fuerza(sum(e[2] > 1 for e in ej), LIBROS_CABEZA_SUB)
             if peso:
                 clf = _cabeza(ej, X, len(vectores(carpeta)))
                 if clf is not None:
@@ -379,7 +384,7 @@ def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor:
             return None
     orden = sorted(puntos, key=puntos.get, reverse=True)
     segundo = puntos[orden[1]] if len(orden) > 1 else 0.0
-    return {"id": orden[0], "nombre": taxonomia.nombre_sub(genero, orden[0], carpeta), "confianza": puntos[orden[0]] - segundo,
+    return {"id": orden[0], "nombre": taxonomia.nombre_sub(genero, orden[0], carpeta), "confianza": puntos[orden[0]] - segundo, "escala": 1.0 + peso_sub,
             "puntos": {sid: round(100 * puntos[sid], 1) for sid in orden[:4]}}
 
 

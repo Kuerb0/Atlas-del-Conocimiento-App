@@ -1,5 +1,5 @@
 """Corpus de pruebas del clasificador. Orden:
-1) python herramientas/corpus/libros_gutenberg.py CARPETA   (necesita CARPETA/pg_catalog.csv: https://www.gutenberg.org/cache/epub/feeds/pg_catalog.csv; baja EPUB en/es con la etiqueta de su estantería oficial)
+1) python herramientas/corpus/libros_gutenberg.py CARPETA   (añade --multi [N] para bajar también libros de varios géneros; necesita CARPETA/pg_catalog.csv: https://www.gutenberg.org/cache/epub/feeds/pg_catalog.csv; baja EPUB en/es con la etiqueta de su estantería oficial)
 2) python herramientas/corpus/articulos_arxiv.py CARPETA [N]  (artículos de arXiv con el género de su categoría)
 3) python herramientas/corpus/codigo_y_datos.py CARPETA        (código y datos de los paquetes instalados, etiquetados por paquete)
 4) python herramientas/corpus/montar.py CARPETA               (junta todo en CARPETA/enes/corpus con las etiquetas buenas; luego herramientas/evaluar_corpus.py)
@@ -11,7 +11,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "py")); sys
 from concurrent.futures import ThreadPoolExecutor
 from conocimiento import telescopio
 D = pathlib.Path(sys.argv[1]); RAW = D / "raw"; RAW.mkdir(exist_ok=True)
-POR_GENERO = int(sys.argv[2]) if len(sys.argv) > 2 else 28
+POR_GENERO = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else 28
 M = {  # estantería -> (género, subgénero)
  "History - Ancient": ("historia", "antigua"), "History - Medieval/Middle Ages": ("historia", "medieval"), "History - Early Modern (c. 1450-1750)": ("historia", "moderna"),
  "History - Modern (1750+)": ("historia", "moderna"), "History - Warfare": ("historia", "militar"), "History - American": ("historia", "america"),
@@ -26,18 +26,28 @@ M = {  # estantería -> (género, subgénero)
  "Law & Criminology": ("derecho", ""), "Cooking & Drinking": ("cocina", ""), "Health & Medicine": ("salud", "medicina"), "Psychiatry/Psychology": ("psicologia", ""),
  "Travel Writing": ("viajes", "relatos"), "Language & Communication": ("idiomas", ""), "Teaching & Education": ("educacion", ""), "Religion/Spirituality": ("religion", ""), "Sports/Hobbies": ("deporte", "")}
 LANG = {"en", "es"}
+MULTI = "--multi" in sys.argv                                    # además de los libros de un solo género, baja los de varios (etiquetas múltiples): libros_multi_etiquetas.json
+_i = sys.argv.index("--multi") + 1 if MULTI else 0
+POR_MULTI = int(sys.argv[_i]) if MULTI and len(sys.argv) > _i and sys.argv[_i].isdigit() else 150
 CUOTA = {"novela": (70, 25), "historia": (50, 20), "ensayo": (40, 12), "economia": (30, 10), "politica": (30, 10), "ciencia": (30, 10), "biografia": (30, 10)}   # (inglés, español)
 YA = {f.stem for f in RAW.glob("*.epub")}
 def autor(a):
     a = re.sub(r"\s*\(.*?\)|,?\s*\d{3,4}\??-\d{0,4}\??", "", a.split(";")[0]).strip()
     return " ".join(reversed([x.strip() for x in a.split(",", 1)])) if "," in a else a
 cand = collections.defaultdict(list)
+multi = []
 for x in csv.DictReader(open(D / "pg_catalog.csv", encoding="utf-8")):
     if x["Type"] != "Text" or x["Language"] not in LANG or not x["Authors"]:
         continue
     sh = [s.strip().replace("Category: ", "") for s in x["Bookshelves"].split(";")]
     hits = [M[s] for s in sh if s in M]
     gens = {g for g, _ in hits}
+    if len(gens) > 1 and MULTI:                                       # varias estanterías de géneros distintos: una obra con varias etiquetas reales
+        orden = list(dict.fromkeys(g for g, _ in hits))
+        pares = list(dict.fromkeys((g, s) for g, s in hits if s))
+        multi.append({"id": x["Text#"], "titulo": " ".join(x["Title"].split(chr(10))[0].split()), "autor": autor(x["Authors"]), "idioma": x["Language"],
+                      "genero": orden[0], "subgenero": next((s for g, s in pares if g == orden[0]), ""), "generos": orden, "subgeneros": [list(p) for p in pares]})
+        continue
     if len(gens) != 1:
         continue
     g = gens.pop(); subs = {s for gg, s in hits if s}
@@ -55,6 +65,25 @@ for g, l in sorted(cand.items()):
     en = [b for b in l if b["idioma"] == "en"][:nen]
     sel += es + en
     print(g, len(l), "->", len(es), "es +", len(en), "en", flush=True)
+if MULTI:                                                            # los de varias etiquetas: un cuarto en español mientras haya, repartidos entre las combinaciones de géneros
+    random.shuffle(multi)
+    multi = [b for b in multi if b["id"] not in YA]
+    def repartir(lista, n):                                          # una por cada combinación de géneros por turnos (biografía+historia es el 13 % de todo: sin esto saldría casi solo eso)
+        grupos = collections.defaultdict(list)
+        for b in lista:
+            grupos[tuple(sorted(b["generos"]))].append(b)
+        out = []
+        while len(out) < n and any(grupos.values()):
+            for k in list(grupos):
+                if grupos[k] and len(out) < n:
+                    out.append(grupos[k].pop())
+        return out
+    es_m = repartir([b for b in multi if b["idioma"] == "es"], POR_MULTI // 4)
+    en_m = repartir([b for b in multi if b["idioma"] == "en"], POR_MULTI - len(es_m))
+    print("multi", len(multi), "->", len(es_m), "es +", len(en_m), "en", flush=True)
+    sel_multi = es_m + en_m
+else:
+    sel_multi = []
 def bajar(b):
     f = RAW / f"{b['id']}.epub"
     if f.exists() and f.stat().st_size > 5000:
@@ -69,6 +98,11 @@ def bajar(b):
         return b, False
 with ThreadPoolExecutor(3) as ex:
     res = list(ex.map(bajar, sel))
+    res_m = list(ex.map(bajar, sel_multi))
 ok = [b for b, k in res if k]
 (D / "libros2_etiquetas.json").write_text(json.dumps(ok, ensure_ascii=False, indent=1), encoding="utf-8")
 print(len(ok), "de", len(sel), "bajados")
+if MULTI:
+    ok_m = [b for b, k in res_m if k]
+    (D / "libros_multi_etiquetas.json").write_text(json.dumps(ok_m, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(len(ok_m), "de", len(sel_multi), "con varias etiquetas bajados")

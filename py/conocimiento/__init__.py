@@ -19,6 +19,8 @@ import unicodedata
 import zipfile
 from pathlib import Path
 
+from .etiquetas import generos_de
+
 CODIGO = Path(__file__).resolve().parents[1]
 RAIZ = CODIGO.parent
 CARPETA = Path(os.environ.get("ARBOL_CONOCIMIENTO", RAIZ / "conocimiento"))   # datos del usuario: no se publican (.gitignore)
@@ -310,7 +312,7 @@ def _portada_cache(base: Path, rel: str) -> str:
 
 
 def buscar(consulta: str, coleccion: str | None = None, n: int = 10, db: Path = DB, genero: str | None = None, formato: str | None = None) -> list[dict]:
-    """Mejores `n` trozos para la consulta, por BM25 (el título pesa 8×); `genero` limita a lo importado con ese género y `formato` (pdf, epub, docx, md, txt) al tipo de archivo. Cada resultado: coleccion, titulo, ubicacion, ruta, fragmento."""
+    """Mejores `n` trozos para la consulta, por BM25 (el título pesa 8×); `genero` limita a lo importado con ese género (en cualquiera de sus etiquetas) y `formato` (pdf, epub, docx, md, txt) al tipo de archivo. Cada resultado: coleccion, titulo, ubicacion, ruta, fragmento."""
     if not Path(db).exists():
         raise FileNotFoundError("no hay índice: ejecuta primero `python -m conocimiento indexar`")
     con = _abrir(Path(db))
@@ -339,7 +341,7 @@ def buscar(consulta: str, coleccion: str | None = None, n: int = 10, db: Path = 
         r.update(subtema=(m or {}).get("subtema", ""), tipo=(m or {}).get("tipo", ""), etiquetas=(m or {}).get("etiquetas", ""))
         if (m or {}).get("portada"):
             r["portada"] = _portada_cache(base, m["portada"])
-        if genero and (m or {}).get("genero") != genero:
+        if genero and genero not in generos_de(m or {}):
             continue
         r["interno"] = m is None and (r["coleccion"] in ("codigo", "teoria") or r["ruta"].endswith("catalogo.json"))   # código, teoría y catálogo del propio árbol: no son ficheros que abrir
         out.append(r)

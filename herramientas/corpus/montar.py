@@ -15,18 +15,18 @@ if not C.exists():
     shutil.copytree(importar.carpeta_datos() / "biblioteca", C / "biblioteca")        # tu biblioteca real entra como ejemplos (y como objetivo de la medición)
 seg = lambda s: re.sub(r'[^\w ,.()-]+', ' ', s)[:70].strip()
 items = []
-libros = [b for n in ("libros_etiquetas.json", "libros2_etiquetas.json") if (D / n).exists() for b in json.loads((D / n).read_text(encoding="utf-8"))]
+libros = [b for n in ("libros_etiquetas.json", "libros2_etiquetas.json", "libros_multi_etiquetas.json") if (D / n).exists() for b in json.loads((D / n).read_text(encoding="utf-8"))]
 libros = [b for b in libros if b.get("idioma", "en") in ("en", "es")]
 print(len(libros), "libros en inglés y español")
 for b in libros:
     f = ST / f"{seg(b['titulo'])} - {seg(b['autor'])}.epub"
     if not f.exists(): shutil.copy(D / "raw" / f"{b['id']}.epub", f)
-    items.append({"ruta": f, "galaxia": "libros", "genero": b["genero"], "subgenero": b["subgenero"], "titulo": b["titulo"][:80]})
+    items.append({"ruta": f, "galaxia": "libros", "genero": b["genero"], "subgenero": b["subgenero"], "titulo": b["titulo"][:80], "generos": b.get("generos"), "subgeneros": b.get("subgeneros")})
 if (D / "arxiv_etiquetas.json").exists():
     for b in json.loads((D / "arxiv_etiquetas.json").read_text(encoding="utf-8")):
         f = ST / f"{seg(b['titulo'])} - {seg(b['autor'])}.pdf"
         if not f.exists(): shutil.copy(D / "raw_arxiv" / b["archivo"], f)
-        items.append({"ruta": f, "genero": b["genero"], "subgenero": b["subgenero"], "titulo": b["titulo"][:80], "tipo": "articulo", "galaxia": "notas"})
+        items.append({"ruta": f, "genero": b["genero"], "subgenero": b["subgenero"], "titulo": b["titulo"][:80], "tipo": "articulo", "galaxia": "notas", "generos": b.get("generos"), "subgeneros": b.get("subgeneros")})
 if (D / "codigo_etiquetas.json").exists():
     for b in json.loads((D / "codigo_etiquetas.json").read_text(encoding="utf-8")):
         items.append({"ruta": D / "raw_codigo" / b["archivo"], "genero": b["genero"], "tipo": b["tipo"], "galaxia": "codigo" if b["tipo"] == "codigo" else "notas", "titulo": b["archivo"][:70]})

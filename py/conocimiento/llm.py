@@ -18,6 +18,7 @@ from shutil import which
 from pathlib import Path
 
 from . import CARPETA
+from .etiquetas import MAXIMO
 
 def ram_gb() -> float:
     """RAM total del equipo en GB (0 si no se sabe)."""
@@ -118,58 +119,84 @@ def disponible(carpeta: Path | str = CARPETA) -> bool:
     return _estado["ok"]
 
 
-EJEMPLOS = [("Orgullo y prejuicio", "Una joven inglesa y un rico caballero superan sus prejuicios y se enamoran.", "novela"),
-            ("Breve historia de Roma", "Desde la fundación de la ciudad hasta la caída del Imperio de Occidente.", "historia"),
-            ("Estadística para ingenieros", "Probabilidad, estimación e intervalos de confianza con ejemplos.", "estadistica"),
-            ("Clean Architecture", "Principios de diseño de software para sistemas mantenibles.", "tecnologia")]      # ejemplos resueltos: con ellos el modelo de 3B pasó del 61 % al 76 % en las pruebas
+EJEMPLOS = [("Orgullo y prejuicio", "Una joven inglesa y un rico caballero superan sus prejuicios y se enamoran.", ["novela"]),
+            ("Breve historia de Roma", "Desde la fundación de la ciudad hasta la caída del Imperio de Occidente.", ["historia"]),
+            ("Estadística para ingenieros", "Probabilidad, estimación e intervalos de confianza con ejemplos.", ["estadistica"]),
+            ("Clean Architecture", "Principios de diseño de software para sistemas mantenibles.", ["tecnologia"]),
+            ("Los orígenes del capitalismo moderno", "Cómo cambiaron el comercio, la banca y las finanzas a lo largo de la historia de Europa.", ["economia", "historia"])]      # ejemplos resueltos (con ellos el modelo de 3B pasó del 61 % al 76 %); el último enseña que una obra puede llevar dos géneros
 
 
-def _prompt(titulo: str, capitulos: list, vista: str, materias: list, generos: dict, autor: str = "", vecinos: list | None = None) -> str:
+def _lista(etiquetas) -> str:
+    return json.dumps(list(etiquetas), ensure_ascii=False)
+
+
+def prompt_generos(titulo: str, capitulos: list, vista: str, materias: list, generos: dict, autor: str = "", vecinos: list | None = None) -> str:
     from .clasificador import semillas_todas
     S = semillas_todas()
     lista = "\n".join(f"- {g}: {S[g][0] if g in S else 'no encaja en ninguno de los demás'}" for g in generos)
-    ej = "\n".join(f'Libro: «{t}». Sinopsis: {s}\n{{"genero": "{g}", "motivo": "…"}}' for t, s, g in EJEMPLOS)
-    if vecinos:        # ejemplos reales: libros parecidos que el usuario ya tiene, con su género
-        ej = "\n".join(f'Libro: «{v["titulo"]}»{" de " + v["autor"] if v["autor"] else ""}.\n{{"genero": "{v["genero"]}", "motivo": "…"}}' for v in vecinos)
+    ej = "\n".join(f'Libro: «{t}». Sinopsis: {s}\n{{"generos": {_lista(g)}, "motivo": "…"}}' for t, s, g in EJEMPLOS)
+    if vecinos:        # ejemplos reales: libros parecidos que el usuario ya tiene, con sus géneros
+        ej = "\n".join(f'Libro: «{v["titulo"]}»{" de " + v["autor"] if v["autor"] else ""}.\n{{"generos": {_lista(v.get("generos") or [v["genero"]])}, "motivo": "…"}}' for v in vecinos)
     caps = "; ".join((c["titulo"] if isinstance(c, dict) else str(c)) for c in capitulos[:8]) or "(sin índice)"
-    return (f"Eres bibliotecario. Elige el género que mejor describe el LIBRO (no solo las palabras de su título).\nGéneros:\n{lista}\n\nEjemplos resueltos:\n{ej}\n\n"
+    return (f"Eres bibliotecario. Elige el género que mejor describe el LIBRO (no solo las palabras de su título). Pon primero el principal y añade otro u otros dos (máximo {MAXIMO}) "
+            f"SOLO si el libro trata de verdad de esos temas a la vez.\nGéneros:\n{lista}\n\nEjemplos resueltos:\n{ej}\n\n"
             f"Ahora este:\nLibro: «{titulo}»{' de ' + autor if autor else ''}. Capítulos o partes: {caps}. Materias según Open Library: {', '.join(materias[:6]) or '(no hay)'}. Texto: {vista[:1300]}\n\n"
-            'Responde solo con JSON: {"genero": "<id>", "motivo": "<una frase corta>"}.')
+            'Responde solo con JSON: {"generos": ["<id principal>", "<id opcional>"], "motivo": "<una frase corta>"}.')
+
+
+def _pedir(a: dict, prompt: str, esquema: dict) -> dict | None:
+    """Una consulta a Ollama con salida JSON forzada por `esquema`; None si falla o la respuesta no es JSON."""
+    try:
+        r = _http(a["url"] + "/api/chat", {"model": a["modelo"], "stream": False, "format": esquema, "options": {"temperature": 0, "num_predict": 100, "num_ctx": 2048},
+                                           "messages": [{"role": "user", "content": prompt}]})
+        _estado["fallo_red"] = False
+        return json.loads(re.sub(r"^```(?:json)?|```$", "", r["message"]["content"].strip()))
+    except Exception as e:
+        if isinstance(e, OSError) or "HTTP Error" in str(e):          # no se pudo hablar con Ollama (servidor caído, conexión cortada, error 5xx): se vuelve a comprobar en un minuto
+            _estado.update(fallo_red=True, ok=False, t=time.time())
+        return None
+
+
+def _ids(j: dict, plural: str, singular: str, validos) -> list[str]:
+    """Ids válidos de la respuesta (lista `plural`, o el valor único `singular` de las respuestas con el formato antiguo), sin repetir y como mucho MAXIMO. Si el primero no es válido, [] (el principal manda)."""
+    v = j.get(plural)
+    v = [v] if isinstance(v, str) else v if isinstance(v, list) else [j.get(singular)]
+    v = list(dict.fromkeys(x for x in v if isinstance(x, str)))
+    return [x for x in v if x in validos][:MAXIMO] if v and v[0] in validos else []
 
 
 def clasificar(titulo: str, capitulos: list, vista: str, materias: list, generos: dict, carpeta: Path | str = CARPETA, autor: str = "", vecinos: list | None = None) -> dict | None:
-    """{'genero': id, 'motivo': str} según el LLM, o None si no está disponible o responde algo inválido."""
+    """{'genero': id principal, 'generos': [ids, el principal primero], 'motivo': str} según el LLM, o None si no está disponible o responde algo inválido."""
     if not disponible(carpeta):
         return None
-    a = ajustes(carpeta)
-    esquema = {"type": "object", "properties": {"genero": {"type": "string", "enum": list(generos)}, "motivo": {"type": "string"}}, "required": ["genero", "motivo"]}
-    try:
-        r = _http(a["url"] + "/api/chat", {"model": a["modelo"], "stream": False, "format": esquema, "options": {"temperature": 0, "num_predict": 80, "num_ctx": 2048},
-                                           "messages": [{"role": "user", "content": _prompt(titulo, capitulos, vista, materias, generos, autor, vecinos)}]})
-        j = json.loads(re.sub(r"^```(?:json)?|```$", "", r["message"]["content"].strip()))
-        return {"genero": j["genero"], "motivo": str(j.get("motivo", ""))[:160]} if j.get("genero") in generos else None
-    except Exception:
-        return None
+    esquema = {"type": "object", "properties": {"generos": {"type": "array", "items": {"type": "string", "enum": list(generos)}, "minItems": 1, "maxItems": MAXIMO}, "motivo": {"type": "string"}}, "required": ["generos", "motivo"]}
+    j = _pedir(ajustes(carpeta), prompt_generos(titulo, capitulos, vista, materias, generos, autor, vecinos), esquema)
+    ids = _ids(j, "generos", "genero", generos) if j else []
+    return {"genero": ids[0], "generos": ids, "motivo": str(j.get("motivo", ""))[:160]} if ids else None
 
 
-def subgenero(titulo: str, capitulos: list, vista: str, genero: str, subs: list, autor: str = "", carpeta: Path | str = CARPETA, vecinos: list | None = None) -> str | None:
-    """Id del subgénero (de `subs` = [(id, nombre, frase_es, frase_en)]) que elige el LLM para un libro ya clasificado en `genero`; None si no está disponible o responde algo inválido."""
-    if not disponible(carpeta):
-        return None
-    a = ajustes(carpeta)
+def prompt_subgeneros(titulo: str, capitulos: list, vista: str, genero: str, subs: list, autor: str = "", vecinos: list | None = None) -> str:
+    """El prompt con el que se pregunta el subgénero (o los subgéneros) de un libro ya clasificado en `genero`; `subs` = [(id, nombre, frase_es, frase_en)]."""
     ids = [x[0] for x in subs]
     lista = "\n".join(f"- {x[0]}: {x[1]} ({x[2]})" for x in subs)
     caps = "; ".join((c["titulo"] if isinstance(c, dict) else str(c)) for c in capitulos[:8]) or "(sin índice)"
-    ej = "".join(f'- «{v["titulo"]}»{" de " + v["autor"] if v["autor"] else ""} → {v["subgenero"]}\n' for v in (vecinos or []) if v.get("subgenero") in ids)
+    ej = "".join(f'- «{v["titulo"]}»{" de " + v["autor"] if v["autor"] else ""} → {", ".join([v["subgenero"]] + [x for x in v.get("subgeneros", []) if x in ids and x != v["subgenero"]])}\n' for v in (vecinos or []) if v.get("subgenero") in ids)
     ej = f"Libros parecidos que el usuario ya clasificó:\n{ej}\n" if ej else ""
-    prompt = (f"Eres bibliotecario. El libro es de género «{genero}». Elige el subgénero que mejor lo describe.\nSubgéneros:\n{lista}\n\n{ej}"
-              f"Libro: «{titulo}»{' de ' + autor if autor else ''}. Capítulos o partes: {caps}. Texto: {vista[:1100]}\n\n"
-              'Responde solo con JSON: {"subgenero": "<id>", "motivo": "<una frase corta>"}.')
-    esquema = {"type": "object", "properties": {"subgenero": {"type": "string", "enum": ids}, "motivo": {"type": "string"}}, "required": ["subgenero", "motivo"]}
-    try:
-        r = _http(a["url"] + "/api/chat", {"model": a["modelo"], "stream": False, "format": esquema, "options": {"temperature": 0, "num_predict": 80, "num_ctx": 2048},
-                                           "messages": [{"role": "user", "content": prompt}]})
-        j = json.loads(re.sub(r"^```(?:json)?|```$", "", r["message"]["content"].strip()))
-        return j["subgenero"] if j.get("subgenero") in ids else None
-    except Exception:
-        return None
+    return (f"Eres bibliotecario. El libro es de género «{genero}». Elige el subgénero que mejor lo describe y, solo si de verdad encaja en otro más, añade uno o dos (máximo {MAXIMO}, el principal primero).\n"
+            f"Subgéneros:\n{lista}\n\n{ej}Libro: «{titulo}»{' de ' + autor if autor else ''}. Capítulos o partes: {caps}. Texto: {vista[:1100]}\n\n"
+            'Responde solo con JSON: {"subgeneros": ["<id principal>", "<id opcional>"], "motivo": "<una frase corta>"}.')
+
+
+def subgeneros(titulo: str, capitulos: list, vista: str, genero: str, subs: list, autor: str = "", carpeta: Path | str = CARPETA, vecinos: list | None = None) -> list[str]:
+    """Ids de subgénero (de `subs` = [(id, nombre, frase_es, frase_en)]) que elige el LLM para un libro ya clasificado en `genero`, el principal primero y hasta MAXIMO; [] si no está disponible o responde algo inválido."""
+    if not disponible(carpeta):
+        return []
+    ids = [x[0] for x in subs]
+    esquema = {"type": "object", "properties": {"subgeneros": {"type": "array", "items": {"type": "string", "enum": ids}, "minItems": 1, "maxItems": MAXIMO}, "motivo": {"type": "string"}}, "required": ["subgeneros", "motivo"]}
+    j = _pedir(ajustes(carpeta), prompt_subgeneros(titulo, capitulos, vista, genero, subs, autor, vecinos), esquema)
+    return _ids(j, "subgeneros", "subgenero", ids) if j else []
+
+
+def subgenero(titulo: str, capitulos: list, vista: str, genero: str, subs: list, autor: str = "", carpeta: Path | str = CARPETA, vecinos: list | None = None) -> str | None:
+    """Id del subgénero principal que elige el LLM (el primero de `subgeneros`), o None."""
+    return next(iter(subgeneros(titulo, capitulos, vista, genero, subs, autor, carpeta, vecinos)), None)
