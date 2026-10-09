@@ -14,7 +14,7 @@ i.add_argument("ficheros", nargs="+")
 i.add_argument("-g", "--galaxia", help="codigo | conceptos | demos | finanzas | libros | notas (por defecto, automática)")
 i.add_argument("-s", "--subtema", help="p. ej. «Inferencia y contrastes» (por defecto, automático)")
 i.add_argument("-t", "--tipo", help="libro | articulo | apuntes | nota | otro (por defecto, automático)")
-i.add_argument("-G", "--genero", help="historia | economia | ensayo | estadistica | ciencia | novela | biografia | politica | tecnologia | psicologia | arte | otro (por defecto, automático)")
+i.add_argument("-G", "--genero", help="uno o varios separados por comas (el primero es el principal): historia | economia | ensayo | estadistica | ciencia | novela | biografia | politica | tecnologia | psicologia | arte | otro (por defecto, automático)")
 t = sub.add_parser("telescopio", help="busca obras de acceso abierto (Gutenberg, arXiv, OpenAlex, Internet Archive); con --traer N descarga e importa la N-ésima")
 t.add_argument("consulta", nargs="*", help="palabras sueltas (opcional si das título o autor)")
 t.add_argument("-T", "--titulo", default="")
@@ -45,7 +45,7 @@ elif a.orden == "estado":
     print(f"fuentes propias: {CARPETA / 'fuentes.json'}")
 elif a.orden == "importar":
     from .importar import importar
-    for r in importar([{"ruta": f, "galaxia": a.galaxia, "subtema": a.subtema, "tipo": a.tipo, "genero": a.genero} for f in a.ficheros]):
+    for r in importar([{"ruta": f, "galaxia": a.galaxia, "subtema": a.subtema, "tipo": a.tipo, "genero": (a.genero or "").split(",")[0] or None, "generos": [g for g in (a.genero or "").split(",") if g] or None} for f in a.ficheros]):
         print(f"{r['estado']:10} {r['nombre']}  ->  {r.get('galaxia', '')} › {r.get('subtema', '')} ({r.get('tipo', '')})  {r['mensaje']}")
 elif a.orden == "modelos":
     from . import clasificador
@@ -66,7 +66,7 @@ elif a.orden == "revisar":
         print(json.dumps(filas, ensure_ascii=False, indent=1))
     else:
         for x in filas:
-            print(f"{x['fecha'][:16]}  {x['titulo'][:40]:40}  {x['galaxia']} › {x['genero']} › {x['subtema']} ({x['tipo']})  [{x['metodo'] or '—'}]{'  ✎ corregido' if x['corregido'] else ''}")
+            print(f"{x['fecha'][:16]}  {x['titulo'][:40]:40}  {x['galaxia']} › {' + '.join(x['generos'])} › {x['subtema']} ({x['tipo']})  [{x['metodo'] or '—'}]{'  ✎ corregido' if x['corregido'] else ''}")
         print(f"{len(filas)} documentos")
 elif a.orden == "telescopio":
     from . import telescopio

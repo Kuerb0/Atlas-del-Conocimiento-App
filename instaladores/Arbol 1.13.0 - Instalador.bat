@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.12.0 - Actualizar
+title Arbol de la estadistica 1.13.0 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=actualizar"
-set "ARBOL_VERSION=1.12.0"
+set "ARBOL_MODO=instalar"
+set "ARBOL_VERSION=1.13.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -682,7 +682,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.12.0
+1.13.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -869,7 +869,7 @@ class Api:
         try:
             import importlib
             import sys
-            for nombre in ("conocimiento", "conocimiento.clasificador", "conocimiento.llm", "conocimiento.importar", "conocimiento.almacenaje", "conocimiento.telescopio", "construir_visor"):
+            for nombre in ("conocimiento.etiquetas", "conocimiento", "conocimiento.clasificador", "conocimiento.llm", "conocimiento.importar", "conocimiento.almacenaje", "conocimiento.telescopio", "construir_visor"):
                 if nombre in sys.modules:
                     importlib.reload(sys.modules[nombre])          # en este orden: el paquete primero y después lo que depende de él
         except Exception as e:
@@ -1597,6 +1597,7 @@ def ramas_biblioteca() -> list[dict]:
     try:
         from conocimiento.importar import GENEROS, GALAXIAS, carpeta_datos, leer_metadatos, titulo_corto
         from conocimiento import taxonomia
+        from conocimiento.etiquetas import generos_de, subgeneros_de
     except Exception:
         return []
     carpeta = carpeta_datos()
@@ -1620,16 +1621,19 @@ def ramas_biblioteca() -> list[dict]:
     libros = {rel: m for rel, m in meta.items() if m.get("galaxia") == "libros"}
     por_genero: dict[str, list] = {}
     for rel, m in sorted(libros.items(), key=lambda kv: kv[1].get("titulo", "")):
-        por_genero.setdefault(m.get("genero") or "otro", []).append((rel, m))
+        for g in generos_de(m) or ["otro"]:                                   # una obra con varios géneros aparece en la rama de cada uno (la principal es la primera; el archivo vive en su carpeta)
+            por_genero.setdefault(g, []).append((rel, m))
     for g, lista in sorted(por_genero.items(), key=lambda kv: GENEROS.get(kv[0], kv[0])):
         modulos = []
         for i, (rel, m) in enumerate(lista):
             libro = titulo_corto(m.get("titulo", rel))
+            todos = [GENEROS.get(x, x) for x in generos_de(m)]
+            tambien = f" · también en {', '.join(x for x in todos if x != GENEROS.get(g, g))}" if len(todos) > 1 else ""
             caps = m.get("capitulos") or [{"titulo": libro, "pagina": 1}]
             items = [_hoja_bib(f"lib_{g}_{i}_{j}", c["titulo"][:90], "capitulo", f"{libro}" + (f" — p. {c['pagina']}" if c.get("pagina") else ""), str(base / rel), rel,
                                pagina=c.get("pagina") or 0, libro=libro, subtema=m.get("subtema", ""), genero=g, paginas=m.get("paginas", 0), etiquetas=m.get("etiquetas", ""),
                                fecha=m.get("fecha", "")[:10], titulo_largo=m.get("titulo", ""), portada=m.get("portada", ""), lineas=8 + min(12, 2 * len(c["titulo"]) // 10)) for j, c in enumerate(caps)]
-            modulos.append({"id": f"lib_{g}_{i}", "nombre": libro, "desc": f"{taxonomia.nombre_sub(g, m.get('subgenero', ''), carpeta) or m.get('subtema', '')} · {m.get('paginas') or '?'} págs. · {len(caps)} capítulos", "archivo": "biblioteca/" + rel, "items": items})
+            modulos.append({"id": f"lib_{g}_{i}", "nombre": libro, "desc": f"{', '.join(taxonomia.nombre_sub(gg, ss, carpeta) for gg, ss in subgeneros_de(m) if gg == g) or m.get('subtema', '')} · {m.get('paginas') or '?'} págs. · {len(caps)} capítulos{tambien}", "archivo": "biblioteca/" + rel, "items": items})
         ramas.append({"id": f"gen_{g}", "nombre": GENEROS.get(g, g), "desc": f"{len(lista)} libro{'s' if len(lista) != 1 else ''} de {GENEROS.get(g, g).lower()}",
                       "modulos": modulos, "galaxia": "libros", "biblioteca": True, "color": color()})
 
@@ -3026,7 +3030,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.12.0"
+version = "1.13.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3706,7 +3710,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.12.0"
+__version__ = "1.13.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -14108,6 +14112,8 @@ import unicodedata
 import zipfile
 from pathlib import Path
 
+from .etiquetas import generos_de
+
 CODIGO = Path(__file__).resolve().parents[1]
 RAIZ = CODIGO.parent
 CARPETA = Path(os.environ.get("ARBOL_CONOCIMIENTO", RAIZ / "conocimiento"))   # datos del usuario: no se publican (.gitignore)
@@ -14399,7 +14405,7 @@ def _portada_cache(base: Path, rel: str) -> str:
 
 
 def buscar(consulta: str, coleccion: str | None = None, n: int = 10, db: Path = DB, genero: str | None = None, formato: str | None = None) -> list[dict]:
-    """Mejores `n` trozos para la consulta, por BM25 (el título pesa 8×); `genero` limita a lo importado con ese género y `formato` (pdf, epub, docx, md, txt) al tipo de archivo. Cada resultado: coleccion, titulo, ubicacion, ruta, fragmento."""
+    """Mejores `n` trozos para la consulta, por BM25 (el título pesa 8×); `genero` limita a lo importado con ese género (en cualquiera de sus etiquetas) y `formato` (pdf, epub, docx, md, txt) al tipo de archivo. Cada resultado: coleccion, titulo, ubicacion, ruta, fragmento."""
     if not Path(db).exists():
         raise FileNotFoundError("no hay índice: ejecuta primero `python -m conocimiento indexar`")
     con = _abrir(Path(db))
@@ -14428,7 +14434,7 @@ def buscar(consulta: str, coleccion: str | None = None, n: int = 10, db: Path = 
         r.update(subtema=(m or {}).get("subtema", ""), tipo=(m or {}).get("tipo", ""), etiquetas=(m or {}).get("etiquetas", ""))
         if (m or {}).get("portada"):
             r["portada"] = _portada_cache(base, m["portada"])
-        if genero and (m or {}).get("genero") != genero:
+        if genero and genero not in generos_de(m or {}):
             continue
         r["interno"] = m is None and (r["coleccion"] in ("codigo", "teoria") or r["ruta"].endswith("catalogo.json"))   # código, teoría y catálogo del propio árbol: no son ficheros que abrir
         out.append(r)
@@ -14467,7 +14473,7 @@ i.add_argument("ficheros", nargs="+")
 i.add_argument("-g", "--galaxia", help="codigo | conceptos | demos | finanzas | libros | notas (por defecto, automática)")
 i.add_argument("-s", "--subtema", help="p. ej. «Inferencia y contrastes» (por defecto, automático)")
 i.add_argument("-t", "--tipo", help="libro | articulo | apuntes | nota | otro (por defecto, automático)")
-i.add_argument("-G", "--genero", help="historia | economia | ensayo | estadistica | ciencia | novela | biografia | politica | tecnologia | psicologia | arte | otro (por defecto, automático)")
+i.add_argument("-G", "--genero", help="uno o varios separados por comas (el primero es el principal): historia | economia | ensayo | estadistica | ciencia | novela | biografia | politica | tecnologia | psicologia | arte | otro (por defecto, automático)")
 t = sub.add_parser("telescopio", help="busca obras de acceso abierto (Gutenberg, arXiv, OpenAlex, Internet Archive); con --traer N descarga e importa la N-ésima")
 t.add_argument("consulta", nargs="*", help="palabras sueltas (opcional si das título o autor)")
 t.add_argument("-T", "--titulo", default="")
@@ -14498,7 +14504,7 @@ elif a.orden == "estado":
     print(f"fuentes propias: {CARPETA / 'fuentes.json'}")
 elif a.orden == "importar":
     from .importar import importar
-    for r in importar([{"ruta": f, "galaxia": a.galaxia, "subtema": a.subtema, "tipo": a.tipo, "genero": a.genero} for f in a.ficheros]):
+    for r in importar([{"ruta": f, "galaxia": a.galaxia, "subtema": a.subtema, "tipo": a.tipo, "genero": (a.genero or "").split(",")[0] or None, "generos": [g for g in (a.genero or "").split(",") if g] or None} for f in a.ficheros]):
         print(f"{r['estado']:10} {r['nombre']}  ->  {r.get('galaxia', '')} › {r.get('subtema', '')} ({r.get('tipo', '')})  {r['mensaje']}")
 elif a.orden == "modelos":
     from . import clasificador
@@ -14519,7 +14525,7 @@ elif a.orden == "revisar":
         print(json.dumps(filas, ensure_ascii=False, indent=1))
     else:
         for x in filas:
-            print(f"{x['fecha'][:16]}  {x['titulo'][:40]:40}  {x['galaxia']} › {x['genero']} › {x['subtema']} ({x['tipo']})  [{x['metodo'] or '—'}]{'  ✎ corregido' if x['corregido'] else ''}")
+            print(f"{x['fecha'][:16]}  {x['titulo'][:40]:40}  {x['galaxia']} › {' + '.join(x['generos'])} › {x['subtema']} ({x['tipo']})  [{x['metodo'] or '—'}]{'  ✎ corregido' if x['corregido'] else ''}")
         print(f"{len(filas)} documentos")
 elif a.orden == "telescopio":
     from . import telescopio
@@ -14639,7 +14645,7 @@ import threading
 
 import numpy as np
 
-from . import CARPETA, _norm
+from . import CARPETA, _norm, etiquetas
 
 MODELO = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 ACTIVO = True            # False: solo reglas (los tests y el script de comparación lo usan)
@@ -14856,7 +14862,10 @@ def _ejemplos(carpeta: Path | str) -> list[tuple[str, str, float]]:
         from .importar import GENEROS, leer_metadatos
         for m in leer_metadatos(Path(carpeta)).values():
             if m.get("genero") in GENEROS and m.get("genero") != "otro":
-                ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), m["genero"], 1.5 if m.get("automatico") else 2.5, m.get("hash")))
+                base, texto, pesos = 1.5 if m.get("automatico") else 2.5, texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), etiquetas.pesos_genero(m)
+                for g in etiquetas.generos_de(m):                       # una obra con varios géneros es ejemplo de cada uno (la principal pesa lo de siempre; las demás, según su peso y la mitad)
+                    if g in GENEROS and g != "otro":
+                        ej.append((texto, g, base if g == m["genero"] else base * .5 * pesos.get(g, 1.0), m.get("hash")))
     except Exception:
         pass
     return ej
@@ -14874,7 +14883,8 @@ def vecinos(texto: str, carpeta: Path | str, k: int = 6, cuerpo=None) -> list[di
         emb = _embedder(modelo(carpeta), carpeta)
         X = _matriz([(texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), None, 1.0, m.get("hash")) for m in ms], emb, carpeta)
         orden = np.argsort(-(X @ mezcla(emb([texto])[0], cuerpo)))[:k]
-        return [{"titulo": ms[i].get("titulo", ""), "autor": autor_de(Path(ms[i].get("origen", "")).stem), "genero": ms[i]["genero"], "subgenero": ms[i].get("subgenero", "")} for i in orden]
+        return [{"titulo": ms[i].get("titulo", ""), "autor": autor_de(Path(ms[i].get("origen", "")).stem), "genero": ms[i]["genero"], "subgenero": ms[i].get("subgenero", ""),
+                 "generos": etiquetas.generos_de(ms[i]), "subgeneros": [s for _, s in etiquetas.subgeneros_de(ms[i])]} for i in orden]
     except Exception:
         return []
 
@@ -14884,7 +14894,7 @@ _cabezas: dict = {}
 
 def _cabeza(ej: list, X, extra: int = 0):
     """Regresión logística multinomial entrenada con los ejemplos (semillas + biblioteca). Se guarda por contenido: con los mismos ejemplos no se vuelve a entrenar."""
-    clave = hash((tuple(e[0] for e in ej), extra))
+    clave = hash((tuple((e[0], e[1]) for e in ej), extra))
     with _candado:
         return _cabeza_(clave, ej, X)
 
@@ -14942,7 +14952,7 @@ def sugerir(texto: str, carpeta: Path | str | None = None, autor: str = "", pist
         if g in puntos:
             puntos[g] += PESO_WIKI * w
     orden = sorted(puntos, key=puntos.get, reverse=True)
-    return {"genero": orden[0], "confianza": puntos[orden[0]] - puntos[orden[1]], "puntos": {g: round(puntos[g], 3) for g in orden}}
+    return {"genero": orden[0], "confianza": puntos[orden[0]] - puntos[orden[1]], "puntos": {g: round(puntos[g], 3) for g in orden}, "escala": 1.0 + peso}     # escala: lo que puede valer la diferencia entre dos géneros (1 del parecido + el peso con que cuenta la cabeza supervisada ahora)
 
 
 _PARADA = set("para como pero sobre entre desde hasta este esta estos estas the and for with from that this their about which sus los las del una por con".split())
@@ -14960,7 +14970,7 @@ def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor:
     subs = taxonomia.subgeneros(genero, carpeta)
     if not subs:
         return None
-    puntos = None
+    puntos, peso_sub = None, 0.0
     if ACTIVO and not _cache.get("fallo"):
         try:
             emb = _embedder(modelo(carpeta), carpeta)
@@ -14969,8 +14979,9 @@ def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor:
                 from .importar import leer_metadatos
                 ids = {s[0] for s in subs}
                 for m in leer_metadatos(carpeta).values():
-                    if m.get("genero") == genero and m.get("subgenero") in ids:
-                        ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), m["subgenero"], 1.5 if m.get("automatico") else 2.5, m.get("hash")))
+                    for g, sid in etiquetas.subgeneros_de(m):                  # una obra con varios subgéneros es ejemplo de cada uno (los secundarios, a mitad de peso)
+                        if g == genero and sid in ids:
+                            ej.append((texto_libro(m.get("titulo", ""), m.get("capitulos", []), extra_ejemplo(m)), sid, (1.5 if m.get("automatico") else 2.5) * (1 if sid == m.get("subgenero") else .5), m.get("hash")))
             except Exception:
                 pass
             X, q = _matriz(ej, emb, carpeta), mezcla(emb([texto])[0], cuerpo)
@@ -14979,7 +14990,7 @@ def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor:
             for sid in ids:
                 v = sorted((s + .04 * (e[2] - 1) for s, e in zip(sims, ej) if e[1] == sid), reverse=True)[:2]
                 puntos[sid] = float(np.mean(v))
-            peso = PESO_CABEZA_SUB * fuerza(sum(e[2] > 1 for e in ej), LIBROS_CABEZA_SUB)
+            peso = peso_sub = PESO_CABEZA_SUB * fuerza(sum(e[2] > 1 for e in ej), LIBROS_CABEZA_SUB)
             if peso:
                 clf = _cabeza(ej, X, len(vectores(carpeta)))
                 if clf is not None:
@@ -15002,7 +15013,7 @@ def subgenero(texto: str, genero: str, carpeta: Path | str | None = None, autor:
             return None
     orden = sorted(puntos, key=puntos.get, reverse=True)
     segundo = puntos[orden[1]] if len(orden) > 1 else 0.0
-    return {"id": orden[0], "nombre": taxonomia.nombre_sub(genero, orden[0], carpeta), "confianza": puntos[orden[0]] - segundo,
+    return {"id": orden[0], "nombre": taxonomia.nombre_sub(genero, orden[0], carpeta), "confianza": puntos[orden[0]] - segundo, "escala": 1.0 + peso_sub,
             "puntos": {sid: round(100 * puntos[sid], 1) for sid in orden[:4]}}
 
 
@@ -15110,6 +15121,102 @@ def texto(f: Path | str) -> str:
         return nombre
     return "\n".join(x for x in (i["titulo"] or nombre, f"Canal: {i['canal']}" if i["canal"] else "", f"Vídeo de {i['plataforma'].capitalize()}", i["url"]) if x)
 :::END
+:::BEGIN py/conocimiento/etiquetas.py|text
+"""Varias etiquetas por obra: uno o más géneros y uno o más subgéneros (máximo MAXIMO de cada), con un peso 0-1.
+
+En los metadatos (`biblioteca/metadatos.json`) cada obra sigue teniendo `genero` y `subgenero` (la etiqueta PRINCIPAL: de ella dependen la carpeta donde vive el archivo,
+las correcciones y el orden) y además `generos` = [{"id", "peso"}] y `subgeneros` = [{"genero", "id", "peso"}], con la principal siempre la primera. Lo importado con versiones
+anteriores no tiene esas listas: `generos_de`/`subgeneros_de` las deducen de la etiqueta única.
+
+Una etiqueta secundaria entra cuando puntúa a menos de `DELTA` (género) o `DELTA_SUB` (subgénero) del primero, medido en fracción de la escala máxima de puntos: es la misma
+distancia que antes hacía saltar el aviso «género poco claro» (MARGEN_REVISAR); ahora, en vez de dudar, la obra lleva las dos etiquetas. Se ajusta con `evaluar_corpus.py --val`.
+Módulo sin dependencias del paquete para que lo puedan importar todos.
+"""
+from __future__ import annotations
+
+MAXIMO = 3          # etiquetas de género (y de subgénero) como mucho por obra
+DELTA = 0.15        # una etiqueta secundaria de género puntúa a menos de DELTA · escala del primero (= clasificador.MARGEN_REVISAR); la escala es lo que puede valer una diferencia de puntos ahora (1 + el peso con que cuenta la cabeza supervisada)
+DELTA_SUB = 0.03    # lo mismo para los subgéneros. Medido en 247 obras de validación sin LLM: F1 de subgénero 31 (0,00 y 0,03) frente a 29 (0,08); con 0,03 la real está entre las predichas el 40 %
+PESO_MIN = 0.3      # peso mínimo de una etiqueta secundaria que viene del LLM
+
+
+def peso_relativo(puntos: dict, id_: str, escala: float, delta: float) -> float:
+    """Peso 0-1 de una etiqueta según lo cerca que está del primero: 1,0 con empate, 0,5 en el límite de `delta`, nunca menos de PESO_MIN."""
+    top = max(puntos.values())
+    lim = delta * escala or 1.0
+    return round(max(PESO_MIN, min(1.0, 1 - 0.5 * (top - puntos.get(id_, top)) / lim)), 2)
+
+
+def elegir(puntos: dict, escala: float, delta: float | None = None, maximo: int | None = None, principal: str | None = None, excluir: tuple = ("otro",)) -> list[tuple[str, float]]:
+    """[(id, peso)] con la etiqueta principal primero (peso 1) y las que puntúan a menos de `delta · escala` del mejor, hasta `maximo`.
+    `principal` fuerza cuál va primero (p. ej. la que decidió el LLM aunque no puntúe más). Con principal «otro» no hay secundarias."""
+    if not puntos:
+        return []
+    delta, maximo = DELTA if delta is None else delta, maximo or MAXIMO               # (se leen al llamar, no al definir: evaluar_corpus.py los cambia con --set)
+    orden = sorted(puntos, key=puntos.get, reverse=True)
+    principal = principal if principal in puntos else orden[0]
+    salida = [(principal, 1.0)]
+    if principal in excluir:
+        return salida
+    top, lim = puntos[orden[0]], delta * escala
+    for k in orden:
+        if len(salida) >= maximo:
+            break
+        if k != principal and k not in excluir and puntos[k] > 0 and top - puntos[k] <= lim:
+            salida.append((k, peso_relativo(puntos, k, escala, delta)))
+    return salida
+
+
+def generos_de(m: dict) -> list[str]:
+    """Ids de género de una obra, la principal primero. Sin lista guardada: solo `genero`."""
+    v = [e["id"] if isinstance(e, dict) else e for e in m.get("generos") or []]
+    g = m.get("genero")
+    return list(dict.fromkeys(([g] if g else []) + v))
+
+
+def subgeneros_de(m: dict) -> list[tuple[str, str]]:
+    """[(género, subgénero)] de una obra, la principal primero. Sin lista guardada: solo `genero`/`subgenero`."""
+    v = [(e["genero"], e["id"]) for e in m.get("subgeneros") or [] if isinstance(e, dict)]
+    p = (m.get("genero"), m.get("subgenero"))
+    return list(dict.fromkeys(([p] if p[0] and p[1] else []) + v))
+
+
+def pesos_genero(m: dict) -> dict:
+    return {(e["id"] if isinstance(e, dict) else e): (e.get("peso", 1.0) if isinstance(e, dict) else 1.0) for e in m.get("generos") or []}
+
+
+def _g(e) -> tuple:
+    if isinstance(e, dict):
+        return e["id"], e.get("peso", 1.0)
+    return (e, 1.0) if isinstance(e, str) else (e[0], e[1] if len(e) > 1 else 1.0)
+
+
+def _s(e) -> tuple:
+    if isinstance(e, dict):
+        return e["genero"], e["id"], e.get("peso", 1.0)
+    return e[0], e[1], (e[2] if len(e) > 2 else 1.0)
+
+
+def poner(m: dict, generos: list, subgeneros: list | None = None) -> dict:
+    """Escribe en `m` las listas de etiquetas y deja `genero`/`subgenero` igual a la primera de cada lista.
+    `generos`: [id | (id, peso) | {"id", "peso"}]; `subgeneros`: [(género, id) | (género, id, peso) | {"genero", "id", "peso"}]. Devuelve `m`."""
+    gs = list({i: {"id": i, "peso": round(float(w), 2)} for i, w in map(_g, generos) if i}.values())[:MAXIMO]     # (el primero de cada id manda: el dict conserva el orden de inserción)
+    m["generos"] = gs
+    if gs:
+        m["genero"] = gs[0]["id"]
+    if subgeneros is not None:
+        validos = {x["id"] for x in gs}
+        ss = list({(g, i): {"genero": g, "id": i, "peso": round(float(w), 2)} for g, i, w in map(_s, subgeneros) if g in validos and i}.values())[:MAXIMO]
+        m["subgeneros"] = ss
+        m["subgenero"] = next((x["id"] for x in ss if x["genero"] == m.get("genero")), "")
+    return m
+
+
+def jaccard(a, b) -> float:
+    """Parecido entre dos conjuntos de etiquetas (1 = iguales). Dos conjuntos vacíos cuentan como iguales."""
+    a, b = set(a), set(b)
+    return len(a & b) / len(a | b) if a | b else 1.0
+:::END
 :::BEGIN py/conocimiento/fuentes.ejemplo.json|text
 {
   "libros": ["D:/Libros/Estadistica"],
@@ -15143,7 +15250,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from . import CARPETA, CODIGO_EXT, DATOS_EXT, DB, EXT_IMPORTABLE, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, enlaces, indexar, llm, taxonomia, webinfo
+from . import CARPETA, CODIGO_EXT, DATOS_EXT, DB, EXT_IMPORTABLE, RAIZ, SIN_VENTANA, _abrir, _extraer, _norm, _prog, clasificador, enlaces, etiquetas, indexar, llm, taxonomia, webinfo
 
 GALAXIAS = {"codigo": "Código", "conceptos": "Conceptos", "demos": "Demos y guías", "finanzas": "Finanzas", "libros": "Libros", "notas": "Notas y enlaces"}
 TIPOS = {"libro": "Libro", "video": "Vídeo", "articulo": "Artículo", "apuntes": "Apuntes", "nota": "Nota", "codigo": "Código", "datos": "Datos", "otro": "Otro"}
@@ -15393,7 +15500,8 @@ def recordar_correccion(m: dict, carpeta: Path | None = None) -> None:
     f = _ruta_correcciones(carpeta)
     lista = json.loads(f.read_text(encoding="utf-8")) if f.exists() else []
     nombre = Path(m.get("origen", "")).stem or m.get("titulo", "")
-    nueva = {"titulo": m.get("titulo", ""), "tokens": sorted(_tokens(nombre)), "genero": m.get("genero"), "subtema": m.get("subtema"), "hash": m.get("hash", "")}
+    nueva = {"titulo": m.get("titulo", ""), "tokens": sorted(_tokens(nombre)), "genero": m.get("genero"), "subtema": m.get("subtema"), "hash": m.get("hash", ""),
+             "generos": etiquetas.generos_de(m), "subgeneros": [list(p) for p in etiquetas.subgeneros_de(m)]}
     lista = [c for c in lista if c.get("hash") != nueva["hash"] or not nueva["hash"]] + [nueva]
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(json.dumps(lista, ensure_ascii=False, indent=1), encoding="utf-8")
@@ -15518,9 +15626,10 @@ def _barras(puntos: dict, forzar: str | None = None, n: int = 6) -> list[dict]:
     return [{"id": g, "nombre": GENEROS[g], "valor": round(100 * v / m)} for g, v in sorted(p.items(), key=lambda kv: -kv[1])[:n]]
 
 
-def _seguridad(gp: dict, s: dict | None, web, genero: str, sg: dict | None, sg0: str | None, texto: str, tipo: str, corr: bool) -> tuple[float | None, float | None, list[str]]:
+def _seguridad(gp: dict, s: dict | None, web, genero: str, sg: dict | None, sg0: str | None, texto: str, tipo: str, corr: bool, secundarios: tuple = (), secundarios_sub: tuple = ()) -> tuple[float | None, float | None, list[str]]:
     """(margen del género, margen del subgénero, motivos por los que conviene que lo revises tú). Sin motivos = el sistema está seguro.
-    El margen es la distancia de puntos entre la primera y la segunda opción (la misma escala que decide el género); los umbrales están en clasificador.MARGEN_*."""
+    El margen es la distancia de puntos entre la primera y la segunda opción (la misma escala que decide el género); los umbrales están en clasificador.MARGEN_*.
+    Si la segunda opción ya es una etiqueta secundaria (`secundarios`, `secundarios_sub`) el empate no es una duda: la obra lleva las dos."""
     motivos, margen, margen_sub = [], None, None
     if len(texto.strip()) < 300 and tipo not in ("codigo", "datos", "video"):
         motivos.append("casi no hay texto que leer (¿PDF escaneado o protegido?)")
@@ -15538,7 +15647,7 @@ def _seguridad(gp: dict, s: dict | None, web, genero: str, sg: dict | None, sg0:
         motivos.append("no encaja en ningún género")
     if len(orden) > 1:
         margen = sc[orden[0]] - sc[orden[1]]
-        if margen / (1 + clasificador.PESO_CABEZA + clasificador.PESO_REGLAS if s else 1) < (clasificador.MARGEN_REVISAR if s else 0.25):
+        if orden[1] not in secundarios and margen / (1 + clasificador.PESO_CABEZA + clasificador.PESO_REGLAS if s else 1) < (clasificador.MARGEN_REVISAR if s else 0.25):
             motivos.append(f"género poco claro: «{GENEROS.get(orden[0], orden[0])}» y «{GENEROS.get(orden[1], orden[1])}» casi empatan")
         if genero != orden[0] and genero in sc:
             motivos.append(f"el género elegido («{GENEROS.get(genero, genero)}») no es el que más puntúa («{GENEROS.get(orden[0], orden[0])}»)")
@@ -15550,7 +15659,8 @@ def _seguridad(gp: dict, s: dict | None, web, genero: str, sg: dict | None, sg0:
                 motivos.append("el LLM y el parecido no coinciden en el subgénero")
         elif not seguro and margen_sub is not None:
             ps = sorted(sg["puntos"], key=sg["puntos"].get, reverse=True)
-            motivos.append("subgénero poco claro" + (f": «{taxonomia.nombre_sub(genero, ps[0])}» y «{taxonomia.nombre_sub(genero, ps[1])}» casi empatan" if len(ps) > 1 else ""))
+            if len(ps) < 2 or ps[1] not in secundarios_sub:
+                motivos.append("subgénero poco claro" + (f": «{taxonomia.nombre_sub(genero, ps[0])}» y «{taxonomia.nombre_sub(genero, ps[1])}» casi empatan" if len(ps) > 1 else ""))
     return margen, margen_sub, motivos
 
 
@@ -15561,6 +15671,71 @@ def sin_licencia(texto: str) -> str:
     """Quita la cabecera de licencia de Project Gutenberg (lo primero del EPUB), que no dice nada de la obra y confunde al clasificador."""
     m = _INICIO_LICENCIA.search(texto)
     return texto[m.end():] if m else texto
+
+
+def _etiquetas_genero(genero: str, marcador: dict, escala: float, del_llm: list | None, corr: dict | None, tipo: str) -> list[tuple[str, float]]:
+    """[(género, peso)] de la obra, el principal primero: lo que corregiste tú, o lo que dijo el LLM (solo los géneros plausibles), o los géneros que puntúan casi igual que el mejor."""
+    if corr and corr.get("generos") and corr["generos"][0] == genero:
+        return [(g, 1.0 if i == 0 else .8) for i, g in enumerate(corr["generos"][:etiquetas.MAXIMO]) if g in GENEROS]
+    if tipo in ("codigo", "datos") or genero == "otro" or not marcador:
+        return [(genero, 1.0)]
+    if genero not in marcador:
+        marcador = {**marcador, genero: max(marcador.values())}
+    if del_llm:
+        plausibles = sorted(marcador, key=marcador.get, reverse=True)[:4]
+        lista = [genero] + [g for g in del_llm if g != genero and g in plausibles and g != "otro"]
+        return [(g, 1.0 if i == 0 else etiquetas.peso_relativo(marcador, g, escala, etiquetas.DELTA)) for i, g in enumerate(lista[:etiquetas.MAXIMO])]
+    return etiquetas.elegir(marcador, escala, etiquetas.DELTA, principal=genero)
+
+
+def _etiquetas_sub(sg: dict | None, del_llm: list | None) -> list[tuple[str, float]]:
+    """[(subgénero, peso)] del género principal, el elegido primero: los que puntúan casi igual que él, o los que añadió el LLM si son plausibles (entre los 4 mejores)."""
+    if not sg:
+        return []
+    escala = sg.get("escala", 1.0)
+    pts = {k: v / 100 for k, v in sg["puntos"].items()}
+    pts.setdefault(sg["id"], max(pts.values(), default=1.0))                       # lo que eligió el LLM puede no estar entre los 4 primeros del parecido
+    if del_llm:
+        lista = [sg["id"]] + [x for x in del_llm if x != sg["id"] and x in pts]
+        return [(x, 1.0 if i == 0 else etiquetas.peso_relativo(pts, x, escala, etiquetas.DELTA_SUB)) for i, x in enumerate(lista[:etiquetas.MAXIMO])]
+    return etiquetas.elegir(pts, escala, etiquetas.DELTA_SUB, principal=sg["id"], excluir=())
+
+
+def _pares_sub(valor, carpeta) -> list[tuple[str, str]]:
+    """[(género, subgénero)] válidos de lo que llega de fuera: pares, dicts {genero, id} o textos «género/subgénero»."""
+    salida = []
+    for e in valor or []:
+        g, i = (e["genero"], e["id"]) if isinstance(e, dict) else tuple(e.split("/", 1)) if isinstance(e, str) and "/" in e else tuple(e)[:2]
+        if g in GENEROS and i in {x[0] for x in taxonomia.subgeneros(g, carpeta)} and (g, i) not in salida:
+            salida.append((g, i))
+    return salida
+
+
+def _fijar_etiquetas(auto: dict, genero: str, subgenero: str, d: dict, carpeta) -> tuple[list, list]:
+    """([(género, peso)], [(género, subgénero, peso)]) finales de una obra: lo que fijas tú (`generos`, `subgeneros`, `genero`, `subgenero` en `d`) manda sobre lo que propuso `clasificar`.
+    La etiqueta principal que eliges va la primera; si cambias el género principal, el antiguo se descarta (era una corrección, no un empate)."""
+    ag, asub = [(e["id"], e["peso"]) for e in auto["etiquetas"]["generos"]], [(e["genero"], e["id"], e["peso"]) for e in auto["etiquetas"]["subgeneros"]]
+    pedido = [g for g in dict.fromkeys(d.get("generos") or []) if g in GENEROS]
+    if pedido:
+        ids = [genero] + [g for g in pedido if g != genero]
+        gens = [(g, dict(ag).get(g, 1.0)) for g in ids]
+    elif genero != auto["genero"]:
+        gens = [(genero, 1.0)] + [(g, w) for g, w in ag[1:] if g != genero]
+    else:
+        gens = ag
+    ids = [g for g, _ in gens][:etiquetas.MAXIMO]
+    pares = _pares_sub(d.get("subgeneros"), carpeta)
+    if pares:
+        subs = [(g, i, 1.0) for g, i in pares if g in ids]
+        if subgenero and not any(g == genero and i == subgenero for g, i, _ in subs):
+            subs.insert(0, (genero, subgenero, 1.0))
+    elif d.get("subgenero") or genero != auto["genero"]:
+        subs = ([(genero, subgenero, 1.0)] if subgenero else []) + [x for x in asub if x[0] in ids and not (x[0] == genero and (x[1] in (auto["subgenero"], subgenero) or genero != auto["genero"]))]
+    else:
+        subs = [x for x in asub if x[0] in ids]
+    if subgenero and not any(g == genero and i == subgenero for g, i, _ in subs):
+        subs.insert(0, (genero, subgenero, 1.0))                                   # el subgénero principal elegido siempre va en la lista
+    return gens[:etiquetas.MAXIMO], subs[:etiquetas.MAXIMO]
 
 
 def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dict:
@@ -15675,6 +15850,7 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
         genero, metodo = forma, "web"
         subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
         motivo += f"; Open Library la clasifica como {', '.join(m for m in materias if _norm(m).strip(' .') in _FORMA[forma])}"
+    lg = None                                                                       # los géneros que propone el LLM (el principal primero), si respondió
     vec = clasificador.vecinos(clasificador.texto_libro(tit, caps, vista), carpeta, llm.VECINOS, B) if llm.VECINOS and llm.ACTIVO and not corr else None
     if corr or tipo == "codigo" or not llm.ACTIVO:
         ev("llm", "fin", omitido="no aplica" if tipo == "codigo" or corr else "desactivado")
@@ -15688,35 +15864,57 @@ def clasificar(ruta: str | Path, carpeta: Path | None = None, etapa=None) -> dic
         if r and top3 and r["genero"] not in top3:                          # un modelo pequeño a veces se inventa un género: si no está entre los 3 más probables, se ignora
             ev("llm", "fin", omitido=f"propuso «{GENEROS.get(r['genero'], r['genero'])}», que no estaba entre los 3 más probables: se ignora")
         elif r:
-            genero, metodo = r["genero"], "llm"
+            genero, metodo, lg = r["genero"], "llm", r.get("generos")
             subtema = tnombre if p >= 6 and genero in GENEROS_CON_TEMA else "General"
             motivo += f"; el LLM propone «{GENEROS[genero]}»: {r['motivo']}"
             ev("llm", "fin", genero=genero, genero_nombre=GENEROS[genero], razon=r["motivo"], barras=_barras(marcador, genero))
         else:
-            ev("llm", "fin", omitido="Ollama no está disponible")
+            ev("llm", "fin", omitido="Ollama no está disponible" if llm._estado.get("fallo_red") or not llm.disponible(carpeta) else "el LLM no devolvió una respuesta válida")
     if materias and metodo not in ("reglas", "llm"):
         motivo += f"; materias web: {', '.join(materias[:4])}"
     ev("subgenero", "inicio")
     sg = None if tipo == "datos" else clasificador.subgenero(clasificador.texto_libro(tit, caps, vista), genero, carpeta, aut, pistas_sub if genero == "novela" else None, B)       # una tabla de números no tiene tema
     sg0 = sg["id"] if sg else None                                                 # lo que decía el parecido, por si el LLM lo cambia (es una discrepancia que se avisa)
+    del_llm_sub = None
     if sg and not corr and llm.ACTIVO and llm.disponible(carpeta):          # el LLM conoce las obras: elige entre los subgéneros de su género (las novelas sin pistas en el texto son lo que peor sale por parecido)
-        elegido = llm.subgenero(tit, caps, vista_llm, GENEROS[genero], taxonomia.subgeneros(genero, carpeta), aut, carpeta, vec)
+        lista_sub = llm.subgeneros(tit, caps, vista_llm, GENEROS[genero], taxonomia.subgeneros(genero, carpeta), aut, carpeta, vec)
+        elegido = lista_sub[0] if lista_sub else None
         if elegido and elegido != sg["id"]:
             motivo += f"; subgénero por el LLM (el parecido decía «{sg['nombre']}»)"
             sg = {**sg, "id": elegido, "nombre": taxonomia.nombre_sub(genero, elegido, carpeta)}
+        del_llm_sub = lista_sub or None
     if sg:
         motivo += f"; subgénero «{sg['nombre']}»"
         ev("subgenero", "fin", id=sg["id"], nombre=sg["nombre"], barras=[{"id": k, "nombre": taxonomia.nombre_sub(genero, k, carpeta), "valor": round(100 * v / max(max(sg["puntos"].values()), 1e-9))} for k, v in sg["puntos"].items()])
     else:
         ev("subgenero", "fin", omitido="los datos numéricos no tienen un tema que clasificar" if tipo == "datos" else "este género no tiene subgéneros" if not taxonomia.subgeneros(genero, carpeta) else "no hay pistas suficientes")
-    margen, margen_sub, motivos_rev = _seguridad(gp, s, web, genero, sg, sg0, texto, tipo, bool(corr))
-    ev("decision", "fin", revisar=bool(motivos_rev), motivos_revisar=motivos_rev, genero=genero, genero_nombre=GENEROS.get(genero, genero), galaxia=galaxia, tipo=tipo, subgenero_nombre=sg["nombre"] if sg else "", metodo=metodo, motivo=motivo)
+    marcador = clasificador.puntuar(gp, s, web) if s else {g: v / (sum(gp.values()) or 1) for g, v in gp.items()}
+    gens = _etiquetas_genero(genero, marcador, s["escala"] if s else 1.0, lg if metodo == "llm" else None, corr, tipo)       # varios géneros: los que puntúan casi igual (o los que dijo el LLM)
+    ids_gen = [g for g, _ in gens]
+    if corr and corr.get("subgeneros"):                                             # lo que corregiste tú manda
+        subs_et = [(g, i, 1.0 if k == 0 else .8) for k, (g, i) in enumerate(corr["subgeneros"]) if g in ids_gen]
+        if sg and any(g == genero for g, _, _ in subs_et) and next(i for g, i, _ in subs_et if g == genero) != sg["id"]:
+            sg = {**sg, "id": next(i for g, i, _ in subs_et if g == genero), "nombre": taxonomia.nombre_sub(genero, next(i for g, i, _ in subs_et if g == genero), carpeta)}
+    else:
+        subs_et = [(genero, i, w) for i, w in _etiquetas_sub(sg, del_llm_sub)]
+        for g2, w2 in gens[1:]:                                                     # el subgénero principal de cada género secundario
+            sg2 = None if tipo == "datos" else clasificador.subgenero(clasificador.texto_libro(tit, caps, vista), g2, carpeta, aut, None, B)
+            if sg2:
+                el2 = llm.subgeneros(tit, caps, vista_llm, GENEROS[g2], taxonomia.subgeneros(g2, carpeta), aut, carpeta, vec)[:1] if (not corr and llm.ACTIVO and llm.disponible(carpeta)) else []
+                subs_et.append((g2, el2[0] if el2 else sg2["id"], w2))
+        subs_et = subs_et[:etiquetas.MAXIMO]
+    margen, margen_sub, motivos_rev = _seguridad(gp, s, web, genero, sg, sg0, texto, tipo, bool(corr), tuple(ids_gen[1:]), tuple(i for g, i, _ in subs_et if g == genero)[1:])
+    if len(gens) > 1:
+        motivo += "; también " + ", ".join(f"«{GENEROS[g]}»" for g in ids_gen[1:])
+    et_g = [{"id": g, "nombre": GENEROS.get(g, g), "peso": w} for g, w in gens]
+    et_s = [{"genero": g, "id": i, "nombre": taxonomia.nombre_sub(g, i, carpeta), "peso": w} for g, i, w in subs_et]
+    ev("decision", "fin", revisar=bool(motivos_rev), motivos_revisar=motivos_rev, genero=genero, genero_nombre=GENEROS.get(genero, genero), galaxia=galaxia, tipo=tipo, subgenero_nombre=sg["nombre"] if sg else "", metodo=metodo, motivo=motivo, etiquetas_generos=et_g, etiquetas_subgeneros=et_s)
     palabras = re.findall(r"[a-z]+", t[:20000])
     es, en = sum(w in _ES for w in palabras), sum(w in _EN for w in palabras)
     h = _sha1(f)
     dup = next((rel for rel, m in leer_metadatos(carpeta).items() if m.get("hash") == h), "")
     return {"galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "titulo": tit, "titulo_largo": (inf_v or {}).get("titulo") or f.stem, "url": (inf_v or {}).get("url", ""), "motivo": motivo, "metodo": metodo, "materias_web": materias[:8], "paginas": paginas,
-            "subgenero": sg["id"] if sg else "", "subgenero_nombre": sg["nombre"] if sg else "",
+            "subgenero": sg["id"] if sg else "", "subgenero_nombre": sg["nombre"] if sg else "", "etiquetas": {"generos": et_g, "subgeneros": et_s},
             "subgeneros": [{"id": k, "nombre": taxonomia.nombre_sub(genero, k, carpeta), "puntos": v} for k, v in sg["puntos"].items()] if sg else [],
             "tamano": f.stat().st_size, "extension": ext.lstrip("."), "idioma": "es" if es > en else "en" if en else "", "duplicado": dup,
             "vista_previa": re.sub(r"\s+", " ", texto[:1500]).strip()[:380],
@@ -15786,10 +15984,12 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
             galaxia = d.get("galaxia") if d.get("galaxia") in GALAXIAS else auto["galaxia"]
             subtema = (d.get("subtema") or "").strip() or auto["subtema"]
             tipo = d.get("tipo") if d.get("tipo") in TIPOS else auto["tipo"]
-            genero = d.get("genero") if d.get("genero") in GENEROS else auto["genero"]
+            pedido_g = [g for g in d.get("generos") or [] if g in GENEROS]
+            genero = d.get("genero") if d.get("genero") in GENEROS else pedido_g[0] if pedido_g else auto["genero"]
             titulo = (d.get("titulo") or "").strip() or auto["titulo"]
             validos = {s[0]: s[1] for s in taxonomia.subgeneros(genero, carpeta)}
             subgenero = d.get("subgenero") if d.get("subgenero") in validos else (auto["subgenero"] if auto["genero"] == genero else "")
+            gens, subs = _fijar_etiquetas(auto, genero, subgenero, d, carpeta)
             destino = base / galaxia / _slug(GENEROS[genero] if galaxia == "libros" else subtema)      # Libros: una carpeta por género…
             if galaxia == "libros" and subgenero:
                 destino = destino / _slug(validos[subgenero])                                          # …y dentro, una por subgénero
@@ -15803,11 +16003,13 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
             rel = fin.relative_to(base).as_posix()
             caps, pags = capitulos(fin)
             meta[rel] = {"capitulos": caps, "paginas": pags, "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "etiquetas": (d.get("etiquetas") or "").strip(), "origen": str(f), "hash": h,
-                         "fecha": datetime.now().isoformat(timespec="seconds"), "automatico": not (d.get("galaxia") or d.get("subtema") or d.get("tipo") or d.get("genero")) and (d.get("titulo") or auto["titulo"]).strip() == auto["titulo"],
+                         "fecha": datetime.now().isoformat(timespec="seconds"), "automatico": not (d.get("galaxia") or d.get("subtema") or d.get("tipo") or d.get("genero") or d.get("generos") or d.get("subgeneros")) and (d.get("titulo") or auto["titulo"]).strip() == auto["titulo"],
                          "metodo": auto["metodo"], "motivo": auto["motivo"], "materias_web": auto.get("materias_web", []),
-                         "propuesta": {"galaxia": auto["galaxia"], "subtema": auto["subtema"], "genero": auto["genero"], "tipo": auto["tipo"], "subgenero": auto["subgenero"]}, "subgenero": subgenero,
-                         "revisar": bool(auto["revisar"]) and not (d.get("genero") or d.get("subgenero")), "motivos_revisar": auto["motivos_revisar"], "margen": auto["margen"],
+                         "propuesta": {"galaxia": auto["galaxia"], "subtema": auto["subtema"], "genero": auto["genero"], "tipo": auto["tipo"], "subgenero": auto["subgenero"],
+                                       "generos": [e["id"] for e in auto["etiquetas"]["generos"]], "subgeneros": [[e["genero"], e["id"]] for e in auto["etiquetas"]["subgeneros"]]}, "subgenero": subgenero,
+                         "revisar": bool(auto["revisar"]) and not (d.get("genero") or d.get("subgenero") or d.get("generos") or d.get("subgeneros")), "motivos_revisar": auto["motivos_revisar"], "margen": auto["margen"],
                          "web_resumen": auto["web_resumen"], "web_generos": auto["web_generos"]}      # si lo fijaste tú al importar, no hay nada que revisar
+            etiquetas.poner(meta[rel], gens, subs)
             hashes[h] = rel
             clasificador.guardar_vector(carpeta, h, clasificador._pendientes.pop(h, None))        # el cuerpo de este documento servirá de ejemplo a los próximos
             if tipo == "libro":
@@ -15830,7 +16032,7 @@ def importar(items: list, carpeta: Path = CARPETA, db: Path | None = None, index
                 except OSError:
                     pass
             salida.append({**r, "movido": movido, "estado": "ok", "titulo": titulo, "galaxia": galaxia, "subtema": subtema, "genero": genero, "tipo": tipo, "destino": str(fin), "mensaje": auto["motivo"],
-                           "subgenero": subgenero, "subgenero_nombre": validos.get(subgenero, ""), "revisar": meta[rel]["revisar"], "motivos_revisar": meta[rel]["motivos_revisar"]})
+                           "subgenero": subgenero, "subgenero_nombre": validos.get(subgenero, ""), "generos": meta[rel]["generos"], "subgeneros": meta[rel]["subgeneros"], "revisar": meta[rel]["revisar"], "motivos_revisar": meta[rel]["motivos_revisar"]})
         except Exception as e:
             salida.append({**r, "estado": "error", "mensaje": str(e)})
     if any(s["estado"] == "ok" for s in salida):
@@ -15881,13 +16083,14 @@ def reclasificar(carpeta: Path | None = None) -> list[tuple]:
         if (c["subtema"], c["genero"]) != (m.get("subtema"), m.get("genero")):
             cambios.append((m.get("titulo", rel)[:40], m.get("subtema"), c["subtema"], m.get("genero"), c["genero"]))
             m["subtema"], m["genero"] = c["subtema"], c["genero"]
+            etiquetas.poner(m, [(e["id"], e["peso"]) for e in c["etiquetas"]["generos"]], [(e["genero"], e["id"], e["peso"]) for e in c["etiquetas"]["subgeneros"]])
     if cambios:
         _guardar(carpeta, meta)
     return cambios
 
 
 # ---------- gestionar lo importado (pestaña «Observatorio») ----------
-CAMPOS = ("titulo", "galaxia", "genero", "subgenero", "subtema", "tipo", "etiquetas")
+CAMPOS = ("titulo", "galaxia", "genero", "subgenero", "subtema", "tipo", "etiquetas", "generos", "subgeneros")
 
 
 def _guardar(carpeta: Path, meta: dict) -> None:
@@ -15903,6 +16106,8 @@ def _ficha(carpeta: Path, rel: str, m: dict, con_portada: bool = True) -> dict:
     f = Path(carpeta) / "biblioteca" / rel
     return {"rel": rel, "existe": f.is_file(), "titulo": m.get("titulo", ""), "titulo_largo": Path(m.get("origen", "")).stem or m.get("titulo", ""), "galaxia": m.get("galaxia", ""),
             "genero": m.get("genero", "otro"), "subgenero": m.get("subgenero", ""), "subgenero_nombre": taxonomia.nombre_sub(m.get("genero", ""), m.get("subgenero", ""), carpeta),
+            "generos": [{"id": g, "nombre": GENEROS.get(g, g), "peso": etiquetas.pesos_genero(m).get(g, 1.0)} for g in etiquetas.generos_de(m)],
+            "subgeneros": [{"genero": g, "id": i, "nombre": taxonomia.nombre_sub(g, i, carpeta), "peso": next((e.get("peso", 1.0) for e in m.get("subgeneros") or [] if e.get("genero") == g and e.get("id") == i), 1.0)} for g, i in etiquetas.subgeneros_de(m)],
             "subtema": m.get("subtema", ""), "tipo": m.get("tipo", ""), "etiquetas": m.get("etiquetas", ""), "paginas": m.get("paginas", 0),
             "capitulos": len(m.get("capitulos", [])), "fecha": m.get("fecha", "")[:10], "automatico": bool(m.get("automatico")), "fecha_hora": m.get("fecha", ""), "revisar": bool(m.get("revisar")), "motivos_revisar": m.get("motivos_revisar", []), "metodo": m.get("metodo", ""), "motivo": m.get("motivo", ""), "extension": f.suffix.lstrip(".").lower(),
             "tamano": f.stat().st_size if f.is_file() else 0, "ruta": str(f), "portada": portada_datauri(carpeta, m.get("portada", "")) if con_portada else ""}
@@ -15922,14 +16127,16 @@ def _galaxia_en_indice(db: Path, ruta: str, galaxia: str) -> None:
 
 
 def editar(rel: str, cambios: dict, carpeta: Path | None = None, db: Path | None = None) -> dict:
-    """Cambia título, galaxia, género, subtema, tipo o etiquetas de un documento importado. El fichero no se mueve; el índice se pone al día y la corrección se recuerda
-    (algo parecido que importes después se clasificará igual). Devuelve la ficha."""
+    """Cambia título, galaxia, género(s), subgénero(s), subtema, tipo o etiquetas de un documento importado. El fichero no se mueve; el índice se pone al día y la corrección se recuerda
+    (algo parecido que importes después se clasificará igual). `genero`/`subgenero` cambian la etiqueta principal; `generos` (ids, el principal primero) y `subgeneros` (pares
+    «género/subgénero») fijan la lista completa (máximo etiquetas.MAXIMO de cada). Devuelve la ficha."""
     carpeta = Path(carpeta or carpeta_datos()); meta = leer_metadatos(carpeta)
     if rel not in meta:
         raise KeyError(f"no está en el observatorio: {rel}")
-    m, antes = meta[rel], meta[rel].get("galaxia")
+    m, antes, genero_antes = meta[rel], meta[rel].get("galaxia"), meta[rel].get("genero")
+    lista_g, lista_s = cambios.get("generos"), cambios.get("subgeneros")
     for k, v in cambios.items():
-        if k not in CAMPOS:
+        if k not in CAMPOS or k in ("generos", "subgeneros"):
             continue
         v = str(v).strip()
         if (k == "galaxia" and v not in GALAXIAS) or (k == "genero" and v not in GENEROS) or (k == "tipo" and v not in TIPOS):
@@ -15941,11 +16148,30 @@ def editar(rel: str, cambios: dict, carpeta: Path | None = None, db: Path | None
         m[k] = v
         if k == "genero" and "subgenero" not in cambios and m.get("subgenero") not in {s[0] for s in taxonomia.subgeneros(v, carpeta)}:
             m["subgenero"] = ""                                       # al cambiar de género, el subgénero antiguo ya no vale
+    if lista_g is not None:
+        lista_g = [g.strip() for g in (lista_g.split(",") if isinstance(lista_g, str) else lista_g) if g.strip()]
+        mal = [g for g in lista_g if g not in GENEROS]
+        if mal or not lista_g:
+            raise ValueError(f"géneros no válidos: {', '.join(mal) or '(lista vacía)'}")
+        pesos = etiquetas.pesos_genero(m)
+        m["genero"] = lista_g[0]
+        m["generos"] = [{"id": g, "peso": pesos.get(g, 1.0)} for g in dict.fromkeys(lista_g)][:etiquetas.MAXIMO]
+        if m.get("subgenero") not in {s[0] for s in taxonomia.subgeneros(m["genero"], carpeta)}:
+            m["subgenero"] = ""
+    elif m.get("genero") != genero_antes:                              # cambiaste la etiqueta principal: la antigua se descarta (era un error, no un empate)
+        m["generos"] = [e for e in m.get("generos") or [] if e.get("id") not in (genero_antes, m["genero"])]
+    if lista_s is not None:
+        pares = _pares_sub(lista_s, carpeta)
+        m["subgeneros"] = [{"genero": g, "id": i, "peso": 1.0} for g, i in pares]
+        m["subgenero"] = next((i for g, i in pares if g == m["genero"]), "")
+    elif "subgenero" in cambios or m.get("genero") != genero_antes:
+        m["subgeneros"] = [e for e in m.get("subgeneros") or [] if e.get("genero") != (genero_antes if m.get("genero") != genero_antes else m.get("genero"))]
+    etiquetas.poner(m, [(g, etiquetas.pesos_genero(m).get(g, 1.0)) for g in etiquetas.generos_de(m)], [(g, i, next((e.get("peso", 1.0) for e in m.get("subgeneros") or [] if e.get("genero") == g and e.get("id") == i), 1.0)) for g, i in etiquetas.subgeneros_de(m)])
     m["automatico"], m["revisar"] = False, False                  # lo has tocado tú: ya está revisado
     _guardar(carpeta, meta)
     if m.get("galaxia") != antes:
         _galaxia_en_indice(db or carpeta / "indice.db", str(carpeta / "biblioteca" / rel), m["galaxia"])
-    if {"genero", "subtema"} & set(cambios):
+    if {"genero", "generos", "subtema"} & set(cambios):
         recordar_correccion(m, carpeta)
     return _ficha(carpeta, rel, m)
 
@@ -15981,7 +16207,9 @@ def revisar(desde: str = "", hasta: str = "", carpeta: Path | None = None) -> li
         prop = m.get("propuesta") or {}
         filas.append({"rel": rel, "fecha": m.get("fecha", ""), "titulo": m.get("titulo", ""), "galaxia": m.get("galaxia"), "genero": m.get("genero"), "subgenero": m.get("subgenero", ""), "subtema": m.get("subtema"), "tipo": m.get("tipo"),
                       "metodo": m.get("metodo", ""), "motivo": m.get("motivo", ""), "materias_web": m.get("materias_web", []), "propuesta": prop,
-                      "corregido": bool(prop) and any(prop.get(k) != m.get(k) for k in ("galaxia", "genero", "subtema", "tipo", "subgenero") if k in prop)})
+                      "generos": etiquetas.generos_de(m), "subgeneros": [list(p) for p in etiquetas.subgeneros_de(m)],
+                      "corregido": bool(prop) and (any(prop.get(k) != m.get(k) for k in ("galaxia", "genero", "subtema", "tipo", "subgenero") if k in prop)
+                                                    or ("generos" in prop and set(prop["generos"]) != set(etiquetas.generos_de(m))))})
     return sorted(filas, key=lambda x: x["fecha"], reverse=True)
 
 
@@ -15992,6 +16220,7 @@ def reclasificar_uno(rel: str, carpeta: Path | None = None, db: Path | None = No
     c = clasificar(f, carpeta)
     antes = m.get("galaxia")
     m["galaxia"], m["genero"], m["subtema"], m["automatico"], m["subgenero"] = c["galaxia"], c["genero"], c["subtema"], True, c["subgenero"]
+    etiquetas.poner(m, [(e["id"], e["peso"]) for e in c["etiquetas"]["generos"]], [(e["genero"], e["id"], e["peso"]) for e in c["etiquetas"]["subgeneros"]])
     m["revisar"], m["motivos_revisar"], m["margen"] = c["revisar"], c["motivos_revisar"], c["margen"]
     _guardar(carpeta, meta)
     if m["galaxia"] != antes:
@@ -16041,6 +16270,7 @@ from shutil import which
 from pathlib import Path
 
 from . import CARPETA
+from .etiquetas import MAXIMO
 
 def ram_gb() -> float:
     """RAM total del equipo en GB (0 si no se sabe)."""
@@ -16141,61 +16371,87 @@ def disponible(carpeta: Path | str = CARPETA) -> bool:
     return _estado["ok"]
 
 
-EJEMPLOS = [("Orgullo y prejuicio", "Una joven inglesa y un rico caballero superan sus prejuicios y se enamoran.", "novela"),
-            ("Breve historia de Roma", "Desde la fundación de la ciudad hasta la caída del Imperio de Occidente.", "historia"),
-            ("Estadística para ingenieros", "Probabilidad, estimación e intervalos de confianza con ejemplos.", "estadistica"),
-            ("Clean Architecture", "Principios de diseño de software para sistemas mantenibles.", "tecnologia")]      # ejemplos resueltos: con ellos el modelo de 3B pasó del 61 % al 76 % en las pruebas
+EJEMPLOS = [("Orgullo y prejuicio", "Una joven inglesa y un rico caballero superan sus prejuicios y se enamoran.", ["novela"]),
+            ("Breve historia de Roma", "Desde la fundación de la ciudad hasta la caída del Imperio de Occidente.", ["historia"]),
+            ("Estadística para ingenieros", "Probabilidad, estimación e intervalos de confianza con ejemplos.", ["estadistica"]),
+            ("Clean Architecture", "Principios de diseño de software para sistemas mantenibles.", ["tecnologia"]),
+            ("Los orígenes del capitalismo moderno", "Cómo cambiaron el comercio, la banca y las finanzas a lo largo de la historia de Europa.", ["economia", "historia"])]      # ejemplos resueltos (con ellos el modelo de 3B pasó del 61 % al 76 %); el último enseña que una obra puede llevar dos géneros
 
 
-def _prompt(titulo: str, capitulos: list, vista: str, materias: list, generos: dict, autor: str = "", vecinos: list | None = None) -> str:
+def _lista(etiquetas) -> str:
+    return json.dumps(list(etiquetas), ensure_ascii=False)
+
+
+def prompt_generos(titulo: str, capitulos: list, vista: str, materias: list, generos: dict, autor: str = "", vecinos: list | None = None) -> str:
     from .clasificador import semillas_todas
     S = semillas_todas()
     lista = "\n".join(f"- {g}: {S[g][0] if g in S else 'no encaja en ninguno de los demás'}" for g in generos)
-    ej = "\n".join(f'Libro: «{t}». Sinopsis: {s}\n{{"genero": "{g}", "motivo": "…"}}' for t, s, g in EJEMPLOS)
-    if vecinos:        # ejemplos reales: libros parecidos que el usuario ya tiene, con su género
-        ej = "\n".join(f'Libro: «{v["titulo"]}»{" de " + v["autor"] if v["autor"] else ""}.\n{{"genero": "{v["genero"]}", "motivo": "…"}}' for v in vecinos)
+    ej = "\n".join(f'Libro: «{t}». Sinopsis: {s}\n{{"generos": {_lista(g)}, "motivo": "…"}}' for t, s, g in EJEMPLOS)
+    if vecinos:        # ejemplos reales: libros parecidos que el usuario ya tiene, con sus géneros
+        ej = "\n".join(f'Libro: «{v["titulo"]}»{" de " + v["autor"] if v["autor"] else ""}.\n{{"generos": {_lista(v.get("generos") or [v["genero"]])}, "motivo": "…"}}' for v in vecinos)
     caps = "; ".join((c["titulo"] if isinstance(c, dict) else str(c)) for c in capitulos[:8]) or "(sin índice)"
-    return (f"Eres bibliotecario. Elige el género que mejor describe el LIBRO (no solo las palabras de su título).\nGéneros:\n{lista}\n\nEjemplos resueltos:\n{ej}\n\n"
+    return (f"Eres bibliotecario. Elige el género que mejor describe el LIBRO (no solo las palabras de su título). Pon primero el principal y añade otro u otros dos (máximo {MAXIMO}) "
+            f"SOLO si el libro trata de verdad de esos temas a la vez.\nGéneros:\n{lista}\n\nEjemplos resueltos:\n{ej}\n\n"
             f"Ahora este:\nLibro: «{titulo}»{' de ' + autor if autor else ''}. Capítulos o partes: {caps}. Materias según Open Library: {', '.join(materias[:6]) or '(no hay)'}. Texto: {vista[:1300]}\n\n"
-            'Responde solo con JSON: {"genero": "<id>", "motivo": "<una frase corta>"}.')
+            'Responde solo con JSON: {"generos": ["<id principal>", "<id opcional>"], "motivo": "<una frase corta>"}.')
+
+
+def _pedir(a: dict, prompt: str, esquema: dict) -> dict | None:
+    """Una consulta a Ollama con salida JSON forzada por `esquema`; None si falla o la respuesta no es JSON."""
+    try:
+        r = _http(a["url"] + "/api/chat", {"model": a["modelo"], "stream": False, "format": esquema, "options": {"temperature": 0, "num_predict": 100, "num_ctx": 2048},
+                                           "messages": [{"role": "user", "content": prompt}]})
+        _estado["fallo_red"] = False
+        return json.loads(re.sub(r"^```(?:json)?|```$", "", r["message"]["content"].strip()))
+    except Exception as e:
+        if isinstance(e, OSError) or "HTTP Error" in str(e):          # no se pudo hablar con Ollama (servidor caído, conexión cortada, error 5xx): se vuelve a comprobar en un minuto
+            _estado.update(fallo_red=True, ok=False, t=time.time())
+        return None
+
+
+def _ids(j: dict, plural: str, singular: str, validos) -> list[str]:
+    """Ids válidos de la respuesta (lista `plural`, o el valor único `singular` de las respuestas con el formato antiguo), sin repetir y como mucho MAXIMO. Si el primero no es válido, [] (el principal manda)."""
+    v = j.get(plural)
+    v = [v] if isinstance(v, str) else v if isinstance(v, list) else [j.get(singular)]
+    v = list(dict.fromkeys(x for x in v if isinstance(x, str)))
+    return [x for x in v if x in validos][:MAXIMO] if v and v[0] in validos else []
 
 
 def clasificar(titulo: str, capitulos: list, vista: str, materias: list, generos: dict, carpeta: Path | str = CARPETA, autor: str = "", vecinos: list | None = None) -> dict | None:
-    """{'genero': id, 'motivo': str} según el LLM, o None si no está disponible o responde algo inválido."""
+    """{'genero': id principal, 'generos': [ids, el principal primero], 'motivo': str} según el LLM, o None si no está disponible o responde algo inválido."""
     if not disponible(carpeta):
         return None
-    a = ajustes(carpeta)
-    esquema = {"type": "object", "properties": {"genero": {"type": "string", "enum": list(generos)}, "motivo": {"type": "string"}}, "required": ["genero", "motivo"]}
-    try:
-        r = _http(a["url"] + "/api/chat", {"model": a["modelo"], "stream": False, "format": esquema, "options": {"temperature": 0, "num_predict": 80, "num_ctx": 2048},
-                                           "messages": [{"role": "user", "content": _prompt(titulo, capitulos, vista, materias, generos, autor, vecinos)}]})
-        j = json.loads(re.sub(r"^```(?:json)?|```$", "", r["message"]["content"].strip()))
-        return {"genero": j["genero"], "motivo": str(j.get("motivo", ""))[:160]} if j.get("genero") in generos else None
-    except Exception:
-        return None
+    esquema = {"type": "object", "properties": {"generos": {"type": "array", "items": {"type": "string", "enum": list(generos)}, "minItems": 1, "maxItems": MAXIMO}, "motivo": {"type": "string"}}, "required": ["generos", "motivo"]}
+    j = _pedir(ajustes(carpeta), prompt_generos(titulo, capitulos, vista, materias, generos, autor, vecinos), esquema)
+    ids = _ids(j, "generos", "genero", generos) if j else []
+    return {"genero": ids[0], "generos": ids, "motivo": str(j.get("motivo", ""))[:160]} if ids else None
 
 
-def subgenero(titulo: str, capitulos: list, vista: str, genero: str, subs: list, autor: str = "", carpeta: Path | str = CARPETA, vecinos: list | None = None) -> str | None:
-    """Id del subgénero (de `subs` = [(id, nombre, frase_es, frase_en)]) que elige el LLM para un libro ya clasificado en `genero`; None si no está disponible o responde algo inválido."""
-    if not disponible(carpeta):
-        return None
-    a = ajustes(carpeta)
+def prompt_subgeneros(titulo: str, capitulos: list, vista: str, genero: str, subs: list, autor: str = "", vecinos: list | None = None) -> str:
+    """El prompt con el que se pregunta el subgénero (o los subgéneros) de un libro ya clasificado en `genero`; `subs` = [(id, nombre, frase_es, frase_en)]."""
     ids = [x[0] for x in subs]
     lista = "\n".join(f"- {x[0]}: {x[1]} ({x[2]})" for x in subs)
     caps = "; ".join((c["titulo"] if isinstance(c, dict) else str(c)) for c in capitulos[:8]) or "(sin índice)"
-    ej = "".join(f'- «{v["titulo"]}»{" de " + v["autor"] if v["autor"] else ""} → {v["subgenero"]}\n' for v in (vecinos or []) if v.get("subgenero") in ids)
+    ej = "".join(f'- «{v["titulo"]}»{" de " + v["autor"] if v["autor"] else ""} → {", ".join([v["subgenero"]] + [x for x in v.get("subgeneros", []) if x in ids and x != v["subgenero"]])}\n' for v in (vecinos or []) if v.get("subgenero") in ids)
     ej = f"Libros parecidos que el usuario ya clasificó:\n{ej}\n" if ej else ""
-    prompt = (f"Eres bibliotecario. El libro es de género «{genero}». Elige el subgénero que mejor lo describe.\nSubgéneros:\n{lista}\n\n{ej}"
-              f"Libro: «{titulo}»{' de ' + autor if autor else ''}. Capítulos o partes: {caps}. Texto: {vista[:1100]}\n\n"
-              'Responde solo con JSON: {"subgenero": "<id>", "motivo": "<una frase corta>"}.')
-    esquema = {"type": "object", "properties": {"subgenero": {"type": "string", "enum": ids}, "motivo": {"type": "string"}}, "required": ["subgenero", "motivo"]}
-    try:
-        r = _http(a["url"] + "/api/chat", {"model": a["modelo"], "stream": False, "format": esquema, "options": {"temperature": 0, "num_predict": 80, "num_ctx": 2048},
-                                           "messages": [{"role": "user", "content": prompt}]})
-        j = json.loads(re.sub(r"^```(?:json)?|```$", "", r["message"]["content"].strip()))
-        return j["subgenero"] if j.get("subgenero") in ids else None
-    except Exception:
-        return None
+    return (f"Eres bibliotecario. El libro es de género «{genero}». Elige el subgénero que mejor lo describe y, solo si de verdad encaja en otro más, añade uno o dos (máximo {MAXIMO}, el principal primero).\n"
+            f"Subgéneros:\n{lista}\n\n{ej}Libro: «{titulo}»{' de ' + autor if autor else ''}. Capítulos o partes: {caps}. Texto: {vista[:1100]}\n\n"
+            'Responde solo con JSON: {"subgeneros": ["<id principal>", "<id opcional>"], "motivo": "<una frase corta>"}.')
+
+
+def subgeneros(titulo: str, capitulos: list, vista: str, genero: str, subs: list, autor: str = "", carpeta: Path | str = CARPETA, vecinos: list | None = None) -> list[str]:
+    """Ids de subgénero (de `subs` = [(id, nombre, frase_es, frase_en)]) que elige el LLM para un libro ya clasificado en `genero`, el principal primero y hasta MAXIMO; [] si no está disponible o responde algo inválido."""
+    if not disponible(carpeta):
+        return []
+    ids = [x[0] for x in subs]
+    esquema = {"type": "object", "properties": {"subgeneros": {"type": "array", "items": {"type": "string", "enum": ids}, "minItems": 1, "maxItems": MAXIMO}, "motivo": {"type": "string"}}, "required": ["subgeneros", "motivo"]}
+    j = _pedir(ajustes(carpeta), prompt_subgeneros(titulo, capitulos, vista, genero, subs, autor, vecinos), esquema)
+    return _ids(j, "subgeneros", "subgenero", ids) if j else []
+
+
+def subgenero(titulo: str, capitulos: list, vista: str, genero: str, subs: list, autor: str = "", carpeta: Path | str = CARPETA, vecinos: list | None = None) -> str | None:
+    """Id del subgénero principal que elige el LLM (el primero de `subgeneros`), o None."""
+    return next(iter(subgeneros(titulo, capitulos, vista, genero, subs, autor, carpeta, vecinos)), None)
 :::END
 :::BEGIN py/conocimiento/taxonomia.py|text
 """Taxonomía de la biblioteca: género (nivel 1) › subgénero (nivel 2). Cada subgénero lleva una frase en español y otra en inglés: con ellas el clasificador por parecido
@@ -34013,6 +34269,388 @@ def test_importa_el_video_y_guarda_la_url(tmp_path, monkeypatch):
     meta = importar.leer_metadatos(tmp_path)
     assert list(meta.values())[0]["url"].startswith("https://www.youtube.com")
 :::END
+:::BEGIN py/tests/test_entrenador.py|text
+"""Herramientas para reentrenar el LLM con varias etiquetas: métricas, datos de entrenamiento, panel y exportación a Ollama (sin GPU: torch no se necesita para probarlas)."""
+import hashlib
+import importlib.util
+import json
+import sys
+import time
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+RAIZ = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(RAIZ / "py"))
+sys.path.insert(0, str(RAIZ / "herramientas"))
+sys.path.insert(0, str(RAIZ / "herramientas" / "entrenador"))
+from conocimiento import clasificador, importar  # noqa: E402
+import metricas_etiquetas as me  # noqa: E402
+
+
+def fila(g, pg, gs=None, pgs=None, s="", ps="", ss=None, pss=None):
+    return {"rel": g + pg, "g": g, "pg": pg, "s": s, "ps": ps, "gs": gs or [g], "pgs": pgs or [pg], "ss": ss if ss is not None else ([[g, s]] if s else []), "pss": pss if pss is not None else ([[pg, ps]] if ps else [])}
+
+
+def test_metricas_de_etiquetas_multiples():
+    filas = [fila("historia", "historia", pgs=["historia", "economia"]),                         # acierta y añade una de más
+             fila("novela", "ciencia", pgs=["ciencia", "novela"]),                                # el acierto top-1 falla pero la real está entre las predichas
+             fila("economia", "politica"),                                                        # falla del todo
+             fila("historia", "historia", gs=["historia", "economia"], pgs=["historia", "economia"])]    # dos reales, las dos predichas
+    m = me.metricas(filas)["genero"]
+    assert m["n"] == 4 and m["principal_en_conjunto"] == 3                                       # lo comparable con el acierto de antes
+    assert m["pred_media"] == pytest.approx(7 / 4) and m["real_media"] == pytest.approx(5 / 4) and m["de_mas"] == pytest.approx(.5)
+    assert m["precision"] == pytest.approx(4 / 7) and m["exhaustividad"] == pytest.approx(4 / 5)
+    assert m["exacto"] == pytest.approx(1 / 4) and 0 < m["jaccard"] < 1 and 0 <= m["f1_macro"] <= 1
+    lo, hi = m["ic_principal"]
+    assert lo < 3 / 4 < hi
+    em = me.etiquetas_multiples(filas)
+    assert em["reales_multiples"] == 1 and em["predichas_multiples"] == 3 and em["coocurrencia"][("economia", "historia")] == 2
+
+
+def test_las_filas_antiguas_sin_conjuntos_se_leen_como_una_etiqueta():
+    f = {"rel": "a", "g": "historia", "pg": "historia", "s": "antigua", "ps": "medieval"}           # un resultado anterior a la 1.13
+    c = me.conjuntos(f)
+    assert c["g"] == {"historia"} and c["pg"] == {"historia"} and c["s"] == {("historia", "antigua")} and c["ps"] == {("historia", "medieval")}
+    assert me.metricas([f])["genero"]["principal_en_conjunto"] == 1 and me.metricas([f])["subgenero"]["principal_en_conjunto"] == 0
+
+
+def _embedder_falso(textos):
+    """Vectores deterministas (por palabras) y normalizados: textos parecidos dan vectores parecidos."""
+    out = []
+    for t in textos:
+        v = np.zeros(32)
+        for w in set(t.lower().split()):
+            v[int(hashlib.md5(w.encode()).hexdigest(), 16) % 32] += 1
+        out.append(v / (np.linalg.norm(v) or 1))
+    return np.array(out)
+
+
+@pytest.fixture
+def corpus(tmp_path, monkeypatch):
+    """Un corpus de juguete: 8 apuntes (uno con dos géneros) con su split, y un embedder falso."""
+    carpeta = tmp_path / "enes" / "corpus"
+    (carpeta / "biblioteca" / "libros").mkdir(parents=True)
+    temas = {"historia": "Roma antigua Julio César legiones república imperio Augusto", "economia": "mercados inflación política monetaria banca comercio crecimiento",
+             "novela": "novela personajes trama amor misterio aventura detective"}
+    meta = {}
+    for i in range(8):
+        g = ["historia", "economia", "novela"][i % 3]
+        rel = f"libros/obra{i}.md"
+        (carpeta / "biblioteca" / rel).write_text(f"# Obra {i}\n\n" + (temas[g] + " ") * 40, encoding="utf-8")
+        gs = [g, "economia"] if i == 0 else [g]
+        meta[rel] = {"titulo": f"Obra {i}", "galaxia": "libros", "genero": g, "subgenero": "antigua" if g == "historia" else "", "subtema": "General", "tipo": "apuntes", "hash": str(i), "origen": f"C:/x/Obra {i} - Autor Uno.md",
+                     "capitulos": [{"titulo": "Uno", "pagina": 1}], "generos": [{"id": x, "peso": 1.0} for x in gs]}
+    (carpeta / "biblioteca" / "metadatos.json").write_text(json.dumps(meta), encoding="utf-8")
+    (tmp_path / "enes" / "split.json").write_text(json.dumps({"prueba": ["libros/obra7.md"], "entrenamiento": sorted(meta)[:-1]}), encoding="utf-8")
+    monkeypatch.setattr(clasificador, "_embedder", lambda nombre, carpeta=None: _embedder_falso)
+    return tmp_path
+
+
+def test_construir_datos_genera_ejemplos_con_el_prompt_real_y_varias_etiquetas(corpus, monkeypatch):
+    import construir_datos as cd
+    monkeypatch.setattr(sys, "argv", ["construir_datos.py", str(corpus), "--val", "0.2", "--vecinos", "3"])
+    cd.main()
+    d = corpus / "enes" / "entrenamiento" / "datos"
+    train = [json.loads(x) for x in (d / "train.jsonl").read_text(encoding="utf-8").splitlines()]
+    val = [json.loads(x) for x in (d / "val.jsonl").read_text(encoding="utf-8").splitlines()]
+    res = json.loads((d / "resumen.json").read_text(encoding="utf-8"))
+    assert res["obras"] == 7 and res["con_varias_etiquetas"] == 1 and "obra7" not in json.dumps(train + val)       # la obra de prueba no entra
+    assert not {x["rel"] for x in train} & {x["rel"] for x in val}                                                   # la validación se parte por obra
+    g = [x for x in train + val if x["tarea"] == "genero"]
+    assert all(x["messages"][0]["role"] == "user" and x["messages"][1]["role"] == "assistant" for x in g)
+    multi = next(x for x in train + val if x["rel"] == "libros/obra0.md" and x["tarea"] == "genero")
+    assert json.loads(multi["messages"][1]["content"])["generos"] == ["historia", "economia"]                       # las dos etiquetas reales, la principal primero
+    assert "Obra 0" in multi["messages"][0]["content"] and "máximo 3" in multi["messages"][0]["content"]
+    assert "Obra 0" not in multi["messages"][0]["content"].split("Ahora este:")[0]                                  # el ejemplo no se enseña a sí mismo entre los vecinos
+    assert any(x["tarea"] == "subgenero" and json.loads(x["messages"][1]["content"])["subgeneros"] == ["antigua"] for x in train + val)
+    assert res["por_tarea"]["genero"] >= 1 and res["vecinos"] == 3
+
+
+def test_el_prompt_de_los_datos_es_el_mismo_que_usa_el_programa(corpus):
+    from conocimiento import llm
+    p = llm.prompt_generos("T", [], "texto", [], importar.GENEROS, "", [])
+    assert "Géneros:" in p and "Ejemplos resueltos" in p and p.rstrip().endswith("}.")                                # (construir_datos llama a esta misma función)
+    s = llm.prompt_subgeneros("T", [], "texto", "Historia", [("antigua", "Antigua", "roma", "rome")], "", [])
+    assert "antigua" in s and '"subgeneros"' in s
+
+
+def _cargar_panel(tmp, monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["panel_progreso.py", str(tmp)])
+    spec = importlib.util.spec_from_file_location("panel_test", RAIZ / "herramientas" / "panel_progreso.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def test_el_panel_lee_resultados_con_etiquetas_y_el_entrenamiento(tmp_path, monkeypatch):
+    res = tmp_path / "enes" / "resultados"; res.mkdir(parents=True)
+    filas = [dict(fila("historia", "historia", pgs=["historia", "economia"]), titulo="a", tipo="libro", metodo="llm", conf=.3, margen=.2, msub=None, revisar=False, seg=1.0) for _ in range(5)]
+    (res / "v1.json").write_text(json.dumps({"nombre": "v1", "sets": [], "llm": True, "modelo_llm": "qwen2.5:7b", "filas": filas, "hilos": 1}), encoding="utf-8")
+    (res / "v0.json").write_text(json.dumps({"nombre": "v0", "sets": [], "llm": False, "modelo_llm": "", "filas": [{k: v for k, v in x.items() if k not in ("gs", "pgs", "ss", "pss")} for x in filas], "hilos": 1}), encoding="utf-8")
+    ent = tmp_path / "enes" / "entrenamiento"
+    (ent / "datos").mkdir(parents=True); (ent / "ft1").mkdir()
+    (ent / "datos" / "resumen.json").write_text(json.dumps({"obras": 7}), encoding="utf-8")
+    (ent / "ft1" / "estado.json").write_text(json.dumps({"fase": "entrenando", "paso": 3, "pasos_total": 10, "t": time.time()}), encoding="utf-8")
+    (ent / "ft1" / "registro.jsonl").write_text("\n".join(json.dumps(x) for x in [{"tipo": "paso", "paso": 1, "loss": 1.2, "vram_mb": 5000}, {"tipo": "eval", "paso": 1, "eval_loss": 1.3}, {"tipo": "paso", "paso": 2, "loss": 1.0, "vram_mb": 5100}]), encoding="utf-8")
+    p = _cargar_panel(tmp_path, monkeypatch)
+    et = p.etiquetas_res()
+    assert [e["nombre"] for e in et] == ["v1"]                                                       # el resultado antiguo (sin conjuntos) no aparece en este cuadro
+    assert et[0]["genero"]["principal_en_conjunto"] == 5 and et[0]["hist"] == {2: 5} and et[0]["pares"][0][:2] == ["economia", "historia"]
+    en = p.entrenamiento()
+    assert en["datos"]["obras"] == 7 and en["runs"][0]["nombre"] == "ft1" and en["runs"][0]["pasos"] == [[1, 1.2], [2, 1.0]] and en["runs"][0]["evals"] == [[1, 1.3]] and en["runs"][0]["estado"]["activo"]
+    json.dumps({"etiquetas": et, "entrenamiento": en})                                              # lo que sirve el panel tiene que poder serializarse
+
+
+def test_exportar_ollama_funde_convierte_y_crea_el_modelo_con_la_plantilla_del_base(tmp_path, monkeypatch):
+    import exportar_ollama as ex
+    (tmp_path / "adaptador").mkdir()
+    (tmp_path / "adaptador" / "adapter_model.safetensors").write_bytes(b"x")
+    (tmp_path / "estado.json").write_text(json.dumps({"modelo": "Qwen/Qwen2.5-3B-Instruct"}), encoding="utf-8")
+    conv = tmp_path / "convert_hf_to_gguf.py"
+    conv.write_text("", encoding="utf-8")
+    llamadas = []
+
+    class R:
+        def __init__(self, out=""):
+            self.returncode, self.stdout, self.stderr = 0, out, ""
+
+    def falso(cmd, **k):
+        llamadas.append(cmd)
+        if cmd[1:3] == ["show", "--modelfile"]:
+            return R("\n".join(['# Modelfile generated', 'FROM C:/blobs/sha256-abc', 'TEMPLATE """{{ .Prompt }}"""', 'PARAMETER stop "<|im_end|>"', 'PARAMETER temperature 0.7', '']))
+        if str(conv) in cmd:
+            Path(cmd[cmd.index("--outfile") + 1]).write_bytes(b"gguf")
+        return R()
+    monkeypatch.setattr(ex.subprocess, "run", falso)
+    monkeypatch.setattr(ex, "fusionar", lambda ad, base, dest: (dest.mkdir(), (dest / "model.safetensors").write_bytes(b"w")))
+    monkeypatch.setattr(sys, "argv", ["exportar_ollama.py", str(tmp_path), "--nombre", "mi-clasificador", "--convertidor", str(conv)])
+    ex.main()
+    mf = (tmp_path / "Modelfile").read_text(encoding="utf-8")
+    assert "FROM C:/blobs" not in mf and "modelo-q8_0.gguf" in mf and "TEMPLATE" in mf and 'PARAMETER stop "<|im_end|>"' in mf       # la plantilla y la parada son las del base de Ollama
+    assert mf.count("temperature") == 1 and mf.rstrip().endswith("PARAMETER temperature 0")
+    assert [c[1] for c in llamadas if c[0].endswith("ollama") or "ollama" in c[0].lower()][-1] == "create" and "mi-clasificador" in llamadas[-1]
+    assert any(c[1:3] == ["show", "--modelfile"] and c[3] == "qwen2.5:3b" for c in llamadas)                                    # el base de Ollama sale del modelo con el que se entrenó
+
+
+def test_exportar_sin_convertidor_explica_que_hacer(tmp_path, monkeypatch):
+    import exportar_ollama as ex
+    (tmp_path / "adaptador").mkdir()
+    (tmp_path / "adaptador" / "adapter_model.safetensors").write_bytes(b"x")
+    monkeypatch.setattr(ex, "fusionar", lambda ad, base, dest: (dest.mkdir(), (dest / "model.safetensors").write_bytes(b"w")))
+    monkeypatch.setattr(sys, "argv", ["exportar_ollama.py", str(tmp_path), "--convertidor", str(tmp_path / "no_existe.py")])
+    with pytest.raises(SystemExit) as e:
+        ex.main()
+    assert "convert_hf_to_gguf.py" in str(e.value) and "fusionado" in str(e.value)
+
+
+def test_el_entrenamiento_usa_la_plantilla_de_ollama_sin_mensaje_de_sistema():
+    import entrenar
+    assert entrenar.formato_ollama("hola") == "<|im_start|>user\nhola<|im_end|>\n<|im_start|>assistant\n"
+
+
+def test_entrenar_sin_gpu_ni_librerias_falla_con_un_mensaje_claro(tmp_path, monkeypatch, capsys):
+    import entrenar
+    assert entrenar.opciones([])["modelo"] == "Qwen/Qwen2.5-3B-Instruct" and entrenar.opciones(["--epocas", "3", "--rango", "8"])["epocas"] == 3
+    monkeypatch.setitem(sys.modules, "torch", None)                                                  # como si torch no estuviera instalado
+    monkeypatch.setattr(sys, "argv", ["entrenar.py", str(tmp_path), str(tmp_path / "out")])
+    with pytest.raises(SystemExit) as e:
+        entrenar.main()
+    assert "Falta una librería" in str(e.value)
+
+
+def test_servidor_hf_habla_como_ollama_y_llm_py_lo_usa(tmp_path, monkeypatch):
+    """El servidor del modelo reentrenado responde a /api/tags y /api/chat con el formato de Ollama y recibe el prompt con la plantilla de entrenamiento."""
+    import threading
+    from http.server import ThreadingHTTPServer
+    import servidor_hf as sh
+    from conocimiento import llm
+    vistos = []
+
+    def generar(prompt, max_tokens):
+        vistos.append(prompt)
+        return json.dumps({"generos": ["historia", "economia"], "motivo": "x"})
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), sh.crear(generar, "arbol-ft"))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    url = f"http://localhost:{srv.server_address[1]}"
+    try:
+        monkeypatch.setattr(llm, "ACTIVO", True)
+        monkeypatch.setattr(llm, "URL", url)
+        monkeypatch.setattr(llm, "MODELO", "arbol-ft")
+        monkeypatch.delenv("ARBOL_LLM", raising=False)
+        llm._estado.clear()
+        assert llm.disponible(tmp_path)
+        r = llm.clasificar("Historia de la banca", [], "texto", [], importar.GENEROS, tmp_path)
+        assert r["generos"] == ["historia", "economia"] and r["genero"] == "historia"
+        assert vistos[0].startswith("<|im_start|>user\n") and vistos[0].endswith("<|im_start|>assistant\n") and "Historia de la banca" in vistos[0]
+    finally:
+        srv.shutdown()
+        llm._estado.clear()
+:::END
+:::BEGIN py/tests/test_etiquetas.py|text
+"""Varias etiquetas por obra: varios géneros y varios subgéneros (máximo 3 de cada), con peso; el principal manda sobre la carpeta, las correcciones y el orden."""
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conocimiento import etiquetas as et
+from conocimiento import importar as im
+from conocimiento import llm
+
+ROMA = "Roma antigua: Julio César, la república romana, las legiones, Augusto y el imperio. Alejandro Magno y Grecia clásica. " * 6
+ECO = "Economía: mercados, oferta y demanda, inflación, política monetaria, crecimiento, banca central y comercio internacional. " * 6
+
+
+def test_elegir_pone_primero_al_principal_y_anade_los_que_empatan():
+    p = {"historia": .60, "economia": .55, "novela": .20, "otro": .59}
+    assert [g for g, _ in et.elegir(p, 1.0, .15)] == ["historia", "economia"]                      # «otro» nunca es secundaria; novela queda lejos
+    assert et.elegir(p, 1.0, .15, principal="economia")[0] == ("economia", 1.0)                    # el principal forzado (p. ej. por el LLM) va primero
+    assert len(et.elegir({"a": 1, "b": 1, "c": 1, "d": 1}, 1.0, .5)) == et.MAXIMO                  # como mucho tres
+    assert et.elegir({"otro": 1.0, "historia": .99}, 1.0, .5) == [("otro", 1.0)]                    # lo que no encaja en nada no lleva otras etiquetas
+    pesos = dict(et.elegir({"a": 1.0, "b": 1.0, "c": .86}, 1.0, .15))
+    assert pesos["b"] == 1.0 and 0.5 <= pesos["c"] < 1.0                                           # más cerca del primero = más peso
+
+
+def test_lo_importado_sin_listas_se_lee_como_una_sola_etiqueta():
+    m = {"genero": "historia", "subgenero": "antigua"}
+    assert et.generos_de(m) == ["historia"] and et.subgeneros_de(m) == [("historia", "antigua")]
+    m2 = {"genero": "historia", "generos": [{"id": "economia", "peso": .7}, {"id": "historia", "peso": 1}], "subgenero": "antigua", "subgeneros": [{"genero": "economia", "id": "macro", "peso": .7}]}
+    assert et.generos_de(m2) == ["historia", "economia"] and et.subgeneros_de(m2) == [("historia", "antigua"), ("economia", "macro")]    # el principal siempre primero
+
+
+def test_poner_mantiene_coherentes_las_listas_y_las_etiquetas_principales():
+    m = et.poner({}, [("economia", 1), ("historia", .8), "economia", "ciencia", "arte"], [("economia", "macro"), ("ciencia", "fisica"), ("novela", "x"), ("historia", "antigua", .6)])
+    assert [e["id"] for e in m["generos"]] == ["economia", "historia", "ciencia"] and m["genero"] == "economia"          # sin repetidos, máximo 3
+    assert [(e["genero"], e["id"]) for e in m["subgeneros"]] == [("economia", "macro"), ("ciencia", "fisica"), ("historia", "antigua")] and m["subgenero"] == "macro"   # (novela no es uno de sus géneros)
+    assert et.jaccard({"a", "b"}, {"b", "c"}) == pytest.approx(1 / 3) and et.jaccard([], []) == 1.0
+
+
+@pytest.fixture
+def ollama_multi(monkeypatch):
+    """Un Ollama falso que responde con dos géneros y dos subgéneros."""
+    def http(url, datos=None, espera=0):
+        esquema = (datos or {}).get("format", {}).get("properties", {})
+        if "subgeneros" in esquema:
+            ids = esquema["subgeneros"]["items"]["enum"]
+            return {"message": {"content": json.dumps({"subgeneros": [x for x in ("antigua", "macro") if x in ids][:2] or ids[:1], "motivo": "x"})}}
+        return {"message": {"content": json.dumps({"generos": ["historia", "economia", "inventado"], "motivo": "trata de las dos cosas"})}}
+    monkeypatch.setattr(llm, "ACTIVO", True)
+    monkeypatch.setattr(llm, "disponible", lambda carpeta=None: True)
+    monkeypatch.setattr(llm, "_http", http)
+
+
+def test_llm_devuelve_varios_generos_y_acepta_el_formato_antiguo(ollama_multi, monkeypatch, tmp_path):
+    r = llm.clasificar("Historia de la banca", [], "texto", [], im.GENEROS, tmp_path)
+    assert r["genero"] == "historia" and r["generos"] == ["historia", "economia"]                  # el que se inventa se ignora
+    monkeypatch.setattr(llm, "_http", lambda *a, **k: {"message": {"content": '{"genero": "novela", "motivo": "x"}'}})
+    assert llm.clasificar("t", [], "", [], im.GENEROS, tmp_path)["generos"] == ["novela"]          # respuesta con el formato de antes
+    monkeypatch.setattr(llm, "_http", lambda *a, **k: {"message": {"content": '{"generos": ["inventado", "novela"], "motivo": "x"}'}})
+    assert llm.clasificar("t", [], "", [], im.GENEROS, tmp_path) is None                           # si el principal no vale, no se fía de la respuesta
+    subs = [("antigua", "Antigua", "roma", "rome"), ("macro", "Macro", "pib", "gdp"), ("otra", "Otra", "x", "y")]
+    monkeypatch.setattr(llm, "_http", lambda *a, **k: {"message": {"content": '{"subgeneros": ["macro", "antigua", "macro"], "motivo": "x"}'}})
+    assert llm.subgeneros("t", [], "", "Historia", subs, "", tmp_path) == ["macro", "antigua"] and llm.subgenero("t", [], "", "Historia", subs, "", tmp_path) == "macro"
+
+
+def test_el_prompt_enseña_que_se_puede_poner_mas_de_un_genero():
+    p = llm.prompt_generos("T", [], "texto", [], {"historia": "H", "economia": "E"}, "", [{"titulo": "Otro", "autor": "", "genero": "historia", "generos": ["historia", "economia"]}])
+    assert '"generos": ["historia", "economia"]' in p and "máximo 3" in p
+
+
+def _epub(ruta: Path, texto: str):
+    import zipfile
+    with zipfile.ZipFile(ruta, "w") as z:
+        z.writestr("mimetype", "application/epub+zip"); z.writestr("c.xhtml", "<p>" + texto + "</p>")
+
+
+def test_clasificar_con_llm_lleva_varios_generos_y_sus_subgeneros(ollama_multi, tmp_path):
+    _epub(tmp_path / "Historia de la banca - Autor Ejemplo.epub", ROMA + ECO)
+    a = im.clasificar(tmp_path / "Historia de la banca - Autor Ejemplo.epub", tmp_path)
+    assert a["genero"] == "historia" and a["metodo"] == "llm"
+    assert [g["id"] for g in a["etiquetas"]["generos"]] == ["historia", "economia"] and a["etiquetas"]["generos"][0]["peso"] == 1.0
+    sub = {(s["genero"], s["id"]) for s in a["etiquetas"]["subgeneros"]}
+    assert ("historia", "antigua") in sub and ("economia", "macro") in sub and "también" in a["motivo"]
+
+
+def test_importar_guarda_las_listas_y_la_carpeta_es_la_del_principal(ollama_multi, tmp_path):
+    o = tmp_path / "o"; o.mkdir()
+    _epub(o / "Historia de la banca - Autor Ejemplo.epub", ROMA + ECO)
+    k = tmp_path / "k"
+    r = im.importar([o / "Historia de la banca - Autor Ejemplo.epub"], k, db=tmp_path / "i.db")[0]
+    assert r["estado"] == "ok" and [g["id"] for g in r["generos"]] == ["historia", "economia"]
+    assert "Historia" in Path(r["destino"]).parts and "Economia_y_finanzas" not in Path(r["destino"]).parts       # el archivo vive en la carpeta del género principal
+    rel = next(iter(im.leer_metadatos(k)))
+    m = im.leer_metadatos(k)[rel]
+    assert et.generos_de(m) == ["historia", "economia"] and m["genero"] == "historia" and m["propuesta"]["generos"] == ["historia", "economia"]
+    f = im.listar(k)[0]
+    assert [g["nombre"] for g in f["generos"]] == [im.GENEROS["historia"], im.GENEROS["economia"]] and f["subgeneros"]
+
+
+def test_fijar_a_mano_los_generos_manda_sobre_lo_automatico(ollama_multi, tmp_path):
+    o = tmp_path / "o"; o.mkdir()
+    _epub(o / "Historia de la banca - Autor Ejemplo.epub", ROMA + ECO)
+    k = tmp_path / "k"
+    im.importar([{"ruta": o / "Historia de la banca - Autor Ejemplo.epub", "generos": ["economia", "politica"]}], k, db=tmp_path / "i.db")
+    m = next(iter(im.leer_metadatos(k).values()))
+    assert et.generos_de(m)[:2] == ["economia", "politica"] and m["genero"] == "economia"      # lo que eliges tú va primero; lo que no pediste no se queda
+
+
+def test_editar_cambia_las_etiquetas_y_valida(tmp_path):
+    (tmp_path / "biblioteca").mkdir()
+    meta = {"libros/a.epub": {"titulo": "A", "galaxia": "libros", "genero": "historia", "subgenero": "antigua", "subtema": "General", "tipo": "libro", "hash": "1",
+                              "generos": [{"id": "historia", "peso": 1}, {"id": "economia", "peso": .8}], "subgeneros": [{"genero": "historia", "id": "antigua", "peso": 1}, {"genero": "economia", "id": "macro", "peso": .8}]}}
+    (tmp_path / "biblioteca" / "metadatos.json").write_text(json.dumps(meta), encoding="utf-8")
+    db = tmp_path / "i.db"
+    f = im.editar("libros/a.epub", {"generos": ["economia", "historia", "ciencia"]}, tmp_path, db)
+    assert [g["id"] for g in f["generos"]] == ["economia", "historia", "ciencia"] and f["genero"] == "economia" and f["subgenero"] == "macro"     # el principal cambia y su subgénero sale de las listas
+    f = im.editar("libros/a.epub", {"subgeneros": ["economia/micro", "historia/antigua", "novela/fantasia"]}, tmp_path, db)
+    assert [(s["genero"], s["id"]) for s in f["subgeneros"]] == [("economia", "micro"), ("historia", "antigua")] and f["subgenero"] == "micro"       # novela no es uno de sus géneros
+    f = im.editar("libros/a.epub", {"genero": "ciencia"}, tmp_path, db)
+    assert f["genero"] == "ciencia" and [g["id"] for g in f["generos"]][0] == "ciencia" and "economia" not in [g["id"] for g in f["generos"]] and "historia" in [g["id"] for g in f["generos"]]    # el principal antiguo se descarta; las demás se quedan
+    with pytest.raises(ValueError):
+        im.editar("libros/a.epub", {"generos": ["economia", "no_existe"]}, tmp_path, db)
+    with pytest.raises(ValueError):
+        im.editar("libros/a.epub", {"generos": []}, tmp_path, db)
+
+
+def test_la_busqueda_por_genero_encuentra_tambien_las_etiquetas_secundarias(tmp_path):
+    from conocimiento import indexar, buscar
+    (tmp_path / "biblioteca" / "libros").mkdir(parents=True)
+    (tmp_path / "biblioteca" / "libros" / "a.md").write_text("# Banca\n\nla banca medieval en Florencia y la economia de los mercados " * 3, encoding="utf-8")
+    meta = {"libros/a.md": {"titulo": "Banca", "galaxia": "libros", "genero": "historia", "subgenero": "", "subtema": "General", "tipo": "apuntes", "hash": "1", "generos": [{"id": "historia", "peso": 1}, {"id": "economia", "peso": .9}]}}
+    (tmp_path / "biblioteca" / "metadatos.json").write_text(json.dumps(meta), encoding="utf-8")
+    db = tmp_path / "i.db"
+    indexar(db, {}, carpeta=tmp_path)
+    import conocimiento
+    conocimiento.CARPETA, antes = tmp_path, conocimiento.CARPETA
+    try:
+        assert buscar("banca florencia", db=db, genero="historia") and buscar("banca florencia", db=db, genero="economia") and not buscar("banca florencia", db=db, genero="novela")
+    finally:
+        conocimiento.CARPETA = antes
+
+
+def test_un_empate_entre_generos_ya_no_es_una_duda_si_los_dos_son_etiquetas():
+    empate = {"puntos": {"novela": 0.50, "historia": 0.49}, "confianza": 0.01, "genero": "novela"}
+    args = ({"novela": 1, "historia": 1}, empate, None, "novela", None, None, "x" * 500, "libro", False)
+    assert any("poco claro" in m for m in im._seguridad(*args)[2])
+    assert not any("poco claro" in m for m in im._seguridad(*args, ("historia",))[2])             # pero si «historia» ya es una de sus etiquetas, no hay nada que revisar
+
+
+def test_las_ramas_del_mapa_llevan_la_obra_en_cada_genero(monkeypatch, tmp_path):
+    import construir_visor as cv
+    (tmp_path / "biblioteca").mkdir()
+    meta = {"libros/a.epub": {"titulo": "Historia de la banca", "galaxia": "libros", "genero": "historia", "subgenero": "antigua", "subtema": "General", "tipo": "libro", "hash": "1", "paginas": 10,
+                              "capitulos": [{"titulo": "Uno", "pagina": 1}], "generos": [{"id": "historia", "peso": 1}, {"id": "economia", "peso": .8}]}}
+    (tmp_path / "biblioteca" / "metadatos.json").write_text(json.dumps(meta), encoding="utf-8")
+    monkeypatch.setenv("ARBOL_CONOCIMIENTO", str(tmp_path))
+    ramas = {r["id"]: r for r in cv.ramas_biblioteca()}
+    assert {"gen_historia", "gen_economia"} <= set(ramas)
+    assert ramas["gen_economia"]["modulos"][0]["nombre"] == "Historia de la banca" and "también en" in ramas["gen_economia"]["modulos"][0]["desc"]
+    assert ramas["gen_economia"]["modulos"][0]["items"][0]["id"] != ramas["gen_historia"]["modulos"][0]["items"][0]["id"]       # ids distintos: cada copia es su propio punto
+:::END
 :::BEGIN py/tests/test_extras_010.py|text
 """Funciones añadidas en 0.10 a ramas existentes: regresión, interpretación, aplicabilidad, multinivel, diccionario,
 multivariante, no supervisado, IA generativa y BDT."""
@@ -39364,6 +40002,10 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 .imp-bar{display:grid;grid-template-columns:minmax(80px,1.4fr) 1fr 28px;gap:6px;align-items:center;margin:2px 0;font-size:12px;cursor:pointer;border-radius:5px;padding:1px 3px}
 .imp-bar:hover,.imp-bar.sel{background:#16213f} .imp-bar.sel{outline:1px solid #6fa2ff}
 .imp-bar i{display:block;height:6px;border-radius:3px;background:#3b5bb5} .imp-bar em{font-style:normal;color:#8ea0c0;text-align:right}
+.et-chips{display:flex;flex-wrap:wrap;gap:5px;margin:3px 0 6px} .et-chip{padding:2px 9px;border-radius:999px;background:#0f1730;border:1px solid #26335a;color:#8ea0c0;font-size:11.5px;cursor:pointer;font-family:inherit}
+.et-chip:hover{border-color:#6fa2ff;color:#dfe8ff} .et-chip.on{background:#16264f;border-color:#4f7be0;color:#dfe8ff} .et-chip.pri{background:#274a9a;border-color:#8fb2ff;color:#fff;font-weight:600}
+.et-chip.sub.on{background:#2a1e4a;border-color:#8a6ae0} .et-chip.sub.pri{background:#4b2d96;border-color:#b9a0ff}
+.bib-et{grid-column:1/-1;font-size:12px;color:#8ea0c0} .bib-et select{font-size:11.5px;padding:2px 4px;margin-left:4px}
 .imp-prev{font-style:italic;color:#9fb0cc;font-size:12px;line-height:1.45;margin:0}
 .imp-caps{margin:0;padding-left:16px;font-size:12px;color:#b9c7e4} .imp-nota{font-size:11.5px;color:#8ea0c0;margin:4px 0 0}
 .imp-res{display:flex;gap:8px;align-items:baseline;padding:6px 8px;border-radius:8px;background:rgba(14,20,38,.6);font-size:13px}
@@ -40292,8 +40934,8 @@ function salaFicha(a, activa) {
   var d = e.decision;
   if (d && d.estado === 'fin') {
     var col = GAL[d.galaxia] ? 'rgb(' + GAL[d.galaxia].color.join(',') + ')' : '#9fb0cc';
-    h += '<div class="sala-final"><span style="border-color:' + col + ';color:' + col + '">' + esc(impNom(imp.opciones ? imp.opciones.galaxias : GALAXIAS, d.galaxia)) + '</span><span>' + esc(d.genero_nombre) + '</span>' +
-      (d.subgenero_nombre ? '<span>' + esc(d.subgenero_nombre) + '</span>' : '') + '<span>' + esc(d.tipo) + '</span><span title="' + esc(d.motivo) + '">por ' + esc(d.metodo) + '</span></div>';
+    h += '<div class="sala-final"><span style="border-color:' + col + ';color:' + col + '">' + esc(impNom(imp.opciones ? imp.opciones.galaxias : GALAXIAS, d.galaxia)) + '</span>' + (d.etiquetas_generos && d.etiquetas_generos.length ? d.etiquetas_generos.map(function (g, k) { return '<span title="' + (k ? 'Género secundario (peso ' + g.peso + ')' : 'Género principal') + '">' + (k ? '' : '★ ') + esc(g.nombre) + (k ? ' · ' + g.peso : '') + '</span>'; }).join('') : '<span>' + esc(d.genero_nombre) + '</span>') +
+      (d.etiquetas_subgeneros && d.etiquetas_subgeneros.length ? d.etiquetas_subgeneros.map(function (g, k) { return '<span title="Subgénero' + (k ? ' secundario' : '') + '">' + esc(g.nombre) + '</span>'; }).join('') : d.subgenero_nombre ? '<span>' + esc(d.subgenero_nombre) + '</span>' : '') + '<span>' + esc(d.tipo) + '</span><span title="' + esc(d.motivo) + '">por ' + esc(d.metodo) + '</span></div>';
   }
   return h + '</div>';
 }
@@ -40304,7 +40946,7 @@ function salaRender(v) {
   v.archivos.forEach(function (a, k) {
     if (a.estado === 'listo' && k !== v.actual && v.fase !== 'fin') {          /* los ya clasificados se resumen en una línea */
       var d = (a.etapas || {}).decision || {};
-      h += '<div class="sala-mini"><span>✓</span><b>' + esc(recorta(a.nombre, 50)) + '</b><span>→ ' + esc(d.genero_nombre || '') + (d.subgenero_nombre ? ' › ' + esc(d.subgenero_nombre) : '') + '</span></div>';
+      h += '<div class="sala-mini"><span>✓</span><b>' + esc(recorta(a.nombre, 50)) + '</b><span>→ ' + esc((d.etiquetas_generos && d.etiquetas_generos.length ? d.etiquetas_generos.map(function (g) { return g.nombre; }).join(' + ') : d.genero_nombre) || '') + (d.subgenero_nombre ? ' › ' + esc(d.subgenero_nombre) : '') + '</span></div>';
     } else if (a.estado === 'trabajando' || (a.estado === 'listo' && k === v.actual) || a.estado === 'error') h += salaFicha(a, a.estado === 'trabajando');
     else if (a.estado === 'espera') h += '<div class="sala-mini"><span>○</span><span>' + esc(recorta(a.nombre, 60)) + ' · en cola</span></div>';
   });
@@ -40326,7 +40968,7 @@ async function impAnadir(rutas) {
       if (a0.estado === 'error' || !a0.resultado) { impAviso(a0.error || 'No se pudo clasificar ' + a0.nombre); continue; }
       var c = a0.resultado;
       imp.archivos.push({ruta: c.ruta, nombre: c.ruta.split(/[\\/]/).pop(), auto: c, titulo: c.titulo, galaxia: 'auto', genero: 'auto', subtema: '', tipo: 'auto', etiquetas: '',
-        subgenero: 'auto', incluir: !c.duplicado, abierto: imp.archivos.length === 0, estado: '', res: null});
+        subgenero: 'auto', generos: null, subgeneros: null, incluir: !c.duplicado, abierto: imp.archivos.length === 0, estado: '', res: null});
     }
   } while (st.fase !== 'fin' || hechos < st.archivos.length);
   agujero.ocupado(false); impAviso('');
@@ -40339,18 +40981,47 @@ function impOpt(lista, val, autoTxt) {
     lista.map(function (g) { return '<option value="' + esc(g.id) + '"' + (val === g.id ? ' selected' : '') + '>' + esc(g.nombre) + '</option>'; }).join('');
 }
 function impNom(lista, id) { return ((lista || []).filter(function (g) { return g.id === id; })[0] || {}).nombre || id; }
+/* varias etiquetas: chips que se encienden y se apagan; la primera encendida es la principal (★). Máximo 3 de cada tipo. */
+function etChips(opciones, activos, tipo) {
+  return '<div class="et-chips">' + opciones.map(function (x) {
+    var k = activos.indexOf(x.v), cl = 'et-chip' + (tipo === 'subgeneros' ? ' sub' : '') + (k >= 0 ? ' on' : '') + (k === 0 ? ' pri' : '');
+    return '<button type="button" class="' + cl + '" data-et="' + tipo + '" data-v="' + esc(x.v) + '" title="' + (k === 0 ? 'Principal' : k > 0 ? 'Secundaria: pulsa para quitarla' : 'Pulsa para añadirla (máximo 3)') + '">' + (k === 0 ? '★ ' : '') + esc(x.nombre) + '</button>';
+  }).join('') + '</div>';
+}
+function impEtGen(a) {                       /* ids de género de un archivo en importación: lo fijado a mano, o lo que propuso el clasificador (con el principal elegido en el desplegable primero) */
+  var c = a.auto, l = (a.generos || (c.etiquetas ? c.etiquetas.generos.map(function (x) { return x.id; }) : [c.genero])).slice();
+  if (a.genero !== 'auto') l = [a.genero].concat(l.filter(function (x) { return x !== a.genero; }));
+  return l.slice(0, 3);
+}
+function impEtSub(a) {                       /* «género/subgénero» de un archivo en importación */
+  var c = a.auto, l = a.subgeneros || (c.etiquetas ? c.etiquetas.subgeneros.map(function (x) { return x.genero + '/' + x.id; }) : []), g = impEtGen(a);
+  l = l.filter(function (x) { return g.indexOf(x.split('/')[0]) >= 0; });
+  if (a.subgenero !== 'auto') { var p = g[0] + '/' + a.subgenero; l = [p].concat(l.filter(function (x) { return x !== p; })); }
+  return l.slice(0, 3);
+}
+function impEtNombres(a, o) {                /* {v, nombre} de los géneros y subgéneros que se pueden encender: los activos y los candidatos del clasificador */
+  var c = a.auto, g = impEtGen(a), vistos = {}, gs = [], ss = [], nombresSub = {};
+  g.concat((c.generos || []).map(function (x) { return x.id; })).forEach(function (id) { if (!vistos[id]) { vistos[id] = 1; gs.push({v: id, nombre: impNom(o.generos, id)}); } });
+  ((c.etiquetas || {}).subgeneros || []).forEach(function (x) { nombresSub[x.genero + '/' + x.id] = x.nombre; });
+  (c.subgeneros || []).forEach(function (x) { nombresSub[c.genero + '/' + x.id] = x.nombre; });
+  Object.keys(o.subgeneros || {}).forEach(function (gg) { (o.subgeneros[gg] || []).forEach(function (x) { if (!nombresSub[gg + '/' + x.id]) nombresSub[gg + '/' + x.id] = x.nombre; }); });
+  var vs = {};
+  impEtSub(a).concat(Object.keys(nombresSub).filter(function (k) { return g.indexOf(k.split('/')[0]) >= 0 && ((c.subgeneros || []).some(function (x) { return c.genero + '/' + x.id === k; }) || ((c.etiquetas || {}).subgeneros || []).some(function (x) { return x.genero + '/' + x.id === k; })); })).forEach(function (k) {
+    if (!vs[k]) { vs[k] = 1; ss.push({v: k, nombre: (nombresSub[k] || k.split('/')[1]) + (g.length > 1 ? ' (' + impNom(o.generos, k.split('/')[0]) + ')' : '')}); } });
+  return {gs: gs, ss: ss};
+}
 function impBarras(items, nombreKey, valKey, sel, tipo) {
   var max = Math.max.apply(null, items.map(function (x) { return x[valKey]; }).concat([1]));
   return items.map(function (x) { var nom = x[nombreKey];
     return '<div class="imp-bar' + (sel === nom || sel === x.id ? ' sel' : '') + '" data-fija="' + tipo + '" data-v="' + esc(x.id || nom) + '" title="Pulsa para fijarlo"><span>' + esc(nom) + '</span><span><i style="width:' + Math.round(100 * x[valKey] / max) + '%"></i></span><em>' + x[valKey] + '</em></div>'; }).join('');
 }
 function impTarjeta(a, i, o) {
-  var c = a.auto, G = o.galaxias, ga = a.galaxia === 'auto' ? c.galaxia : a.galaxia, ge = a.genero === 'auto' ? c.genero : a.genero, ti = a.tipo === 'auto' ? c.tipo : a.tipo, su = a.subtema || c.subtema, sgs = (o.subgeneros || {})[ge] || [], sg = a.subgenero === 'auto' ? c.subgenero : a.subgenero, sgNom = (sgs.filter(function (x) { return x.id === sg; })[0] || {}).nombre || '';
+  var c = a.auto, G = o.galaxias, ga = a.galaxia === 'auto' ? c.galaxia : a.galaxia, ge = impEtGen(a)[0], ti = a.tipo === 'auto' ? c.tipo : a.tipo, su = a.subtema || c.subtema, sgs = (o.subgeneros || {})[ge] || [], sg = a.subgenero === 'auto' ? (impEtSub(a).filter(function (x) { return x.split('/')[0] === ge; })[0] || '/').split('/')[1] : a.subgenero, sgNom = (sgs.filter(function (x) { return x.id === sg; })[0] || {}).nombre || '', et = impEtNombres(a, o);
   var col = GAL[ga] ? 'rgb(' + GAL[ga].color.join(',') + ')' : '#9fb0cc';
   var h = '<div class="imp-card' + (a.incluir ? '' : ' off') + (a.estado === 'listo' ? ' listo' : a.estado === 'error' ? ' error' : '') + '" data-i="' + i + '"><div class="imp-cab">' +
     '<input type="checkbox" data-c="incluir"' + (a.incluir ? ' checked' : '') + ' title="Incluir en la importación">' +
     '<input type="text" data-c="titulo" value="' + esc(a.titulo) + '" title="' + esc(c.titulo_largo || a.nombre) + '">' +
-    '<div class="imp-ins"><span class="gal" style="color:' + col + '">' + esc(impNom(G, ga)) + '</span><span>' + esc(impNom(o.generos, ge)) + '</span>' + (sgNom ? '<span>' + esc(sgNom) + '</span>' : '') + '<span>' + esc(su) + '</span><span>' + esc(impNom(o.tipos, ti)) + '</span>' +
+    '<div class="imp-ins"><span class="gal" style="color:' + col + '">' + esc(impNom(G, ga)) + '</span>' + impEtGen(a).map(function (id, k) { return '<span title="' + (k ? 'Género secundario' : 'Género principal') + '">' + (k ? '' : '★ ') + esc(impNom(o.generos, id)) + '</span>'; }).join('') + impEtSub(a).map(function (v, k) { var n = et.ss.filter(function (x) { return x.v === v; })[0]; return '<span title="Subgénero' + (k ? ' secundario' : '') + '">' + esc(n ? n.nombre : v.split('/')[1]) + '</span>'; }).join('') + '<span>' + esc(su) + '</span><span>' + esc(impNom(o.tipos, ti)) + '</span>' +
     '<span>' + esc(c.extension.toUpperCase()) + ' · ' + fmtTam(c.tamano) + (c.paginas ? ' · ' + c.paginas + ' págs.' : '') + (c.idioma ? ' · ' + c.idioma : '') + '</span>' +
     (c.duplicado ? '<span class="aviso">ya importado</span>' : '') + '</div>' +
     '<span class="imp-est" style="color:' + (a.estado === 'error' ? '#ff8a73' : '#7be08a') + '">' + (a.estado === 'hecho' ? '' : '') + esc(a.estadoTxt || '') + '</span>' +
@@ -40362,7 +41033,9 @@ function impTarjeta(a, i, o) {
     '<label>Subtema<input type="text" data-c="subtema" list="impSub" placeholder="Automático (' + esc(c.subtema) + ')" value="' + esc(a.subtema) + '"></label>' +
     '<label>Tipo<select data-c="tipo">' + impOpt(o.tipos, a.tipo, 'Automático (' + impNom(o.tipos, c.tipo) + ')') + '</select></label>' +
     '<label style="grid-column:1/-1">Etiquetas (separadas por comas)<input type="text" data-c="etiquetas" placeholder="p. ej. regresión, tfm, repaso" value="' + esc(a.etiquetas) + '"></label></div>' +
-    '<div class="imp-det"><h4>Género más probable</h4>' + (c.generos.length ? impBarras(c.generos, 'nombre', 'puntos', a.genero === 'auto' ? c.genero : a.genero, 'genero') : '<p class="imp-nota">Sin pistas claras: «Otros».</p>') +
+    '<div class="imp-det"><h4>Etiquetas de la obra (hasta 3 géneros y 3 subgéneros)</h4><p class="imp-nota" style="margin:0">Géneros: la ★ es la principal (la carpeta del archivo); pulsa uno para añadirlo o quitarlo.</p>' + etChips(et.gs, impEtGen(a), 'generos') +
+    '<p class="imp-nota" style="margin:0">Subgéneros</p>' + (et.ss.length ? etChips(et.ss, impEtSub(a), 'subgeneros') : '<p class="imp-nota">Sin subgéneros para estos géneros.</p>') +
+    '<h4 style="margin-top:8px">Género más probable</h4>' + (c.generos.length ? impBarras(c.generos, 'nombre', 'puntos', ge, 'genero') : '<p class="imp-nota">Sin pistas claras: «Otros».</p>') +
     '<h4 style="margin-top:8px">Subgénero más probable</h4>' + ((c.subgeneros || []).length ? impBarras(c.subgeneros, 'nombre', 'puntos', sg, 'subgenero') : '<p class="imp-nota">Sin subgéneros para este género.</p>') +
     '<h4 style="margin-top:8px">Temas de estadística detectados</h4>' + (c.temas.length ? impBarras(c.temas, 'tema', 'puntos', su, 'subtema') : '<p class="imp-nota">Ninguno del catálogo.</p>') + '</div>' +
     '<div class="imp-det"><h4>Capítulos detectados (' + c.n_capitulos + ')</h4>' + (c.capitulos.length ? '<ol class="imp-caps">' + c.capitulos.map(function (x) { return '<li>' + esc(recorta(x, 60)) + '</li>'; }).join('') + (c.n_capitulos > c.capitulos.length ? '<li>… y ' + (c.n_capitulos - c.capitulos.length) + ' más</li>' : '') + '</ol>' : '<p class="imp-nota">Sin índice: se importará como un solo bloque.</p>') +
@@ -40405,7 +41078,7 @@ $('#impPanel').addEventListener('input', function (ev) {         /* texto: solo 
 });
 $('#impPanel').addEventListener('change', function (ev) {
   var f = ev.target.closest('.imp-card'), c = ev.target.dataset.c;
-  if (f && c) { var a = imp.archivos[+f.dataset.i]; a[c] = ev.target.type === 'checkbox' ? ev.target.checked : ev.target.value; if (c === 'genero') a.subgenero = 'auto'; impRender(); return; }
+  if (f && c) { var a = imp.archivos[+f.dataset.i]; a[c] = ev.target.type === 'checkbox' ? ev.target.checked : ev.target.value; if (c === 'genero') { a.subgenero = 'auto'; a.subgeneros = null; if (a.generos && a.genero !== 'auto') a.generos = [a.genero].concat(a.generos.filter(function (x) { return x !== a.genero; })).slice(0, 3); } impRender(); return; }
   if (ev.target.id === 'gModo') { imp.modo = ev.target.value; return; }
   var m = {gGal: 'galaxia', gGen: 'genero', gSub: 'subtema', gTipo: 'tipo', gEti: 'etiquetas'}[ev.target.id]; if (!m) return;       /* «Para todos» */
   imp.archivos.forEach(function (a) { a[m] = ev.target.value; }); var g = {gGal: $('#gGal').value, gGen: $('#gGen').value, gSub: $('#gSub').value, gTipo: $('#gTipo').value, gEti: $('#gEti').value}; impRender();
@@ -40415,7 +41088,14 @@ $('#impPanel').addEventListener('click', function (ev) {
   var f = ev.target.closest('.imp-card'), a = f ? imp.archivos[+f.dataset.i] : null;
   if (ev.target.closest('[data-q]') && a) { imp.archivos.splice(+f.dataset.i, 1); impRender(); }
   else if (ev.target.closest('[data-ab]') && a) { a.abierto = !a.abierto; impRender(); }
-  else if (ev.target.closest('[data-fija]') && a) { var b = ev.target.closest('[data-fija]'); a[b.dataset.fija] = b.dataset.v; if (b.dataset.fija === 'genero') a.subgenero = 'auto'; impRender(); }      /* pulsar una barra fija ese género o subtema */
+  else if (ev.target.closest('[data-et]') && a) {                                      /* encender o apagar una etiqueta (máximo 3; la primera es la principal) */
+    var be = ev.target.closest('[data-et]'), te = be.dataset.et, cur = (te === 'generos' ? impEtGen(a) : impEtSub(a)).slice(), ke = cur.indexOf(be.dataset.v);
+    if (ke >= 0) { if (te === 'generos' && cur.length === 1) return; cur.splice(ke, 1); } else if (cur.length < 3) cur.push(be.dataset.v); else return;
+    if (te === 'generos') { a.generos = cur; a.genero = 'auto'; a.subgenero = 'auto'; a.subgeneros = impEtSub(a).filter(function (x) { return cur.indexOf(x.split('/')[0]) >= 0; }); }
+    else { a.subgeneros = cur; a.subgenero = 'auto'; }
+    impRender();
+  }
+  else if (ev.target.closest('[data-fija]') && a) { var b = ev.target.closest('[data-fija]'); a[b.dataset.fija] = b.dataset.v; if (b.dataset.fija === 'genero') { a.subgenero = 'auto'; a.subgeneros = null; a.generos = a.generos ? [b.dataset.v].concat(a.generos.filter(function (x) { return x !== b.dataset.v; })).slice(0, 3) : null; } impRender(); }      /* pulsar una barra fija ese género o subtema */
   else if (ev.target.id === 'impMas') impElegir();
   else if (ev.target.id === 'impTodo') { var abrir = !imp.archivos.every(function (x) { return x.abierto; }); imp.archivos.forEach(function (x) { x.abierto = abrir; }); impRender(); }
   else if (ev.target.id === 'impGo') impImportar();
@@ -40427,7 +41107,7 @@ async function impImportar() {
   for (var k = 0; k < cola.length; k++) {                          /* de uno en uno; cada archivo se importa en segundo plano y aquí se ve su avance real (copiar, leer páginas, indexar) */
     var a = cola[k]; a.estado = 'trabajando'; a.estadoTxt = '⏳ 0%'; impRender();
     var ini = await api.importar_archivos([{ruta: a.ruta, titulo: a.titulo, galaxia: a.galaxia === 'auto' ? null : a.galaxia, genero: a.genero === 'auto' ? null : a.genero,
-      subtema: a.subtema || null, subgenero: a.subgenero === 'auto' ? null : a.subgenero, tipo: a.tipo === 'auto' ? null : a.tipo, etiquetas: a.etiquetas, modo: imp.modo}]), st = {fase: 'fin', resultado: {error: ini && ini.error}};
+      subtema: a.subtema || null, subgenero: a.subgenero === 'auto' ? null : a.subgenero, generos: a.generos || null, subgeneros: a.subgeneros || null, tipo: a.tipo === 'auto' ? null : a.tipo, etiquetas: a.etiquetas, modo: imp.modo}]), st = {fase: 'fin', resultado: {error: ini && ini.error}};
     if (!ini.error) do {
       await espera(350); st = await api.estado_trabajo();
       var fr = (k + Math.min(st.frac || 0, 1)) / cola.length; var bar = $('#impProg'); if (bar) bar.style.width = Math.round(100 * fr) + '%';
@@ -40516,8 +41196,25 @@ async function bibCargar() {
 function bibVista() {
   var f = norm(bib.filtro);
   return (bib.lista || []).filter(function (x) {
-    return (!bib.gal || x.galaxia === bib.gal) && (!bib.rev || x.revisar) && (!bib.desde || (x.fecha_hora || '').slice(0, 10) >= bib.desde) && (!f || norm([x.titulo, x.titulo_largo, x.genero, GENEROS_NOM[x.genero], x.subgenero_nombre, x.subtema, x.etiquetas, x.tipo, x.galaxia].join(' ')).indexOf(f) >= 0);
+    return (!bib.gal || x.galaxia === bib.gal) && (!bib.rev || x.revisar) && (!bib.desde || (x.fecha_hora || '').slice(0, 10) >= bib.desde) && (!f || norm([x.titulo, x.titulo_largo, x.genero, GENEROS_NOM[x.genero], (x.generos || []).map(function (g) { return g.nombre; }).join(' '), (x.subgeneros || []).map(function (g) { return g.nombre; }).join(' '), x.subgenero_nombre, x.subtema, x.etiquetas, x.tipo, x.galaxia].join(' ')).indexOf(f) >= 0);
   }).sort(function (a, b) { return bib.orden === 'gal' ? 0 : String(b.fecha_hora || '').localeCompare(String(a.fecha_hora || '')); });
+}
+function bibEtiquetasHtml(x, o) {                              /* géneros y subgéneros de la obra: los activos como chips (✕ quita; la ★ es la principal) y un desplegable para añadir */
+  var gs = (x.generos || []), ss = (x.subgeneros || []);
+  function chip(t, v, nombre, k) { return '<button type="button" class="et-chip on' + (t === 'subgeneros' ? ' sub' : '') + (k === 0 ? ' pri' : '') + '" data-a="quitar" data-t="' + t + '" data-v="' + esc(v) + '" title="Pulsa para quitarla">' + (k === 0 ? '★ ' : '') + esc(nombre) + ' ✕</button>'; }
+  var ya = {}; gs.forEach(function (g) { ya[g.id] = 1; });
+  var addG = gs.length < 3 ? '<select data-c="addgen"><option value="">+ género…</option>' + (o.generos || []).filter(function (g) { return !ya[g.id] && g.id !== 'otro'; }).map(function (g) { return '<option value="' + esc(g.id) + '">' + esc(g.nombre) + '</option>'; }).join('') + '</select>' : '';
+  var ys = {}; ss.forEach(function (s) { ys[s.genero + '/' + s.id] = 1; });
+  var addS = ss.length < 3 ? '<select data-c="addsub"><option value="">+ subgénero…</option>' + gs.map(function (g) { return '<optgroup label="' + esc(g.nombre) + '">' + ((o.subgeneros || {})[g.id] || []).filter(function (s) { return !ys[g.id + '/' + s.id]; }).map(function (s) { return '<option value="' + esc(g.id + '/' + s.id) + '">' + esc(s.nombre) + '</option>'; }).join('') + '</optgroup>'; }).join('') + '</select>' : '';
+  return '<div class="bib-et"><b>Géneros</b> <span class="et-chips" style="display:inline-flex">' + gs.map(function (g, k) { return chip('generos', g.id, g.nombre, k); }).join('') + '</span>' + addG +
+    ' &nbsp; <b>Subgéneros</b> <span class="et-chips" style="display:inline-flex">' + ss.map(function (s, k) { return chip('subgeneros', s.genero + '/' + s.id, s.nombre, k); }).join('') + '</span>' + addS + '</div>';
+}
+async function bibEtiquetas(card, tipo, lista) {
+  var cambios = {}; cambios[tipo] = lista;
+  var r = await impApi().biblioteca_editar(card.dataset.rel, cambios);
+  if (r.error) { bibMarca(card, '✗ ' + r.error); return; }
+  var i = bib.lista.findIndex(function (y) { return y.rel === r.rel; }); if (i >= 0) bib.lista[i] = r;
+  bib.sucio = true; $('#bibAplicar').hidden = false; bibRender();
 }
 function bibTarjeta(x) {
   var o = imp.opciones || {galaxias: GALAXIAS, generos: [], tipos: []}, nuevo = x.automatico ? '' : ' · ajustado por ti';
@@ -40530,7 +41227,7 @@ function bibTarjeta(x) {
     '<label>Tipo<select data-c="tipo">' + opts(o.tipos, x.tipo) + '</select></label>' +
     '<label>Subgénero<select data-c="subgenero"><option value="">—</option>' + opts((o.subgeneros || {})[x.genero] || [], x.subgenero) + '</select></label>' +
     '<label>Subtema<input type="text" data-c="subtema" list="impSub" value="' + esc(x.subtema) + '"></label>' +
-    '<label class="ancho">Etiquetas<input type="text" data-c="etiquetas" value="' + esc(x.etiquetas) + '" placeholder="separadas por comas"></label></div>' +
+    '<label class="ancho">Etiquetas<input type="text" data-c="etiquetas" value="' + esc(x.etiquetas) + '" placeholder="separadas por comas"></label>' + bibEtiquetasHtml(x, o) + '</div>' +
     '<div class="bib-acc"><button class="btn primario" data-a="abrir" type="button"' + (x.existe ? '' : ' disabled') + '>Abrir</button>' +
     '<button class="btn" data-a="recl" type="button" title="Vuelve a decidir galaxia, género y subtema según el contenido y tus correcciones anteriores">Reclasificar</button>' +
     '<button class="btn" data-a="borrar" type="button" style="' + (bib.borrando === x.rel ? 'background:#8a3a2c;color:#fff' : '') + '">' + (bib.borrando === x.rel ? '¿Seguro? Pulsa otra vez' : 'Borrar') + '</button><span class="bib-ok"></span></div>' +
@@ -40563,6 +41260,13 @@ $('#bibRev').addEventListener('change', function () { bib.rev = this.checked; bi
 $('#bibDesde').addEventListener('change', function () { bib.desde = this.value; bibRender(); });
 $('#biblioteca').addEventListener('change', async function (ev) {
   var card = ev.target.closest('.bib-card'), c = ev.target.dataset.c; if (!card || !c) return;
+  if (c === 'addgen' || c === 'addsub') {                                           /* añadir una etiqueta a la lista de la obra */
+    if (!ev.target.value) return;
+    var xx = bibFicha(card.dataset.rel);
+    if (c === 'addgen') bibEtiquetas(card, 'generos', xx.generos.map(function (g) { return g.id; }).concat([ev.target.value]));
+    else bibEtiquetas(card, 'subgeneros', xx.subgeneros.map(function (s) { return s.genero + '/' + s.id; }).concat([ev.target.value]));
+    return;
+  }
   var r = await impApi().biblioteca_editar(card.dataset.rel, (function () { var o = {}; o[c] = ev.target.value; return o; })());
   if (r.error) { bibMarca(card, '✗ ' + r.error); return; }
   var i = bib.lista.findIndex(function (x) { return x.rel === r.rel; }); if (i >= 0) bib.lista[i] = r;
@@ -40573,6 +41277,11 @@ $('#biblioteca').addEventListener('click', async function (ev) {
   if (ev.target.id === 'bibAplicar') { bibAplicar(); return; }
   var b = ev.target.closest('button[data-a]'), card = ev.target.closest('.bib-card'); if (!b || !card) return;
   var rel = card.dataset.rel, x = bibFicha(rel), a = impApi();
+  if (b.dataset.a === 'quitar') {                                                   /* quitar una etiqueta (siempre queda al menos un género) */
+    if (b.dataset.t === 'generos') { if (x.generos.length > 1) bibEtiquetas(card, 'generos', x.generos.map(function (g) { return g.id; }).filter(function (g) { return g !== b.dataset.v; })); else bibMarca(card, 'Debe quedar al menos un género'); }
+    else bibEtiquetas(card, 'subgeneros', x.subgeneros.map(function (s) { return s.genero + '/' + s.id; }).filter(function (s) { return s !== b.dataset.v; }));
+    return;
+  }
   if (b.dataset.a === 'abrir') a.abrir_fuente(x.ruta, '');
   else if (b.dataset.a === 'confirmar') { var rc = await a.biblioteca_confirmar(rel); if (rc.error) bibMarca(card, '✗ ' + rc.error); else { bib.lista[bib.lista.indexOf(x)] = rc; bibRender(); } }
   else if (b.dataset.a === 'recl') { var r = await a.biblioteca_reclasificar(rel); if (r.error) bibMarca(card, '✗ ' + r.error); else { bib.lista[bib.lista.indexOf(x)] = r; bib.sucio = true; bibRender(); } }
@@ -41274,7 +41983,7 @@ Arbol de la estadística/
 ├── teoria/                   guías de teoría, contrastes, tabla SAS ↔ Python
 ├── ejemplos/                 flujos completos de uso
 ├── assets/                   icono.ico / icono.png
-├── herramientas/             generar_instaladores.py, descargar_python.ps1, plantillas/
+├── herramientas/             generar_instaladores.py, descargar_python.ps1, plantillas/, entrenador/ (reentrenar el LLM: datos, QLoRA, exportar a Ollama), corpus/ + evaluar_corpus.py + panel_progreso.py (medir y ver el progreso)
 ├── instaladores/             "Arbol X.Y.Z - Instalador.bat" y "… - Actualizar.bat" (autoextraíbles)
 ├── anteriores/               copias de seguridad que hace el actualizador (py_anterior, estructura_plana)
 └── python/                   (opcional) Python propio descargado por el instalador si el equipo no tiene
@@ -41836,6 +42545,8 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 5o. **Clasificador por parecido (embeddings locales):** `py/conocimiento/clasificador.py`. El importador mezcla las reglas de palabras clave con el parecido del libro (título + capítulos + principio) a unas frases semilla por género y a lo que ya hay en tu biblioteca (lo que corregiste a mano pesa más); `decidir` suma parecido + cuota de las reglas × su seguridad, y si nada se parece (`MIN_PARECIDO`) respeta a las reglas. Corre en local con `fastembed` (ONNX, sin PyTorch; **opcional**: `pip install fastembed`; sin él o sin el modelo todo sigue con las reglas). Los modelos se guardan en `conocimiento/modelos/` (no se publican). Modelo por defecto `paraphrase-multilingual-MiniLM-L12-v2` (0,2 GB; sirve en un portátil de 8 GB); para otro, `conocimiento/ajustes.json` {"modelo_embeddings": "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"} o la variable ARBOL_MODELO. **Medido con `python herramientas/comparar_clasificadores.py`** (66 libros de prueba): reglas solas 42 %; con MiniLM 86 %, con mpnet 89 % (1 GB, algo más lento), con potion-multilingual-128M 82 %; ~0,1 s por libro una vez cargado el modelo. Al añadir géneros o frases semilla, vuelve a medir. El resultado de `clasificar` trae `metodo` (`reglas` | `parecido`) y el motivo lo explica. Tests: `tests/test_clasificador.py` (con un modelo falso; la suite desactiva el real).
 5v. **Cómo se mide y se entrena el clasificador (1.11.0):** `herramientas/evaluar_corpus.py CARPETA NOMBRE [--sin-llm] [--val] [--n N] [--hilos N] [--set modulo.ATRIBUTO=valor]` clasifica una muestra de PRUEBA (25 %, estratificada, semilla fija, `split.json`) con ejemplos solo de entrenamiento y guarda las predicciones en `resultados/`; `--val` reparte el entrenamiento otra vez (validación: ajustar parámetros sin mirar la prueba). `herramientas/estadisticas_clasificacion.py` da acierto con IC de Wilson, F1 macro, calibración, confusiones, cola de revisión y McNemar entre configuraciones; `herramientas/panel_progreso.py RAIZ` abre un panel en `localhost:8765` (progreso en vivo, gráfica por versión desde `enes/progreso.json`, GPU/VRAM/RAM). El corpus se monta con `herramientas/corpus/` (EPUB de Gutenberg en inglés y español con la etiqueta de su estantería, arXiv, código y datos de paquetes instalados) y NO se publica. `herramientas/evaluar_biblioteca.py` mide dejando uno fuera con tu biblioteca. **Medido sobre 232 obras de validación (inglés/español, 19 géneros):** 1.10.1 50 % género / 27 % subgénero → autor, licencia y capítulos limpios 53/28 → cabeza supervisada 67/36 → con cabeza en subgénero 68/39 → LLM 7b con ejemplos parecidos 75/42 (McNemar p = 0,005 en el género). mpnet no mejora a MiniLM; el LLM sin ejemplos parecidos no ayuda; «solo si hay duda» no cambia nada. Con libros nuevos (distribución distinta a la de tu biblioteca) el acierto real es mucho menor que el 94 % que daba dejando uno fuera con tus propios libros: **siempre mide con un conjunto separado.** `clasificador.PESO_CABEZA`/`PESO_CABEZA_SUB` (regresión logística sobre los embeddings de todos los ejemplos), `PESO_AUTOR`, `PESO_WIKI`, `llm.VECINOS`, `llm.ajustes()["siempre"]` y los umbrales `MARGEN_*` son los mandos; cualquier cambio de peso se valida con `--val` y se confirma con `--set` en la prueba. **Cifra final sobre el conjunto de PRUEBA (310 obras que no se usaron para decidir nada):** 1.10.1 53,2 % de género (IC 95 % 48-59) y 27,9 % de subgénero → 1.11.0 sin LLM 71,0 % / 38,9 % → 1.11.0 con LLM 7b y ejemplos parecidos **78,7 %** (IC 74-83) / 38,9 %; McNemar frente a 1.10.1: 15 contra 94 obras a favor, p < 0,001. El subgénero sigue siendo el punto débil (el LLM no lo mejora en la prueba). **Probado y descartado:** una «cabeza base» preentrenada con 1 089 obras (regresión logística sobre los embeddings, ~60 KB que viajarían con el programa) NO transfiere a tu biblioteca: con peso 0,5 sube el género 79 → 81 % pero baja el subgénero 56 → 52 %, y con más peso empeora (peso 2: 70/45); la cabeza propia con pocos libros también empeora (79 → 75 % con 73 obras), por eso `clasificador.fuerza` la apaga por debajo de 100 libros tuyos y la enciende del todo con 400. Mientras no haya un corpus moderno etiquetado (los de dominio público son de los siglos XIX-XX) lo que viaja con el programa son los pesos, las semillas y el LLM con ejemplos parecidos. Trampas ya vividas: la licencia de Gutenberg al principio del EPUB se leía como texto de la obra (`importar.sin_licencia`); los hilos de `evaluar_corpus` exigen el candado de `clasificador._candado`; `ARBOL_PY=otra/py` mide otra versión del código.
 5z. **Lectura del cuerpo y género «literatura» (1.12.0):** el modelo de embeddings (MiniLM) solo lee ~100 palabras, que en un libro suelen ser portada y licencia: `clasificador.vector_cuerpo` embebe 8 pasajes de 500 caracteres repartidos por el documento (`pasajes`) y su media se mezcla con el vector de título + capítulos + principio (`mezcla`, `PESO_CUERPO`); los libros importados guardan su vector en `conocimiento/biblioteca/vectores.npz` (por hash; no se publica) para servir de ejemplo con la misma representación (`_matriz`). Medido sin LLM en 232 obras de validación: género 68,1 → 74,6 % (McNemar p = 0,028), subgénero 41,4 → 46,6 %; en el experimento previo con solo una regresión logística, 63 → 73 %. `CUERPO = False` lo apaga. **Sin medir:** que el LLM vea también pasajes del cuerpo (`llm.PASAJES`, apagado por defecto; probar con `--set llm.PASAJES=3`) y el efecto exacto del cuerpo encima del LLM. **Género nuevo `literatura`** (poesía, teatro, cuentos, crítica; `arte` pierde la poesía y la crítica literaria): neutro en precisión (78,7 % → 78,7 % en las mismas 310 obras con el oro antiguo) y reconoce la literatura (35/50); a cambio roba algunas obras de ensayo, novela y viajes. Los pares de subgéneros que más se confunden (ingeniería de software ↔ programación, física ↔ química, guías ↔ relatos de viaje) son parecidos de verdad y varias etiquetas del corpus salen de categorías de arXiv mapeadas a ojo: no merece la pena retocar definiciones sin etiquetas mejores. `herramientas/panel_progreso.py --log fichero` enseña ese registro en vivo.
+5aa. **Varias etiquetas por obra (1.13.0):** una obra lleva hasta 3 géneros y hasta 3 subgéneros (`py/conocimiento/etiquetas.py`: `MAXIMO`, `DELTA`, `DELTA_SUB`, `elegir`, `poner`, `generos_de`, `subgeneros_de`). `metadatos.json` sigue teniendo `genero` y `subgenero` (la etiqueta PRINCIPAL: de ella dependen la carpeta del archivo `biblioteca/libros/<Género>/<Subgénero>/`, las correcciones y el orden) y añade `generos` = [{id, peso}] y `subgeneros` = [{genero, id, peso}] con la principal primero; lo importado antes no tiene las listas y se lee como una sola etiqueta (no hay migración). **Cómo se eligen:** una etiqueta secundaria entra si puntúa a menos de `DELTA · escala` del primero (`escala` = 1 + el peso con que cuenta ahora la cabeza supervisada, que `sugerir` devuelve en `escala`; es la misma distancia que antes hacía saltar «género poco claro», y por eso `_seguridad` ya no avisa cuando el segundo es una etiqueta de la obra), o si la propone el LLM y es plausible (entre los 4 mejores del marcador). Cada subgénero secundario sale de su propio género (`_etiquetas_sub`, y el principal de cada género secundario). El LLM devuelve `{"generos": [...], "motivo"}` y `{"subgeneros": [...], "motivo"}` (esquema con `maxItems` 3; sigue entendiendo el formato antiguo de una sola etiqueta); los prompts son `llm.prompt_generos` y `llm.prompt_subgeneros` (los usa también el entrenador, así que entrenamiento y uso ven exactamente el mismo texto) y los vecinos enseñados llevan todas sus etiquetas. Las obras con varias etiquetas son ejemplo de cada una (la principal pesa lo de siempre; las demás, la mitad). **Interfaz:** las tarjetas de importación y el Observatorio muestran las etiquetas como chips (★ = principal; en el Observatorio ✕ quita y un desplegable añade; `Api.biblioteca_editar` acepta `generos` y `subgeneros` como listas, este último con «género/subgénero»); la sala de clasificación enseña todas; `importar([{ruta, generos, subgeneros}])` las fija. **Galaxias:** no cambian (la galaxia es dónde vive el documento: Código, Libros, Notas…, no su tema, y un tema repartido entre galaxias duplicaría los objetos); en Libros una obra aparece en la rama de cada uno de sus géneros (misma obra, puntos distintos: `lib_<género>_<n>`), la descripción dice «también en …» y `historia:`/`economia:` la encuentran por cualquiera. Con más de ~12 géneros no vacíos en Libros convendría agrupar ramas, no crear galaxias. **Calibración (sin LLM, 247 obras de validación de un corpus de 1 335; 97 de ellas con varias etiquetas reales, de estanterías de Gutenberg y categorías cruzadas de arXiv, así que el «oro» de las secundarias es ruidoso):** género top-1 64,8 % (no cambia con DELTA) y subgénero 36,6 %. DELTA de género 0,03 / 0,08 / 0,15 / 0,25 → la etiqueta real está entre las predichas 67,6 / 70,4 / 74,1 / 77,7 %, con 1,09 / 1,21 / 1,39 / 1,70 géneros por obra (real 1,58) y precisión 71 / 67 / 62 / 56 % frente a exhaustividad 49 / 51 / 55 / 60 %: **la F1 es plana (58) en todo el rango**, DELTA solo mueve el equilibrio entre acertar más y etiquetar de más; se dejó 0,15. DELTA_SUB 0,00 / 0,03 / 0,08 → F1 de subgénero 31 / 31 / 29 (con 0,08 predice 1,89 por obra frente a 1,39 reales: demasiadas); se dejó 0,03. **Efecto en la cola de revisión:** como el segundo género empatado ya es una etiqueta, `_seguridad` avisa mucho menos (marca el 11 % de las obras y recoge el 13 % de los errores top-1, frente al 44 % y 67 % de antes): lo que antes era «dudoso» ahora es «dos etiquetas». Pendiente repetir la calibración con el LLM y con el modelo reentrenado.
+5ab. **Reentrenar el LLM (entrenador, 1.13.0):** `herramientas/entrenador/` (todo se lanza con `entrenar_llm.bat preparar | datos CORPUS | entrenar CORPUS [MODELO] [NOMBRE] | exportar CORPUS NOMBRE | panel CORPUS`). `preparar` crea un entorno aparte (`.venv`, ~5 GB: torch con CUDA, transformers, peft, bitsandbytes; no se instala con la aplicación). `construir_datos.py` saca de un corpus (`enes/corpus` + `enes/split.json`: solo las obras de ENTRENAMIENTO) ejemplos de género y de subgénero con el prompt exacto del programa y los 8 vecinos calculados sin contar la propia obra; con `--biblioteca` suma la tuya (lo que corregiste pesa doble). `entrenar.py` hace QLoRA (modelo base en 4 bits + LoRA r=16, solo se aprende la respuesta; bucle propio, sin `Trainer`, para no depender de la versión de transformers) y escribe `registro.jsonl`, `estado.json`, `adaptador/` y `resultado.json` (JSON válido y acierto en la validación con generación libre). `exportar_ollama.py` crea el modelo de Ollama: **Ollama 0.40 ya no admite adaptadores LoRA ni importar Qwen2 desde safetensors** (probado: «LoRA adapters are no longer supported», «unsupported MLX architecture»), así que fusiona el adaptador con el base (bf16), lo convierte a GGUF con `convert_hf_to_gguf.py` de llama.cpp (NO viene con el programa: descargarlo a mano de github.com/ggml-org/llama.cpp y `pip install gguf` en el entorno) y hace `ollama create` con la plantilla y la parada del base (`ollama show --modelfile`); con `--usar` apunta `ajustes.json` a él. **La plantilla importa:** la de Qwen en Hugging Face añade un «You are Qwen…» por defecto que la de Ollama NO añade; el entrenador usa `formato_ollama` (sin mensaje de sistema) para que entrenar y servir vean lo mismo. La GPU se comparte con otras aplicaciones (Wallpaper Engine, navegadores…; su uso de VRAM sube y baja entre 4 y 10 GB) y un primer intento se cortó por falta de memoria: por eso los logits se calculan solo sobre la respuesta (el paso pasó de ~88 s a ~38 s y de ~12 GB a ~5,7 GB), un ejemplo sin memoria se salta y se anota (`saltados`), y `entrenar_llm.bat entrenar` (o `entrenar_vigilado.sh`) reanuda solo con `--reanudar` desde el último adaptador guardado (hasta 20 intentos). Con 12 GB, el 3B entrena con unos 6 GB libres; el 7B exige cerrar lo demás (Wallpaper Engine, juegos…). **Medir:** `evaluar_corpus.py` guarda ahora los conjuntos reales y predichos (`gs`, `pgs`, `ss`, `pss`) y `metricas_etiquetas.py`/`estadisticas_clasificacion.py` calculan «la etiqueta real está entre las predichas» (comparable con el acierto de antes), etiquetas de más por obra, precisión, exhaustividad, Jaccard y F1 macro, más McNemar sobre ese acierto; para evaluar un modelo entrenado: `--set 'llm.MODELO="arbol-clasificador"'`. **Corpus con varias etiquetas:** `libros_gutenberg.py CARPETA 28 --multi N` baja además N libros con estanterías de géneros distintos (repartidos entre las combinaciones de géneros; la etiqueta principal es la de la primera estantería y es arbitraria, por eso para ellos importan las métricas de conjunto y no el top-1) y `articulos_arxiv.py` guarda las categorías cruzadas (stat.ML + cs.LG = estadística + tecnología) como etiquetas múltiples; `montar.py` las pasa a `importar`. **Panel** (`panel_progreso.py CORPUS`, localhost:8765): cuadros «Entrenamiento del LLM» (barra, curva de pérdida de entrenamiento y validación, VRAM, minutos que quedan, resultado) y «Etiquetas múltiples» (métricas por configuración, cuántos géneros predice por obra y qué pares se dan juntos). Tests: `tests/test_etiquetas.py`, `tests/test_entrenador.py`. Trampas ya vividas: en un `python - <<EOF` de bash las barras invertidas dobles (`\\n`) llegan como una sola y rompen las cadenas del código que se escribe: para parchear ficheros usar un fichero de script con cadenas crudas o la herramienta Edit.
 5w. **Cola de revisión («no estoy seguro»):** `importar._seguridad` mide el margen entre el género ganador y el segundo (y lo mismo en el subgénero), si el LLM y el parecido discrepan, si casi no hay texto o si no encaja en ningún género; `clasificar` devuelve `revisar`, `motivos_revisar` y `margen`, `importar()` los guarda en `metadatos.json`. El Observatorio muestra ⚠ con el motivo y «✓ Está bien» (`Api.biblioteca_confirmar` → `importar.confirmar`, que además lo recuerda como corrección tuya), la casilla «Solo por revisar» y un contador en la pestaña 🔭 (`Api.biblioteca_por_revisar`); tocar cualquier campo cuenta como revisado; al terminar una importación se avisa de cuántos hay. Consola: `python -m conocimiento revisar --dudosos`. Umbrales calibrados con datos (`MARGEN_REVISAR`, `MARGEN_SUB_REVISAR`): ~44 % marcado recoge ~67 % de los errores de género; subirlos avisa más. Tests: `tests/test_cola_revision.py`.
 5x. **Información web (Wikipedia/Wikidata) y vídeos:** `py/conocimiento/webinfo.py` busca «título autor» en Wikipedia (APIs oficiales, nada de rascar HTML), exige que la introducción nombre al autor y que Wikidata diga que es una obra escrita (no una persona, película o personaje) y devuelve descripción, tipo, género y subgénero de novela; entra al clasificador como descripción (para el parecido y el LLM) y como pista de género (`PESO_WIKI`). Respeta a los servidores: 1 petición por segundo, reintentos con espera ante 429 (Wikimedia limita de verdad), descanso tras fallos y caché en `conocimiento/webinfo_cache.json`; solo sale el título y el autor; `clasificador.WIKI = "auto"` (por defecto) la usa solo cuando el LLM no está disponible, porque con LLM no suma; `True` = siempre, `False` o `ARBOL_WIKI=no` = nunca (los tests la apagan). Medido en 73 obras conocidas (dejando uno fuera): sin LLM 75/49 → con Wikipedia 79/56; con LLM 7b y ejemplos parecidos 86/68, y 86/66 si además se usa Wikipedia. **Vídeos:** `py/conocimiento/enlaces.py` acepta accesos directos `.url` de YouTube/Vimeo: título, canal y miniatura (portada) salen del oEmbed oficial, sin transcripciones; tipo `video`, galaxia Libros, se clasifican por título y canal (+ Wikipedia si es un documental con ficha). Tests: `tests/test_webinfo.py`, `tests/test_enlaces.py`.
 5y. **LLM por defecto (1.11.0):** `llm.py` pregunta por TODAS las obras (`siempre`) y le enseña los `VECINOS = 8` libros más parecidos ya clasificados; el modelo por defecto depende de la RAM (`qwen2.5:7b` con 12 GB o más, `qwen2.5:3b` con menos; si falta el elegido usa el otro), y el instalador (`motor.ps1`) baja el que corresponda. Se cambia con `ajustes.json` o `ARBOL_LLM`.

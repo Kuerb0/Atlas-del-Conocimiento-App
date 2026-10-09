@@ -536,6 +536,7 @@ def ramas_biblioteca() -> list[dict]:
     try:
         from conocimiento.importar import GENEROS, GALAXIAS, carpeta_datos, leer_metadatos, titulo_corto
         from conocimiento import taxonomia
+        from conocimiento.etiquetas import generos_de, subgeneros_de
     except Exception:
         return []
     carpeta = carpeta_datos()
@@ -559,16 +560,19 @@ def ramas_biblioteca() -> list[dict]:
     libros = {rel: m for rel, m in meta.items() if m.get("galaxia") == "libros"}
     por_genero: dict[str, list] = {}
     for rel, m in sorted(libros.items(), key=lambda kv: kv[1].get("titulo", "")):
-        por_genero.setdefault(m.get("genero") or "otro", []).append((rel, m))
+        for g in generos_de(m) or ["otro"]:                                   # una obra con varios géneros aparece en la rama de cada uno (la principal es la primera; el archivo vive en su carpeta)
+            por_genero.setdefault(g, []).append((rel, m))
     for g, lista in sorted(por_genero.items(), key=lambda kv: GENEROS.get(kv[0], kv[0])):
         modulos = []
         for i, (rel, m) in enumerate(lista):
             libro = titulo_corto(m.get("titulo", rel))
+            todos = [GENEROS.get(x, x) for x in generos_de(m)]
+            tambien = f" · también en {', '.join(x for x in todos if x != GENEROS.get(g, g))}" if len(todos) > 1 else ""
             caps = m.get("capitulos") or [{"titulo": libro, "pagina": 1}]
             items = [_hoja_bib(f"lib_{g}_{i}_{j}", c["titulo"][:90], "capitulo", f"{libro}" + (f" — p. {c['pagina']}" if c.get("pagina") else ""), str(base / rel), rel,
                                pagina=c.get("pagina") or 0, libro=libro, subtema=m.get("subtema", ""), genero=g, paginas=m.get("paginas", 0), etiquetas=m.get("etiquetas", ""),
                                fecha=m.get("fecha", "")[:10], titulo_largo=m.get("titulo", ""), portada=m.get("portada", ""), lineas=8 + min(12, 2 * len(c["titulo"]) // 10)) for j, c in enumerate(caps)]
-            modulos.append({"id": f"lib_{g}_{i}", "nombre": libro, "desc": f"{taxonomia.nombre_sub(g, m.get('subgenero', ''), carpeta) or m.get('subtema', '')} · {m.get('paginas') or '?'} págs. · {len(caps)} capítulos", "archivo": "biblioteca/" + rel, "items": items})
+            modulos.append({"id": f"lib_{g}_{i}", "nombre": libro, "desc": f"{', '.join(taxonomia.nombre_sub(gg, ss, carpeta) for gg, ss in subgeneros_de(m) if gg == g) or m.get('subtema', '')} · {m.get('paginas') or '?'} págs. · {len(caps)} capítulos{tambien}", "archivo": "biblioteca/" + rel, "items": items})
         ramas.append({"id": f"gen_{g}", "nombre": GENEROS.get(g, g), "desc": f"{len(lista)} libro{'s' if len(lista) != 1 else ''} de {GENEROS.get(g, g).lower()}",
                       "modulos": modulos, "galaxia": "libros", "biblioteca": True, "color": color()})
 

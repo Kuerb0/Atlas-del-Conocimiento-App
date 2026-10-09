@@ -182,7 +182,7 @@ class Api:
         try:
             import importlib
             import sys
-            for nombre in ("conocimiento", "conocimiento.clasificador", "conocimiento.llm", "conocimiento.importar", "conocimiento.almacenaje", "conocimiento.telescopio", "construir_visor"):
+            for nombre in ("conocimiento.etiquetas", "conocimiento", "conocimiento.clasificador", "conocimiento.llm", "conocimiento.importar", "conocimiento.almacenaje", "conocimiento.telescopio", "construir_visor"):
                 if nombre in sys.modules:
                     importlib.reload(sys.modules[nombre])          # en este orden: el paquete primero y después lo que depende de él
         except Exception as e:

@@ -14,6 +14,9 @@ from pathlib import Path
 
 from scipy.stats import binomtest
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from metricas_etiquetas import etiquetas_multiples, metricas  # noqa: E402
+
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
@@ -63,17 +66,26 @@ def resumen(r: dict) -> None:
         libres = [x for x in f if not x.get("revisar")]
         ok_libres = sum(x["g"] == x["pg"] and (not x["s"] or x["s"] == x["ps"]) for x in libres)
         print(f"  cola de revisión: marca {100 * len(marc) / n:.0f} % de las obras y recoge {100 * len(cogidos) / max(len(err), 1):.0f} % de los errores; lo no marcado acierta {100 * ok_libres / max(len(libres), 1):.0f} %")
+    if any("pgs" in x for x in f):                                         # resultados con varias etiquetas (1.13 en adelante)
+        mm = metricas(f)
+        for nivel, d in mm.items():
+            if d.get("n"):
+                lo3, hi3 = d["ic_principal"]
+                print(f"  {nivel:9} con etiquetas: la real está entre las predichas {100 * d['principal_en_conjunto'] / d['n']:.1f} %  IC95 [{100 * lo3:.0f}, {100 * hi3:.0f}]   etiquetas por obra: predice {d['pred_media']:.2f}, real {d['real_media']:.2f} "
+                      f"(de más {d['de_mas']:+.2f})   precisión {100 * d['precision']:.0f} %  exhaustividad {100 * d['exhaustividad']:.0f} %  Jaccard {100 * d['jaccard']:.0f} %  F1 macro {100 * d['f1_macro']:.0f} %")
+        em = etiquetas_multiples(f)
+        print(f"  obras con varias etiquetas de género: reales {em['reales_multiples']} · predichas {em['predichas_multiples']} de {em['n']}   pares más frecuentes: " + ", ".join(f"{a}+{b} ×{c}" for (a, b), c in sorted(em["coocurrencia"].items(), key=lambda kv: -kv[1])[:5]))
     print("  confusiones: " + ", ".join(f"{g}→{p} ×{c}" for (g, p), c in Counter((x["g"], x["pg"]) for x in f if x["g"] != x["pg"]).most_common(6)))
 
 
 def mcnemar(a: dict, b: dict, campo: str) -> str:
     fa, fb = {x["rel"]: x for x in a["filas"]}, {x["rel"]: x for x in b["filas"]}
-    ok = (lambda x: x["g"] == x["pg"]) if campo == "g" else (lambda x: x["g"] == x["pg"] and x["s"] == x["ps"])
-    sel = [r for r in fa.keys() & fb.keys() if campo == "g" or fa[r]["s"]]
+    ok = (lambda x: x["g"] == x["pg"]) if campo == "g" else (lambda x: x["g"] == x["pg"] and x["s"] == x["ps"]) if campo == "s" else (lambda x: x["g"] in (x.get("pgs") or [x["pg"]]))     # «c»: la etiqueta real está entre las predichas
+    sel = [r for r in fa.keys() & fb.keys() if campo != "s" or fa[r]["s"]]
     n10 = sum(ok(fa[r]) and not ok(fb[r]) for r in sel)
     n01 = sum(not ok(fa[r]) and ok(fb[r]) for r in sel)
     p = binomtest(n10, n10 + n01, 0.5).pvalue if n10 + n01 else 1.0
-    return f"{'género' if campo == 'g' else 'subgénero'}: {a['nombre']} solo acierta {n10}, {b['nombre']} solo acierta {n01} → p = {p:.3f}" + ("  *" if p < 0.05 else "")
+    return f"{ {'g': 'género', 's': 'subgénero', 'c': 'género en el conjunto'}[campo]}: {a['nombre']} solo acierta {n10}, {b['nombre']} solo acierta {n01} → p = {p:.3f}" + ("  *" if p < 0.05 else "")
 
 
 if __name__ == "__main__":
@@ -81,4 +93,4 @@ if __name__ == "__main__":
     for r in rs:
         resumen(r)
     for r in rs[1:]:
-        print("\nMcNemar (", rs[0]["nombre"], "vs", r["nombre"], ")  ", mcnemar(rs[0], r, "g"), " | ", mcnemar(rs[0], r, "s"))
+        print("\nMcNemar (", rs[0]["nombre"], "vs", r["nombre"], ")  ", mcnemar(rs[0], r, "g"), " | ", mcnemar(rs[0], r, "s"), " | ", mcnemar(rs[0], r, "c"))

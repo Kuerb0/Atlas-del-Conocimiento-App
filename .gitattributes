@@ -1,0 +1,2 @@
+# los scripts de bash tienen que acabar las líneas en LF aunque Windows convierta el resto
+*.sh text eol=lf

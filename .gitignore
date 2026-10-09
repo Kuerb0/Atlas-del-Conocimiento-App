@@ -25,3 +25,6 @@ mn
 # libros y documentos pesados (las bibliotecas de cada usuario no se publican)
 *.pdf
 *.epub
+
+# entorno aparte para reentrenar el LLM (torch, peft...) y sus salidas
+herramientas/entrenador/.venv/
