@@ -229,6 +229,47 @@ class Api:
     def entrenamiento_parar(self):
         return self._ent("parar")
 
+    # ---- pestaña «IA»: chat y límites de recursos (py/conocimiento/chat.py y recursos.py) ----
+    def _ia(self, modulo, nombre, *args):
+        try:
+            import importlib
+            return getattr(importlib.import_module("conocimiento." + modulo), nombre)(*args)
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    def ia_maquina(self):
+        return self._ia("recursos", "maquina")
+
+    def ia_configuracion(self):
+        """Los límites guardados y el modelo con el que clasifica."""
+        try:
+            from conocimiento import chat, llm, recursos
+            return {"recursos": recursos.ajustes(), "modelo_llm": llm.ajustes()["modelo"], **chat.modelos()}
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    def ia_guardar(self, recursos, modelo_llm=""):
+        try:
+            from conocimiento import recursos as r
+            out = {"recursos": r.guardar(dict(recursos))}
+            if modelo_llm:
+                r.fijar_modelo_llm(str(modelo_llm))
+            return out
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    def chat_modelos(self):
+        return self._ia("chat", "modelos")
+
+    def chat_iniciar(self, mensajes, modelo, biblioteca):
+        return self._ia("chat", "iniciar", list(mensajes), str(modelo), bool(biblioteca))
+
+    def chat_estado(self):
+        return self._ia("chat", "estado")
+
+    def chat_parar(self):
+        return self._ia("chat", "parar")
+
     # ---- telescopio (pestaña «Telescopio»): ver py/conocimiento/telescopio.py ----
     def telescopio_buscar(self, consulta="", titulo="", autor="", tipo="todo", formato=""):
         try:

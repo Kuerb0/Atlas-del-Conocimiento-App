@@ -34,7 +34,7 @@ def test_lanzar_escribe_lote_y_marca_y_no_duplica(tmp_path, monkeypatch):
     monkeypatch.setattr(ent.subprocess, "Popen", lambda *a, **k: llamadas.append(a) or P())
     monkeypatch.setattr(ent, "_vivo", lambda pid: True)
     r = ent.lanzar("mi ft/../3", "Qwen/Qwen2.5-3B-Instruct", biblioteca=False)
-    assert r == {"ok": True, "pid": 4242} and len(llamadas) == 1
+    assert r["ok"] and r["pid"] == 4242 and len(llamadas) == 1
     lote = (c / "enes" / "entrenamiento" / "_lanzar.bat").read_text(encoding="utf-8")
     assert "ARBOL_VENV" in lote and "entrenar" in lote and " datos " not in lote       # los datos ya existen y no se pidió sumar la biblioteca
     assert "mift3" in lote                                                               # el nombre se limpia (nada de rutas)

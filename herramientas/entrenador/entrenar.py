@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import random
 import sys
 import time
@@ -60,6 +61,9 @@ def main() -> None:
         sys.exit(f"Falta una librería ({e.name}). Instálalas con entrenar_llm.bat o: pip install -r herramientas/entrenador/requisitos.txt")
     if not torch.cuda.is_available():
         sys.exit("No hay GPU con CUDA: este entrenamiento necesita una NVIDIA (en CPU tardaría días).")
+    vram, gpu_pct = float(os.environ.get("ARBOL_VRAM_PCT") or 100), float(os.environ.get("ARBOL_GPU_PCT") or 100)       # límites que pone la app (pestaña IA › Configuración)
+    if vram < 100:
+        torch.cuda.set_per_process_memory_fraction(vram / 100)                       # tope real de VRAM: si no cabe, el ejemplo se salta (ver más abajo) o el vigilante reintenta
     salida.mkdir(parents=True, exist_ok=True)
     reg, t0 = salida / "registro.jsonl", time.time()
     cabeza = {"modelo": op["modelo"], **{k: v for k, v in op.items() if k != "modelo"}, "datos": str(datos), "gpu": torch.cuda.get_device_name(0), "inicio": time.strftime("%Y-%m-%d %H:%M:%S")}
@@ -148,6 +152,7 @@ def main() -> None:
         for k, i in enumerate(orden):
             if epoca * len(train) + k < paso0 * op["acum"]:
                 continue                                                 # ya visto antes de cortarse
+            t_ej = time.time()
             try:
                 l = perdida(train[i])
                 (l / op["acum"]).backward()
@@ -158,6 +163,8 @@ def main() -> None:
                 continue
             reciente.append(float(l))
             micro += 1
+            if gpu_pct < 100:                                                # «GPU %» = parte del tiempo que trabaja: se descansa el resto (no hay otro modo de capar el cómputo en Windows)
+                time.sleep((time.time() - t_ej) * (100 / gpu_pct - 1))
             if micro % op["acum"] == 0:
                 torch.nn.utils.clip_grad_norm_([p for p in modelo.parameters() if p.requires_grad], 1.0)
                 opt.step(); sched.step(); opt.zero_grad(set_to_none=True)

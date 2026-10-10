@@ -14,7 +14,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from . import CARPETA, RAIZ
+from . import CARPETA, RAIZ, recursos
 
 PUERTO = 8765
 MODELOS = {"Qwen/Qwen2.5-3B-Instruct": "3B (cabe con 12 GB de VRAM)", "Qwen/Qwen2.5-7B-Instruct": "7B (cierra todo lo demás: necesita casi toda la VRAM)"}
@@ -96,7 +96,7 @@ def abrir_panel() -> dict:
         py = Path(sys.executable)
         if py.name.lower() == "pythonw.exe" and (py.parent / "python.exe").exists():
             py = py.parent / "python.exe"
-        subprocess.Popen([str(py), str(RAIZ / "herramientas" / "panel_progreso.py"), str(corpus()), "--puerto", str(PUERTO)], cwd=str(RAIZ), creationflags=_SIN_VENTANA,
+        subprocess.Popen([str(py), str(RAIZ / "herramientas" / "panel_progreso.py"), str(corpus()), "--puerto", str(PUERTO), "--padre", str(os.getpid())], cwd=str(RAIZ), creationflags=_SIN_VENTANA,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, env={**os.environ, "PYTHONIOENCODING": "utf-8"})
         for _ in range(30):
             time.sleep(.3)
@@ -136,9 +136,11 @@ def lanzar(nombre: str, modelo: str = "Qwen/Qwen2.5-3B-Instruct", biblioteca: bo
     lote = c / "enes" / "entrenamiento" / "_lanzar.bat"
     lote.write_text("@echo off\nset \"ARBOL_VENV=%s\"\n%s\n" % (venv_python().parent.parent, " && ".join(pasos)), encoding="utf-8")
     _soltar_gpu()
-    p = subprocess.Popen(["cmd", "/c", str(lote)], cwd=str(RAIZ), creationflags=_SIN_VENTANA, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+    p = subprocess.Popen(["cmd", "/c", str(lote)], cwd=str(RAIZ), creationflags=_SIN_VENTANA, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+                         env={**os.environ, **recursos.entorno()})                  # los límites de VRAM y GPU los lee entrenar.py
+    ram = recursos.limitar_ram(p.pid, recursos.ajustes()["ram"])                      # el de RAM se pone aquí, al proceso entero
     _marca(c).write_text(json.dumps({"pid": p.pid, "nombre": nombre, "modelo": modelo, "desde": time.strftime("%Y-%m-%d %H:%M:%S")}), encoding="utf-8")
-    return {"ok": True, "pid": p.pid}
+    return {"ok": True, "pid": p.pid, "limite_ram": ram}
 
 
 def parar() -> dict:
