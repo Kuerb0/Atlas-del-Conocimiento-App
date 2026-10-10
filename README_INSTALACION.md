@@ -1,4 +1,4 @@
-# Instalación del Árbol de la estadística
+# Instalación del Atlas del conocimiento
 
 Funciona en **Windows 10/11**. Necesitas internet la primera vez (para descargar Python y las librerías) y unos **800 MB** libres.
 No hace falta ser administrador.
@@ -9,8 +9,8 @@ Los instaladores están en la carpeta [`instaladores/`](instaladores/) de este r
 
 | Fichero | Cuándo usarlo |
 |---|---|
-| `Arbol X.Y.Z - Instalador.bat` | **Primera vez.** Instala todo: Python (si no lo tienes), librerías, el programa y los accesos directos. |
-| `Arbol X.Y.Z - Actualizar.bat` | Ya lo tienes instalado y quieres la versión nueva. Solo cambia el programa. |
+| `Atlas X.Y.Z - Instalador.bat` | **Primera vez.** Instala todo: Python (si no lo tienes), librerías, el programa y los accesos directos. |
+| `Atlas X.Y.Z - Actualizar.bat` | Ya lo tienes instalado y quieres la versión nueva. Solo cambia el programa. |
 
 **Opción A, sin GitHub Desktop:** abre el `.bat` en GitHub y pulsa el botón de descarga (flecha hacia abajo, «Download raw file»).
 
@@ -19,24 +19,24 @@ Para recibir versiones nuevas, pulsa **Fetch origin / Pull origin**.
 
 ## 2. Instalar
 
-1. Haz doble clic en `Arbol X.Y.Z - Instalador.bat`.
+1. Haz doble clic en `Atlas X.Y.Z - Instalador.bat`.
 2. Si Windows muestra «Windows protegió su PC», pulsa **Más información → Ejecutar de todas formas**
    (es un `.bat` descargado de internet; puedes abrirlo con el Bloc de notas antes para ver qué hace).
 3. Elige dónde instalarlo:
    ```
-   [1] Documentos\Árbol de la estadística   (recomendado)
+   [1] Documentos\Atlas del conocimiento   (recomendado)
    [2] Elegir una carpeta con el explorador de archivos
    [3] Escribir la ruta a mano
    [Q] Cancelar
    ```
-   - Si eliges una carpeta con cosas dentro, crea una subcarpeta «Árbol de la estadística».
+   - Si eliges una carpeta con cosas dentro, crea una subcarpeta «Atlas del conocimiento».
    - Evita carpetas sincronizadas (OneDrive, Dropbox): Python y las librerías son miles de ficheros y la sincronización los ralentiza.
    - No uses `Program Files` ni `Windows` (necesitan administrador).
 4. Confirma con Enter y espera unos minutos. El instalador:
    - copia el programa,
-   - busca Python 3.10 o superior y, si no lo encuentra, **lo descarga e instala dentro de la carpeta del Árbol** (no toca el Python del sistema),
+   - busca Python 3.10 o superior y, si no lo encuentra, **lo descarga e instala dentro de la carpeta del Atlas** (no toca el Python del sistema),
    - instala las librerías (numpy, pandas, statsmodels, matplotlib…) y `pywebview`,
-   - genera el visor y crea el acceso directo **«Árbol de la estadística»** en el Escritorio,
+   - genera el visor y crea el acceso directo **«Atlas del conocimiento»** en el Escritorio,
    - abre la aplicación al terminar.
 
 ## 3. Usarlo
@@ -50,7 +50,7 @@ Para recibir versiones nuevas, pulsa **Fetch origin / Pull origin**.
 
 ## 4. Actualizar
 
-Descarga el nuevo `Arbol X.Y.Z - Actualizar.bat` (o haz *Pull* en GitHub Desktop) y ejecútalo. Encuentra tu instalación solo
+Descarga el nuevo `Atlas X.Y.Z - Actualizar.bat` (o haz *Pull* en GitHub Desktop) y ejecútalo. Encuentra tu instalación solo
 (o te pide la carpeta), guarda la versión anterior en `anteriores/` y **conserva tu catálogo de conceptos y tus fichas**
 (`conceptos/catalogo.json`, `conceptos/fichas_mias.json`); solo le añade los conceptos nuevos.
 

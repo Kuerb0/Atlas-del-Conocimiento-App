@@ -31,7 +31,7 @@ arbol_estadistica
 ## Estructura de carpetas
 
 ```
-Arbol de la estadística/
+Atlas del conocimiento/
 ├── abrir_arbol.bat · regenerar_visor.bat · ejecutar_tests.bat · medir_propiedades.bat   lanzadores (doble clic)
 ├── visor_arbol.html          mapa visual 3D (lo genera py/construir_visor.py con visor/plantilla.html + mapa3d.js + demos.js)
 ├── INDEX.md · CLAUDE.md      índice de funciones y reglas para Claude
@@ -42,14 +42,14 @@ Arbol de la estadística/
 ├── ejemplos/                 flujos completos de uso
 ├── assets/                   icono.ico / icono.png
 ├── herramientas/             generar_instaladores.py, descargar_python.ps1, plantillas/, entrenador/ (reentrenar el LLM: datos, QLoRA, exportar a Ollama), corpus/ + evaluar_corpus.py + panel_progreso.py (medir y ver el progreso); la pestaña «🧠 Entrenamiento» de la app los lanza y los muestra (py/conocimiento/entrenamiento.py)
-├── instaladores/             "Arbol X.Y.Z - Instalador.bat" y "… - Actualizar.bat" (autoextraíbles)
+├── instaladores/             "Atlas X.Y.Z - Instalador.bat" y "… - Actualizar.bat" (autoextraíbles)
 ├── anteriores/               copias de seguridad que hace el actualizador (py_anterior, estructura_plana)
 └── python/                   (opcional) Python propio descargado por el instalador si el equipo no tiene
 ```
 
 **Instaladores**: `python herramientas/generar_instaladores.py` empaqueta todo (py/, teoria/, ejemplos/, los `.bat`, assets/ y el
 catálogo) en dos `.bat` autoextraíbles y comprueba que se extraen idénticos. El `.bat` solo arranca PowerShell; el trabajo lo hace
-`herramientas/plantillas/motor.ps1`. *Instalador* (vale para un PC limpio): pregunta la carpeta (Enter = Documentos\Árbol de la estadística,
+`herramientas/plantillas/motor.ps1`. *Instalador* (vale para un PC limpio): pregunta la carpeta (Enter = Documentos\Atlas del conocimiento,
 C = elegir otra), instala Python dentro de esa carpeta si no hay, las librerías, registra el paquete (`.pth`), genera el visor y crea accesos.
 *Actualizar*: encuentra la instalación (junto al `.bat`, la recordada o la que elijas), mueve `py/` a `anteriores/py_<versión>_<fecha>`,
 copia la versión nueva y comprueba `py/VERSION.txt`; tu `conceptos/catalogo.json` se conserva y `py/fusionar_catalogo.py` le añade los

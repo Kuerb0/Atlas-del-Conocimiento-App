@@ -1,4 +1,4 @@
-"""Abre el Árbol de la estadística en su propia ventana, como una aplicación.
+"""Abre el Atlas del conocimiento en su propia ventana, como una aplicación.
 
 Uso: doble clic en el acceso directo del Escritorio (lo crean el instalador y el actualizador),
 o desde una consola:  pythonw py/arbol_app.pyw
@@ -28,7 +28,7 @@ if str(CODIGO) not in sys.path:          # arbol_estadistica y el cuaderno, aunq
 VISOR = RAIZ / "visor_arbol.html"
 FOCO = RAIZ / ".foco"                  # modo vivo: dónde debe colocarse la app (ver vigilar)
 VIVO = "--vivo" in sys.argv
-TITULO = "Árbol de la estadística"
+TITULO = "Atlas del conocimiento"
 
 
 def asegurar_visor() -> None:

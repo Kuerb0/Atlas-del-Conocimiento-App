@@ -339,7 +339,7 @@ def ramas_conceptos(funciones: set[str]) -> list[dict]:
             print(f"AVISO: el concepto «{k['nombre']}» cita funciones que no están en py/: {desconocidas} "
                   "(¿falta ejecutar el actualizador?)")
             k = dict(k, funciones=[f for f in k["funciones"] if f in funciones])
-        origen = "; ".join({"very_normal": "Very Normal: ", "master": "Máster: ", "manual": "Manual: ", "curso": "Curso: "}.get(f["tipo"], "Árbol (consultoría): ") + f["ref"] + (f" ({f['base']})" if f.get("base") else "")
+        origen = "; ".join({"very_normal": "Very Normal: ", "master": "Máster: ", "manual": "Manual: ", "curso": "Curso: "}.get(f["tipo"], "Atlas (consultoría): ") + f["ref"] + (f" ({f['base']})" if f.get("base") else "")
                            for f in k["fuentes"])
         return {
             "id": k["id"], "nombre": k["nombre"], "tipo": "concepto", "firma": "", "doc": " ".join(k["sinonimos"] + k["funciones"]),

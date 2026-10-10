@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Árbol de la estadística</title>
+<title>Atlas del conocimiento</title>
 <link rel="icon" type="image/png" href="__ICONO__">
 <style>
 /* Visor del árbol: mapa 3D (núcleo + ramas en órbita), buscador y panel de código. Un solo fichero, sin internet. */
@@ -399,7 +399,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 <body>
 <div class="app">
   <header class="top">
-    <div class="brand"><h1 id="titulo">Árbol</h1></div>
+    <div class="brand"><h1 id="titulo">Atlas</h1></div>
     <nav class="pestanas" id="pestanas" role="tablist" aria-label="Pestañas">
       <button class="pest" id="pestUniverso" role="tab" type="button" aria-selected="true" title="El universo: todo tu conocimiento">🌌 Universo</button>
       <button class="pest" id="pestImportar" role="tab" type="button" aria-selected="false" title="Importar archivos: un agujero negro que los clasifica">⚫ Importar</button>
@@ -535,7 +535,7 @@ var reducir = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)'
 /* ---------- árbol ---------- */
 var VIDEO_RE = /youtube|youtu\.be|vimeo|3blue1brown|ocw\.mit\.edu\/.*(video|lecture)|stat110|video/i;
 function esVideo(f) { return !!f.url && (f.tipo === 'very_normal' || VIDEO_RE.test(f.url)); }
-var root = {id: 'raiz', nombre: 'Árbol de la estadística', kind: 'raiz', hijos: [], depth: 0, parent: null};
+var root = {id: 'raiz', nombre: 'Atlas del conocimiento', kind: 'raiz', hijos: [], depth: 0, parent: null};
 DATA.ramas.forEach(function (rm) {
   var rn = {id: 'r-' + rm.id, rama: rm.id, nombre: rm.nombre, desc: rm.desc, kind: 'rama', hijos: [], parent: root, depth: 1, colorHex: rm.color ? rm.color.oscuro : null, grupo: rm.grupo || '', galaxia: rm.galaxia || '', biblioteca: !!rm.biblioteca};
   rm.modulos.forEach(function (md) {
@@ -757,7 +757,7 @@ function migas() {
 }
 var nCon = hojas.filter(function (h) { return h.tipo === 'concepto'; }), nHuecos = nCon.filter(esHueco).length;
 var RESUMEN = hojas.filter(function (h) { return h.tipo === 'funcion'; }).length + ' funciones · ' + nCon.length + ' conceptos (' + nHuecos + ' huecos) · ' + hojas.filter(function (h) { return h.tipo === 'demo'; }).length + ' demos · ' + DATA.pruebas + ' pruebas · generado ' + DATA.generado;
-$('#titulo').title = 'Árbol de la estadística · ' + RESUMEN;
+$('#titulo').title = 'Atlas del conocimiento · ' + RESUMEN;
 $('#panelBtn').addEventListener('click', function () { window.alternarDetalle(); });
 function pantallaCompleta() {
   var d = document, el = d.documentElement;
@@ -1078,7 +1078,7 @@ function detalleConcepto(n, d) {
   h += botonesDemo(n.rid);
   h += '<h3>Dónde aparece</h3><ul class="fuentes">' + (n.fuentes || []).map(function (f) {
     var vn = f.tipo === 'very_normal';
-    return '<li><span class="tag' + (vn ? ' vn' : '') + '">' + (vn ? 'Very Normal' : f.tipo === 'master' ? 'Máster' : f.tipo === 'manual' ? 'Manual' : f.tipo === 'curso' ? 'Curso' : 'Árbol (consultoría)') + '</span>' +
+    return '<li><span class="tag' + (vn ? ' vn' : '') + '">' + (vn ? 'Very Normal' : f.tipo === 'master' ? 'Máster' : f.tipo === 'manual' ? 'Manual' : f.tipo === 'curso' ? 'Curso' : 'Atlas (consultoría)') + '</span>' +
       (f.url ? '<a href="' + esc(f.url) + '" target="_blank" rel="noopener noreferrer">' + esc(f.ref) + '</a>' : '<span>' + esc(f.ref) + '</span>') +
       (f.base ? '<span class="base">' + esc(f.base) + '</span>' : '') + '</li>'; }).join('') + '</ul>';
   h += '<div class="acciones"><button class="btn primario" data-a="nota" type="button">Copiar nota para Claude</button>' +
@@ -1294,7 +1294,7 @@ async function impOpciones() {
 }
 function impClic() {
   if (imp.ocupado) return;
-  if (!impApi()) { impAviso('El importador funciona en la app («Árbol de la estadística» del Escritorio): necesita abrir el explorador de archivos y guardar en tu observatorio.'); return; }
+  if (!impApi()) { impAviso('El importador funciona en la app («Atlas del conocimiento» del Escritorio): necesita abrir el explorador de archivos y guardar en tu observatorio.'); return; }
   impElegir();
 }
 async function impElegir() {
@@ -1530,7 +1530,7 @@ var bib = {lista: null, sucio: false, filtro: '', gal: '', borrando: null, rev: 
 var tel = {lista: []};
 async function telBuscar() {
   var a = window.pywebview && window.pywebview.api, q = $('#telQ').value.trim();
-  if (!a || !a.telescopio_buscar) { $('#telN').textContent = 'El telescopio funciona desde la app («Árbol de la estadística» del Escritorio).'; return; }
+  if (!a || !a.telescopio_buscar) { $('#telN').textContent = 'El telescopio funciona desde la app («Atlas del conocimiento» del Escritorio).'; return; }
   var tit = $('#telTit').value.trim(), aut = $('#telAut').value.trim(); if (!q && !tit && !aut) return; $('#telN').textContent = 'Buscando…'; $('#telBuscar').disabled = true;
   var r = await a.telescopio_buscar(q, tit, aut, $('#telTipo').value, $('#telFmt').value); $('#telBuscar').disabled = false;
   if (r.error) { $('#telN').textContent = r.error; return; }
@@ -1557,7 +1557,7 @@ var ent = {timer: null, cargado: false};
 function entApi() { var a = window.pywebview && window.pywebview.api; return a && a.entrenamiento_estado ? a : null; }
 async function entMostrar() {
   var a = entApi(), st = $('#entEstado');
-  if (!a) { st.textContent = 'El entrenamiento se controla desde la app («Árbol de la estadística» del Escritorio).'; $('#entIniciar').disabled = true; return; }
+  if (!a) { st.textContent = 'El entrenamiento se controla desde la app («Atlas del conocimiento» del Escritorio).'; $('#entIniciar').disabled = true; return; }
   await entRefrescar();
   if (!ent.cargado) { var p = await a.entrenamiento_panel(); if (p && p.url) { $('#entFrame').src = p.url; ent.cargado = true; } else if (p && p.error) st.textContent = p.error; }
   clearInterval(ent.timer); ent.timer = setInterval(function () { if (entAbierta()) entRefrescar(); else clearInterval(ent.timer); }, 3000);
@@ -1605,7 +1605,7 @@ function eclRender() {
 }
 async function eclCargar() {
   var a = window.pywebview && window.pywebview.api;
-  if (!a || !a.almacenaje) { $('#eclNota').textContent = 'Los eclipses se miden desde la app («Árbol de la estadística» del Escritorio).'; return; }
+  if (!a || !a.almacenaje) { $('#eclNota').textContent = 'Los eclipses se miden desde la app («Atlas del conocimiento» del Escritorio).'; return; }
   var r = await a.almacenaje(); if (r.error) { $('#eclNota').textContent = r.error; return; }
   ecl.datos = r; if (!r.github) ecl.github = false; eclRender(); eclipses.mostrar();
 }
@@ -1613,7 +1613,7 @@ $('#eclEsc').onclick = function () { ecl.github = !ecl.github; eclRender(); };
 $('#eclVista').onclick = function () { ecl.tipos = !ecl.tipos; eclRender(); };
 async function bibCargar() {
   var a = impApi(), cont = $('#bibLista');
-  if (!a || !a.biblioteca_listar) { cont.innerHTML = '<p class="imp-msg">El observatorio se gestiona desde la app («Árbol de la estadística» del Escritorio).</p>'; return; }
+  if (!a || !a.biblioteca_listar) { cont.innerHTML = '<p class="imp-msg">El observatorio se gestiona desde la app («Atlas del conocimiento» del Escritorio).</p>'; return; }
   await impOpciones();
   var r = await a.biblioteca_listar();
   if (r.error) { cont.innerHTML = '<p class="imp-msg">' + esc(r.error) + '</p>'; return; }

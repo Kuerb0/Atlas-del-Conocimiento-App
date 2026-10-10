@@ -1,4 +1,4 @@
-"""Genera los instaladores autoextraibles del Arbol de la estadistica.
+"""Genera los instaladores autoextraibles del Atlas del conocimiento.
 
 Uso (desde cualquier sitio):
 
@@ -7,8 +7,8 @@ Uso (desde cualquier sitio):
 Lee el programa (py/, assets/, teoria/, ejemplos/, INDEX.md, CLAUDE.md, los .bat de la carpeta
 principal, conceptos/catalogo.json y catalogo_base.json y herramientas/descargar_python.ps1) y escribe en instaladores/:
 
-    Arbol <version> - Instalador.bat    (instalacion completa: Python si hace falta, librerias, visor, accesos)
-    Arbol <version> - Actualizar.bat    (solo el programa y las librerias; guarda lo anterior en anteriores/)
+    Atlas <version> - Instalador.bat    (instalacion completa: Python si hace falta, librerias, visor, accesos)
+    Atlas <version> - Actualizar.bat    (solo el programa y las librerias; guarda lo anterior en anteriores/)
 
 Cada .bat lleva dentro TODOS los ficheros del programa, asi que se puede mandar suelto a otro ordenador
 (o a otra persona, p. ej. un companero): al ejecutarlo crea py/, assets/, etc. en su propia carpeta.
@@ -36,8 +36,8 @@ PLANTILLAS = os.path.join(RAIZ, "herramientas", "plantillas")
 SALIDA = os.path.join(RAIZ, "instaladores")
 
 PLANTILLAS_BAT = [
-    ("instalador.bat.txt", "Arbol {v} - Instalador.bat"),
-    ("actualizar.bat.txt", "Arbol {v} - Actualizar.bat"),
+    ("instalador.bat.txt", "Atlas {v} - Instalador.bat"),
+    ("actualizar.bat.txt", "Atlas {v} - Actualizar.bat"),
 ]
 
 FICHEROS_RAIZ = ["INDEX.md", "CLAUDE.md", "abrir_arbol.bat", "regenerar_visor.bat", "indexar_conocimiento.bat", "ejecutar_tests.bat", "medir_propiedades.bat",

@@ -27,7 +27,7 @@ def test_generar_y_extraer(tmp_path):
     escritos = gen.generar(str(RAIZ), str(tmp_path))      # ya comprueba ida y vuelta byte a byte
     nombres = sorted(Path(e).name for e in escritos)
     version = gen.version_del_programa(str(RAIZ))
-    assert nombres == [f"Arbol {version} - Actualizar.bat", f"Arbol {version} - Instalador.bat"]
+    assert nombres == [f"Atlas {version} - Actualizar.bat", f"Atlas {version} - Instalador.bat"]
     for e in escritos:
         sacado = gen.extraer(Path(e).read_bytes())
         assert sacado["py/arbol_estadistica/modelos/logit_sas.py"][0] == "text"
