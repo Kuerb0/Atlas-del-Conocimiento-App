@@ -478,9 +478,9 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
     <div class="tel-lista" id="telLista"></div>
   </section>
   <section class="eclipses" id="eclipses" hidden aria-label="Eclipses">
-    <div class="imp-cabeza"><h2>Eclipses</h2><p>El Sol es el límite de GitHub (1 GB recomendado por repositorio); cada luna es una galaxia o un tipo de archivo y tapa el Sol en proporción a lo que ocupa.</p></div>
+    <div class="imp-cabeza"><h2>Eclipses</h2><p>El Sol es el límite de GitHub (1 GB recomendado por repositorio); una sola luna lo tapa entero (eclipse total) y es un gráfico de sectores: cada porción es una galaxia o un tipo de archivo, en proporción a lo que pesa. El anillo de la corona se completa según lo lleno que está el límite.</p></div>
     <div class="ecl-barra"><button class="btn" id="eclEsc" type="button" aria-pressed="false">En GitHub</button><button class="btn" id="eclVista" type="button" aria-pressed="false">Por tipo de archivo</button><span class="ecl-nota" id="eclNota" aria-live="polite"></span></div>
-    <div class="ecl-lienzo"><canvas id="eclipses-cv" aria-label="Sol eclipsado por lunas: una por galaxia o tipo de archivo"></canvas></div>
+    <div class="ecl-lienzo"><canvas id="eclipses-cv" aria-label="Eclipse total: la luna es un gráfico de sectores con lo que pesa cada galaxia o tipo de archivo"></canvas></div>
     <div class="ecl-lista" id="eclLista"></div>
   </section>
 </div>
@@ -1591,9 +1591,11 @@ function eclMB(b) { return b >= 1073741824 ? (b / 1073741824).toFixed(2) + ' GB'
 function eclEsc(s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
 function eclResaltar(id) { eclipses.resaltar(id); document.querySelectorAll('.ecl-fila').forEach(function (f) { f.classList.toggle('hot', f.dataset.id === id); }); }
 function eclRender() {
-  var d = ecl.datos, esc = ecl.github && d.github ? d.github : d.disco, lista = (ecl.tipos ? esc.tipos : esc.grupos).slice(0, 12), lim = d.limite;
+  var d = ecl.datos, esc = ecl.github && d.github ? d.github : d.disco, todos = ecl.tipos ? esc.tipos : esc.grupos, lista = todos.slice(0, 12), lim = d.limite;
   var items = lista.map(function (x, i) { var c = !ecl.tipos && GAL[x.id] && GAL[x.id].color ? GAL[x.id].color : ECL_COL[i % ECL_COL.length]; return {id: x.id, nombre: x.nombre, bytes: x.bytes, color: c}; });
-  eclipses.datos(items, lim);
+  var resto = todos.slice(12).reduce(function (s, x) { return s + x.bytes; }, 0);
+  if (resto > 0) items.push({id: 'otros', nombre: 'Otros', bytes: resto, color: [120, 130, 150]});         /* la luna debe sumar el total */
+  eclipses.datos(items, lim, esc.total);
   $('#eclLista').innerHTML = items.map(function (x) { return '<div class="ecl-fila" data-id="' + eclEsc(x.id) + '"><span class="ecl-pto" style="background:rgb(' + x.color.join(',') + ')"></span><span>' + eclEsc(x.nombre) + '</span><span class="ecl-pct">' + eclMB(x.bytes) + ' · ' + (100 * x.bytes / lim).toFixed(1) + ' %</span></div>'; }).join('');
   document.querySelectorAll('.ecl-fila').forEach(function (f) { f.onmouseenter = function () { eclResaltar(f.dataset.id); }; f.onmouseleave = function () { eclResaltar(null); }; });
   var aviso = esc.grandes.length ? ' · ⚠ ' + esc.grandes.length + ' archivo(s) de más de 100 MB: GitHub los rechaza' : '';
