@@ -160,3 +160,10 @@ def test_el_instalador_detecta_e_instala_la_ia_local():
     for clave in ("Preparar-IA", "Buscar-Ollama", "Descargar-Con-Barra", "Get-AuthenticodeSignature", "qwen2.5:3b", "ARBOL_SIN_IA", "conocimiento', 'modelos'"):
         assert clave in texto, clave
     assert "ARBOL_SIN_RED" in texto.split("function Preparar-Python-Y-Visor")[1]          # sin red no se intenta ninguna descarga
+
+
+def test_actualizar_con_la_misma_version_rehace_el_acceso_directo():
+    """Si se movió o renombró la carpeta, el acceso directo viejo no abre: aunque no haya nada que actualizar, el actualizador debe rehacerlo."""
+    motor = (Path(__file__).resolve().parents[2] / "herramientas" / "plantillas" / "motor.ps1").read_text(encoding="utf-8-sig")
+    rama = motor[motor.index("Preparar-IA $pyc $dest"):motor.index("Comprobación terminada")]
+    assert "Crear-Accesos $dest" in rama and "Registrar $dest" in rama

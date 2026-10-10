@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Atlas del conocimiento 1.15.0 - Actualizar
+title Atlas del conocimiento 1.15.1 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=actualizar"
-set "ARBOL_VERSION=1.15.0"
+set "ARBOL_MODO=instalar"
+set "ARBOL_VERSION=1.15.1"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -626,7 +626,7 @@ if ($Modo -eq 'actualizar') {
     if ($anterior -eq $Version -and -not $env:ARBOL_DESTINO) {
         Write-Host ''
         Write-Host "  Ya tienes instalada la versión ${Version}: no hace falta sustituir el programa." -ForegroundColor Green
-        Write-Host '  Solo voy a comprobar que están todos los componentes (Python, librerías, IA local) e instalar los que falten.'
+        Write-Host '  Solo voy a comprobar que están todos los componentes (Python, librerías, IA local), instalar los que falten y rehacer el acceso directo del Escritorio.'
         $r = Read-Host '  Enter = comprobar componentes   R = reinstalar el programa igualmente   Q = salir'
         if ($r -match '^\s*[qQ]') { exit 2 }
         if ($r -notmatch '^\s*[rR]') {
@@ -634,6 +634,7 @@ if ($Modo -eq 'actualizar') {
             if (-not $pyc) { Fallo 'No encuentro Python en esta instalación. Usa el instalador completo.' }
             $Estado.py = $pyc
             Preparar-IA $pyc $dest
+            if ($env:ARBOL_SIN_ACCESOS -ne '1') { Crear-Accesos $dest; Registrar $dest }      # el acceso directo y la ubicación se rehacen siempre (si se movió o renombró la carpeta, el viejo no abre)
             Titulo 'Comprobación terminada'
             exit 0
         }
@@ -685,7 +686,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.15.0
+1.15.1
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Atlas del conocimiento en su propia ventana, como una aplicación.
@@ -3094,7 +3095,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.15.0"
+version = "1.15.1"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3774,7 +3775,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.15.0"
+__version__ = "1.15.1"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -36336,6 +36337,13 @@ def test_el_instalador_detecta_e_instala_la_ia_local():
     for clave in ("Preparar-IA", "Buscar-Ollama", "Descargar-Con-Barra", "Get-AuthenticodeSignature", "qwen2.5:3b", "ARBOL_SIN_IA", "conocimiento', 'modelos'"):
         assert clave in texto, clave
     assert "ARBOL_SIN_RED" in texto.split("function Preparar-Python-Y-Visor")[1]          # sin red no se intenta ninguna descarga
+
+
+def test_actualizar_con_la_misma_version_rehace_el_acceso_directo():
+    """Si se movió o renombró la carpeta, el acceso directo viejo no abre: aunque no haya nada que actualizar, el actualizador debe rehacerlo."""
+    motor = (Path(__file__).resolve().parents[2] / "herramientas" / "plantillas" / "motor.ps1").read_text(encoding="utf-8-sig")
+    rama = motor[motor.index("Preparar-IA $pyc $dest"):motor.index("Comprobación terminada")]
+    assert "Crear-Accesos $dest" in rama and "Registrar $dest" in rama
 :::END
 :::BEGIN py/tests/test_llm.py|text
 """LLM local (Ollama) para los casos dudosos, con un Ollama falso: se prueba cuándo se pregunta y cómo se usa la respuesta."""
