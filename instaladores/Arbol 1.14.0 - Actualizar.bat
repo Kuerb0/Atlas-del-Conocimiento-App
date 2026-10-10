@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.13.1 - Actualizar
+title Arbol de la estadistica 1.14.0 - Actualizar
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
 set "ARBOL_MODO=actualizar"
-set "ARBOL_VERSION=1.13.1"
+set "ARBOL_VERSION=1.14.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -682,7 +682,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.13.1
+1.14.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -3050,7 +3050,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.13.1"
+version = "1.14.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3730,7 +3730,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.13.1"
+__version__ = "1.14.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -39219,55 +39219,74 @@ return D;
 })();
 :::END
 :::BEGIN py/visor/eclipses.js|text
-/* eclipses.js — pestaña «Eclipses»: el Sol es el límite de GitHub y cada galaxia / tipo de archivo es una luna de su color que lo tapa.
-   Todo es estático: el área de cada luna es proporcional a lo que ocupa (radio = R·√(bytes/límite)), así que el Sol queda tapado en la misma proporción que el repositorio está lleno.
-   Las lunas se reparten alrededor del Sol, cada una en su ángulo, para que cada eclipse se vea por separado. Canvas 2D sin librerías.
-   API: crearEclipses({canvas, alPasar(id|null)}) -> {medir, mostrar, ocultar, datos(items, limite), resaltar(id|null)}
-   items = [{id, nombre, bytes, color:[r,g,b]}] */
+/* eclipses.js — pestaña «Eclipses»: un eclipse total. El Sol es el límite de GitHub y UNA luna lo cubre entero; la luna es un gráfico de sectores (pie): cada galaxia / tipo de archivo es una porción de su color, proporcional a lo que pesa.
+   Cuánto del límite está lleno se lee en el anillo de la corona (un arco que se va completando; ámbar y luego rojo al acercarse al 100 %) y en el texto del centro. Estático, sin animación. Canvas 2D sin librerías.
+   API: crearEclipses({canvas, alPasar(id|null)}) -> {medir, mostrar, ocultar, datos(items, limite, total), resaltar(id|null)}
+   items = [{id, nombre, bytes, color:[r,g,b]}] (los que no entren en la lista se suman en un item «Otros» antes de llamar); total = bytes de todo (la luna se reparte entre los items). */
 (function () {
 'use strict';
+var TAU = 2 * Math.PI, INI = -Math.PI / 2;
 window.crearEclipses = function (o) {
-  var cv = o.canvas, ctx = cv.getContext('2d'), W = 800, H = 460, DPR = 1, lunas = [], resal = null, estrellas = [];
+  var cv = o.canvas, ctx = cv.getContext('2d'), W = 800, H = 460, DPR = 1, trozos = [], total = 0, lim = 1, resal = null, estrellas = [];
   for (var i = 0, a = 7; i < 220; i++) { a = (a * 16807) % 2147483647; var x = a / 2147483647; a = (a * 16807) % 2147483647; var y = a / 2147483647; estrellas.push([x, y, .5 + 1.4 * x * y]); }
 
-  function geom() { return {cx: W * .5, cy: H * .5, R: Math.min(W * .24, H * .36)}; }
+  function geom() { return {cx: W * .5, cy: H * .5, R: Math.min(W * .3, H * .36)}; }
+  function mb(b) { return b >= 1073741824 ? (b / 1073741824).toFixed(2) + ' GB' : b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
   function dibujar() {
-    var g = geom(), cx = g.cx, cy = g.cy, R = g.R, n = lunas.length;
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.fillStyle = '#02030a'; ctx.fillRect(0, 0, W, H);
+    var g = geom(), cx = g.cx, cy = g.cy, R = g.R, sombra = '#02030a';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.fillStyle = sombra; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = '#fff'; estrellas.forEach(function (e) { ctx.globalAlpha = .12 + .5 * e[2] / 2; ctx.fillRect(e[0] * W, e[1] * H, e[2], e[2]); }); ctx.globalAlpha = 1;
-    ctx.globalCompositeOperation = 'lighter';                                                             /* corona */
-    var co = ctx.createRadialGradient(cx, cy, R * .9, cx, cy, R * 2.1); co.addColorStop(0, 'rgba(255,170,70,.45)'); co.addColorStop(.4, 'rgba(255,120,40,.12)'); co.addColorStop(1, 'rgba(255,100,30,0)');
+    ctx.globalCompositeOperation = 'lighter';                                                             /* corona: el Sol queda tapado y solo asoma su luz alrededor */
+    var co = ctx.createRadialGradient(cx, cy, R * .96, cx, cy, R * 2.2); co.addColorStop(0, 'rgba(255,190,90,.85)'); co.addColorStop(.25, 'rgba(255,140,50,.28)'); co.addColorStop(1, 'rgba(255,100,30,0)');
     ctx.fillStyle = co; ctx.fillRect(0, 0, W, H);
     ctx.globalCompositeOperation = 'source-over';
-    var so = ctx.createRadialGradient(cx, cy, 0, cx, cy, R); so.addColorStop(0, '#fff6d8'); so.addColorStop(.7, '#ffc864'); so.addColorStop(1, '#ff9a3c');
-    ctx.fillStyle = so; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 6.2832); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,220,150,.55)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(cx, cy, R, 0, 6.2832); ctx.stroke();
-    lunas.slice().sort(function (p, q) { return q.k - p.k; }).forEach(function (l) {                         /* las grandes debajo, las pequeñas encima: ninguna queda escondida */
-      var rr = R * l.k, ang = -Math.PI / 2 + 2 * Math.PI * l.pos / n, d = R * .72, c = l.color.join(','), hot = resal === l.id;
-      l.px = cx + Math.cos(ang) * d; l.py = cy + Math.sin(ang) * d; l.pr = rr;
-      ctx.fillStyle = 'rgba(' + c + ',' + (hot ? .98 : .88) + ')'; ctx.beginPath(); ctx.arc(l.px, l.py, rr, 0, 6.2832); ctx.fill();
-      ctx.strokeStyle = hot ? '#fff' : 'rgba(255,255,255,.55)'; ctx.lineWidth = hot ? 2.6 : 1.2; ctx.stroke();
-      if (rr > 22 || hot) { ctx.fillStyle = '#fff'; ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = 4; ctx.font = (hot ? 13 : 11) + 'px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(l.nombre, l.px, l.py + 4); ctx.shadowBlur = 0; }
+    var f = Math.max(0, total / lim), fr = Math.min(1, f), col = f >= 1 ? '#ff4d4d' : f >= .8 ? '#ff9a3c' : '#ffd37a', rr = R * 1.2;
+    ctx.lineWidth = 7; ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU); ctx.stroke();   /* anillo = lo lleno del límite */
+    if (fr > 0) { ctx.strokeStyle = col; ctx.beginPath(); ctx.arc(cx, cy, rr, INI, INI + TAU * fr); ctx.stroke(); }
+    ctx.lineCap = 'butt';
+    ctx.fillStyle = '#05060e'; ctx.beginPath(); ctx.arc(cx, cy, R * 1.02, 0, TAU); ctx.fill();            /* la luna, algo mayor que el Sol: eclipse total */
+    var ang = INI;
+    trozos.forEach(function (t) {
+      var a1 = ang + TAU * t.frac, hot = resal === t.id;
+      t.a0 = ang; t.a1 = a1; ang = a1;
+      if (t.frac <= 0) return;
+      ctx.fillStyle = 'rgba(' + t.color.join(',') + ',' + (hot ? 1 : .86) + ')';
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R * (hot ? 1.04 : 1), t.a0, t.a1); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = hot ? '#fff' : 'rgba(2,3,10,.9)'; ctx.lineWidth = hot ? 2.4 : 1.4; ctx.stroke();
+      if (t.frac > .06) {                                                                                  /* etiqueta dentro de la porción si cabe */
+        var m = (t.a0 + t.a1) / 2, px = cx + Math.cos(m) * R * .66, py = cy + Math.sin(m) * R * .66;
+        ctx.fillStyle = '#fff'; ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = 4; ctx.textAlign = 'center';
+        ctx.font = '11px system-ui,sans-serif'; ctx.fillText(t.nombre, px, py - 2); ctx.font = '10px system-ui,sans-serif'; ctx.fillText((100 * t.frac).toFixed(t.frac < .1 ? 1 : 0) + ' %', px, py + 11); ctx.shadowBlur = 0;
+      }
     });
+    ctx.strokeStyle = 'rgba(255,225,160,.5)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(cx, cy, R * 1.02, 0, TAU); ctx.stroke();
+    var h = trozos.filter(function (t) { return t.id === resal; })[0];                                     /* centro de la luna: lo señalado, o el total */
+    ctx.fillStyle = 'rgba(2,3,10,.82)'; ctx.beginPath(); ctx.arc(cx, cy, R * .3, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+    if (h) { ctx.font = '600 12px system-ui,sans-serif'; ctx.fillText(h.nombre, cx, cy - 6); ctx.font = '11px system-ui,sans-serif'; ctx.fillText(mb(h.bytes) + ' · ' + (100 * h.frac).toFixed(1) + ' %', cx, cy + 11); }
+    else { ctx.font = '600 13px system-ui,sans-serif'; ctx.fillText(mb(total), cx, cy - 4); ctx.font = '11px system-ui,sans-serif'; ctx.fillStyle = '#c9d4ee'; ctx.fillText((100 * f).toFixed(f < .1 ? 1 : 0) + ' % del límite', cx, cy + 12); }
   }
   function medir() {
     var r = cv.getBoundingClientRect(); if (!r.width) return; DPR = Math.min(2, window.devicePixelRatio || 1);
     W = r.width; H = r.height; cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR); dibujar();
   }
-  function bajo(e) {                                                                                             /* luna bajo el ratón (la más pequeña si se solapan) */
-    var r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, mejor = null;
-    lunas.forEach(function (l) { if (Math.hypot(x - l.px, y - l.py) <= l.pr && (!mejor || l.pr < mejor.pr)) mejor = l; });
-    return mejor;
+  function bajo(e) {                                                                                             /* porción bajo el ratón (por el ángulo respecto al centro) */
+    var r = cv.getBoundingClientRect(), g = geom(), x = e.clientX - r.left - g.cx, y = e.clientY - r.top - g.cy;
+    if (Math.hypot(x, y) > g.R * 1.04 || Math.hypot(x, y) < g.R * .3) return null;
+    var a = Math.atan2(y, x); if (a < INI) a += TAU;
+    return trozos.filter(function (t) { return t.frac > 0 && a >= t.a0 && a < t.a1; })[0] || null;
   }
-  cv.addEventListener('mousemove', function (e) { var l = bajo(e), id = l ? l.id : null; if (id !== resal) { resal = id; dibujar(); if (o.alPasar) o.alPasar(id); } });
+  cv.addEventListener('mousemove', function (e) { var t = bajo(e), id = t ? t.id : null; if (id !== resal) { resal = id; dibujar(); if (o.alPasar) o.alPasar(id); } });
   cv.addEventListener('mouseleave', function () { if (resal !== null) { resal = null; dibujar(); if (o.alPasar) o.alPasar(null); } });
   return {
     medir: medir,
     mostrar: medir,
     ocultar: function () {},
     resaltar: function (id) { if (id !== resal) { resal = id; dibujar(); } },
-    datos: function (items, lim) {
-      lunas = items.map(function (it, i) { return {id: it.id, nombre: it.nombre, color: it.color, k: Math.max(.035, Math.min(1.5, Math.sqrt(it.bytes / (lim || 1)))), pos: i}; });
+    datos: function (items, limite, tot) {
+      var suma = items.reduce(function (s, it) { return s + it.bytes; }, 0) || 1;
+      lim = limite || 1; total = tot == null ? suma : tot;
+      trozos = items.map(function (it) { return {id: it.id, nombre: it.nombre, color: it.color, bytes: it.bytes, frac: it.bytes / suma, a0: 0, a1: 0}; });
       dibujar();
     }
   };
@@ -40334,9 +40353,9 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
     <div class="tel-lista" id="telLista"></div>
   </section>
   <section class="eclipses" id="eclipses" hidden aria-label="Eclipses">
-    <div class="imp-cabeza"><h2>Eclipses</h2><p>El Sol es el límite de GitHub (1 GB recomendado por repositorio); cada luna es una galaxia o un tipo de archivo y tapa el Sol en proporción a lo que ocupa.</p></div>
+    <div class="imp-cabeza"><h2>Eclipses</h2><p>El Sol es el límite de GitHub (1 GB recomendado por repositorio); una sola luna lo tapa entero (eclipse total) y es un gráfico de sectores: cada porción es una galaxia o un tipo de archivo, en proporción a lo que pesa. El anillo de la corona se completa según lo lleno que está el límite.</p></div>
     <div class="ecl-barra"><button class="btn" id="eclEsc" type="button" aria-pressed="false">En GitHub</button><button class="btn" id="eclVista" type="button" aria-pressed="false">Por tipo de archivo</button><span class="ecl-nota" id="eclNota" aria-live="polite"></span></div>
-    <div class="ecl-lienzo"><canvas id="eclipses-cv" aria-label="Sol eclipsado por lunas: una por galaxia o tipo de archivo"></canvas></div>
+    <div class="ecl-lienzo"><canvas id="eclipses-cv" aria-label="Eclipse total: la luna es un gráfico de sectores con lo que pesa cada galaxia o tipo de archivo"></canvas></div>
     <div class="ecl-lista" id="eclLista"></div>
   </section>
 </div>
@@ -41447,9 +41466,11 @@ function eclMB(b) { return b >= 1073741824 ? (b / 1073741824).toFixed(2) + ' GB'
 function eclEsc(s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
 function eclResaltar(id) { eclipses.resaltar(id); document.querySelectorAll('.ecl-fila').forEach(function (f) { f.classList.toggle('hot', f.dataset.id === id); }); }
 function eclRender() {
-  var d = ecl.datos, esc = ecl.github && d.github ? d.github : d.disco, lista = (ecl.tipos ? esc.tipos : esc.grupos).slice(0, 12), lim = d.limite;
+  var d = ecl.datos, esc = ecl.github && d.github ? d.github : d.disco, todos = ecl.tipos ? esc.tipos : esc.grupos, lista = todos.slice(0, 12), lim = d.limite;
   var items = lista.map(function (x, i) { var c = !ecl.tipos && GAL[x.id] && GAL[x.id].color ? GAL[x.id].color : ECL_COL[i % ECL_COL.length]; return {id: x.id, nombre: x.nombre, bytes: x.bytes, color: c}; });
-  eclipses.datos(items, lim);
+  var resto = todos.slice(12).reduce(function (s, x) { return s + x.bytes; }, 0);
+  if (resto > 0) items.push({id: 'otros', nombre: 'Otros', bytes: resto, color: [120, 130, 150]});         /* la luna debe sumar el total */
+  eclipses.datos(items, lim, esc.total);
   $('#eclLista').innerHTML = items.map(function (x) { return '<div class="ecl-fila" data-id="' + eclEsc(x.id) + '"><span class="ecl-pto" style="background:rgb(' + x.color.join(',') + ')"></span><span>' + eclEsc(x.nombre) + '</span><span class="ecl-pct">' + eclMB(x.bytes) + ' · ' + (100 * x.bytes / lim).toFixed(1) + ' %</span></div>'; }).join('');
   document.querySelectorAll('.ecl-fila').forEach(function (f) { f.onmouseenter = function () { eclResaltar(f.dataset.id); }; f.onmouseleave = function () { eclResaltar(null); }; });
   var aviso = esc.grandes.length ? ' · ⚠ ' + esc.grandes.length + ' archivo(s) de más de 100 MB: GitHub los rechaza' : '';
@@ -42812,7 +42833,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 5h. **Modo vivo (para ver los cambios mientras se trabaja):** el acceso directo con `--vivo` (`powershell -ExecutionPolicy Bypass -File herramientascceso_vivo.ps1 on|off` lo apunta a esta carpeta o lo restaura) recarga la app solo cuando se regenera `visor_arbol.html` y la coloca donde indique `.foco`. Para enseñar un cambio: `python herramientas/ver.py [destino]` regenera el visor y escribe el foco (`cerebro`, `galaxia:codigo|conceptos|demos|finanzas` o el nombre de una función/concepto/demo; el visor también lo admite como `#destino`).
 5i. **Pestañas e importador:** el visor tiene pestañas **🌌 Universo** (el mapa) y **⚫ Importar** (además de 🎓 Aprender). «Importar» es un agujero negro (`py/visor/agujero.js`): clic o soltar archivos abre el explorador de Windows (`Api.elegir_archivos`); `py/conocimiento/importar.py` analiza cada fichero (`clasificar`: galaxia finanzas/libros/notas, **género** —historia, economía, ensayo, estadística, ciencia, novela…—, subtema = tema del catálogo (palabras clave en inglés y español, peso del título) y solo para estadística/economía/tecnología —un libro de historia queda en «General»—, tipo, capítulos, vista previa, idioma, duplicado) y el panel muestra una tarjeta desplegable por archivo (barras con lo detectado: pulsar una fija el género o el subtema; desplegables de galaxia/género/tipo, título editable —los nombres largos se recortan con `titulo_corto`—, etiquetas, «Para todos»). Se importa archivo a archivo con progreso: `importar()` copia a `conocimiento/biblioteca/<galaxia>/<subtema>/` con nombre corto, guarda `biblioteca/metadatos.json` (hash: no duplica) y lo indexa; después `Api.actualizar_visor` regenera `visor_arbol.html` y el visor se recarga. `enriquecer()` completa capítulos/género/títulos de lo importado con versiones anteriores. Al final de la pestaña hay un desplegable «¿Cómo funciona la importación?». **Mapas con tu biblioteca** (`ramas_biblioteca` en `construir_visor.py`): Libros = una rama por género › un módulo por libro › un punto por capítulo (PDF: marcadores o tramos de 25 págs.; EPUB: su índice) con «Abrir en la página N»; los capítulos NO se dibujan hasta que pulsas el libro (`nivel()` en `mapa3d.js`; el panel del libro, `detalleLibro`, los lista siempre); el recuento de una rama son sus libros; Notas = una rama por subtema con un punto por documento; las demás galaxias reciben una rama «Documentos importados». Una galaxia sin nada no tiene mapa ni líneas (solo búsqueda). **Conceptos con vídeo:** los conceptos con fuentes de vídeo (Very Normal, Harvard, MIT, 3Blue1Brown…; `es_video`) llevan un ▶ en el mapa y la lista de vídeos arriba del panel (la cabecera ya no tiene filtros ni chips de ramas: solo buscador y perfil). **Observatorio (pestaña 🔭; internamente «biblioteca»: carpeta `conocimiento/biblioteca`, `biblioteca_*` en la API):** lista lo importado y deja editar título, galaxia, género, subtema, tipo y etiquetas (se guarda al momento; `importar.editar`), reclasificar (`reclasificar_uno`) y borrar (`borrar`: quita la copia de `biblioteca/`, nunca el original); lo que fijas se recuerda (`biblioteca/correcciones.json`: obras de nombre parecido se clasifican igual). El universo se regenera al volver a él. **Importar:** «Original: copiar/mover» (mover quita el original de su carpeta tras importar) y progreso real por páginas (`conocimiento.PROGRESO`, trabajo en segundo plano `Api.importar_archivos` + `estado_trabajo`). **Búsqueda con ámbito:** prefijos `libros:`, `código:`, `conceptos:`, `demos:`, `notas:`, `finanzas:`, `vídeo:` y géneros (`historia:`, `economía:`…), combinables; con la barra vacía salen los atajos; flechas/Enter sirven también para los resultados de tus carpetas y hay indicador de «buscando…».
 **Buscador:** la barra ocupa todo el espacio libre de la cabecera y cada resultado lleva un icono (`iconoNodo`/`iconoRes` en la plantilla): portada del libro (la del EPUB, la primera página del PDF con Poppler si está, o una generada por género; `importar.portada`, `DATA.portadas`), logo de Python (funciones y ejemplos), ∑ (conceptos; con ▶ si tienen vídeo), f(x) (demos), documento (guías) y la etiqueta del formato (PDF, DOCX, MD…). Al buscar, el universo reacciona: la galaxia con más coincidencias late y la cámara se acerca un poco (`cerebro.enfocar`), el resto se atenúa; los capítulos de un mismo libro se agrupan en un resultado. Los `*.pdf` y `*.epub` están en `.gitignore`. Por consola: `cd py && python -m conocimiento importar f.pdf [-g libros] [-G historia] [-s "Inferencia y contrastes"] [-t libro]`.
-5j. **Eclipses (almacenaje):** pestaña «🌘 Eclipses» (`py/visor/eclipses.js`, medición en `py/conocimiento/almacenaje.py`, API `Api.almacenaje`): el Sol es el límite de GitHub (1 GB recomendado, 5 GB tope, 100 MB por archivo) y cada galaxia o tipo de archivo es una luna de su color, ESTÁTICA (sin órbitas ni animación: decisión de Mario), cuya área es proporcional a lo que ocupa y que tapa el Sol. Dos escenarios: «En disco» (todo) y «En GitHub» (`git ls-files -co --exclude-standard`: respeta `.gitignore`), y dos vistas (por galaxia / por tipo). Avisa de archivos >100 MB. Test: `tests/test_almacenaje.py`.
+5j. **Eclipses (almacenaje):** pestaña «🌘 Eclipses» (`py/visor/eclipses.js`, medición en `py/conocimiento/almacenaje.py`, API `Api.almacenaje`): el Sol es el límite de GitHub (1 GB recomendado, 5 GB tope, 100 MB por archivo) y UNA sola luna lo tapa entero (eclipse total, 1.14): es un gráfico de sectores donde cada galaxia o tipo de archivo es una porción de su color proporcional a lo que pesa (lo que no cabe en las 12 mayores va a «Otros»); lo lleno que está el límite se lee en un anillo de la corona (ámbar > 80 %, rojo > 100 %) y en el texto del centro. ESTÁTICA (sin órbitas ni animación: decisión de Mario). Dos escenarios: «En disco» (todo) y «En GitHub» (`git ls-files -co --exclude-standard`: respeta `.gitignore`), y dos vistas (por galaxia / por tipo). Avisa de archivos >100 MB. Test: `tests/test_almacenaje.py`.
 5m. **Referencias que viajan:** los PDF/EPUB no suben a GitHub, pero `conocimiento/biblioteca/referencias.json` (los metadatos sin rutas del equipo: título, galaxia, género, capítulos, hash) y `biblioteca/portadas/` sí (`.gitignore`; `importar._guardar` los escribe junto a `metadatos.json`, que sigue siendo local). `leer_metadatos` fusiona ambos, así que en otro equipo el mapa y el Observatorio muestran los libros como referencias vacías («sin el archivo en este equipo»); al importar un archivo con el mismo hash se restaura en su sitio.
 5k. **Telescopio:** pestaña «📡 Telescopio» (`py/conocimiento/telescopio.py`, API `Api.telescopio_buscar/traer`, consola `python -m conocimiento telescopio <consulta> [--traer N]`). Busca **solo fuentes legales**: Project Gutenberg (catálogo OPDS oficial, dominio público; Gutendex se descartó por lento), Google Books y Open Library (catálogo: ficha y enlace; descarga solo si es dominio público o lectura abierta; Google necesita clave en `GOOGLE_BOOKS_KEY` o `conocimiento/google_books.key` porque la cuota anónima diaria suele estar agotada), arXiv, OpenAlex (solo con PDF abierto) e Internet Archive (solo licencia CC/dominio público o publicado ≤ 1929). **No se añaden fuentes piratas (Anna's Archive, Z-Library, LibGen…) ni descargadores de ellas.** `traer` descarga (https, ≤ 200 MB, comprueba que es PDF/EPUB de verdad) y pasa por `importar.importar` con el género sacado de las materias de la obra (`genero_desde_materias`); `materias_de` consulta Open Library para clasificar un título que ya tienes. Tests sin red (`_get` se sustituye): `tests/test_telescopio.py`.
 5p. **Importar cualquier archivo:** además de libros, el importador acepta código (`CODIGO_EXT`: .py .ipynb .r .sas .sql .js …), datos (`DATOS_EXT`: .csv .xlsx .json .yaml …) y apuntes (`APUNTES_EXT`: .pptx .tex .html .rst) — todo en `EXT_IMPORTABLE` (`conocimiento/__init__.py`). El código va a la galaxia Código (tipo `codigo`, género tecnología); los datos al tipo `datos` (solo se indexa la cabecera); los cuadernos se indexan por celdas y su «índice» son los títulos markdown. Las carpetas de `fuentes.json` siguen leyendo solo `EXT` (documentos), para no indexar todo un disco. Otros formatos (imágenes, .zip, .exe) se rechazan con un mensaje claro. Se filtran en el buscador con prefijos como `py:`, `ipynb:`, `csv:`, `sql:`, `pptx:` (`conocimiento.buscar(formato=)`). Test: `tests/test_importar_formatos.py`.
