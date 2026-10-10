@@ -27,6 +27,7 @@ from metricas_etiquetas import etiquetas_multiples, metricas  # noqa: E402
 RAIZ = Path(sys.argv[1]) if len(sys.argv) > 1 and not sys.argv[1].startswith("--") else Path(".")
 LOG = Path(sys.argv[sys.argv.index("--log") + 1]) if "--log" in sys.argv else None
 PUERTO = int(sys.argv[sys.argv.index("--puerto") + 1]) if "--puerto" in sys.argv else 8765
+PADRE = int(sys.argv[sys.argv.index("--padre") + 1]) if "--padre" in sys.argv else 0          # si lo arranca la app: se cierra cuando la app se cierra
 
 
 def leer(f: Path, defecto):
@@ -331,4 +332,14 @@ class H(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     print(f"Panel en http://localhost:{PUERTO}  (Ctrl+C para cerrar)", flush=True)
+    if PADRE:
+        import os
+        import threading
+
+        def vigilar():
+            while True:
+                time.sleep(10)
+                if str(PADRE) not in subprocess.run(["tasklist", "/FI", f"PID eq {PADRE}", "/NH"], capture_output=True, text=True).stdout:
+                    os._exit(0)
+        threading.Thread(target=vigilar, daemon=True).start()
     ThreadingHTTPServer(("127.0.0.1", PUERTO), H).serve_forever()

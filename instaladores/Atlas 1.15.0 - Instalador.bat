@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Atlas del conocimiento 1.14.1 - Instalador
+title Atlas del conocimiento 1.15.0 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
 set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=1.14.1"
+set "ARBOL_VERSION=1.15.0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -685,7 +685,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.14.1
+1.15.0
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Atlas del conocimiento en su propia ventana, como una aplicación.
@@ -918,6 +918,47 @@ class Api:
 
     def entrenamiento_parar(self):
         return self._ent("parar")
+
+    # ---- pestaña «IA»: chat y límites de recursos (py/conocimiento/chat.py y recursos.py) ----
+    def _ia(self, modulo, nombre, *args):
+        try:
+            import importlib
+            return getattr(importlib.import_module("conocimiento." + modulo), nombre)(*args)
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    def ia_maquina(self):
+        return self._ia("recursos", "maquina")
+
+    def ia_configuracion(self):
+        """Los límites guardados y el modelo con el que clasifica."""
+        try:
+            from conocimiento import chat, llm, recursos
+            return {"recursos": recursos.ajustes(), "modelo_llm": llm.ajustes()["modelo"], **chat.modelos()}
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    def ia_guardar(self, recursos, modelo_llm=""):
+        try:
+            from conocimiento import recursos as r
+            out = {"recursos": r.guardar(dict(recursos))}
+            if modelo_llm:
+                r.fijar_modelo_llm(str(modelo_llm))
+            return out
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    def chat_modelos(self):
+        return self._ia("chat", "modelos")
+
+    def chat_iniciar(self, mensajes, modelo, biblioteca):
+        return self._ia("chat", "iniciar", list(mensajes), str(modelo), bool(biblioteca))
+
+    def chat_estado(self):
+        return self._ia("chat", "estado")
+
+    def chat_parar(self):
+        return self._ia("chat", "parar")
 
     # ---- telescopio (pestaña «Telescopio»): ver py/conocimiento/telescopio.py ----
     def telescopio_buscar(self, consulta="", titulo="", autor="", tipo="todo", formato=""):
@@ -3053,7 +3094,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.14.1"
+version = "1.15.0"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3733,7 +3774,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.14.1"
+__version__ = "1.15.0"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -14649,6 +14690,108 @@ def medir(raiz: Path | str = RAIZ) -> dict:
     return {"limite": LIMITE, "limite_duro": LIMITE_DURO, "limite_archivo": LIMITE_ARCHIVO,
             "disco": _escenario(_lista_disco(raiz), raiz), "github": _escenario(gh, raiz) if gh is not None else None}
 :::END
+:::BEGIN py/conocimiento/chat.py|text
+"""Chat con el LLM local (Ollama) para la pestaña «🧠 IA» › Chat.
+
+La app (pywebview) no puede recibir texto a trozos, así que la respuesta se genera en un hilo y la página pregunta cada poco con `estado()` (igual que la importación).
+Con `biblioteca=True` se buscan en tu conocimiento (`conocimiento.buscar`) los trozos más parecidos a la última pregunta y se le pasan como contexto, con su número para citarlos.
+Todo en localhost. Los modelos entrenados para clasificar contestan JSON aunque les hables: para charlar usa el modelo base (qwen2.5:7b).
+"""
+from __future__ import annotations
+
+import json
+import threading
+import urllib.request
+
+from . import llm, recursos
+
+SISTEMA = ("Eres el asistente del Atlas del conocimiento, la biblioteca personal de estadística y conocimiento de Mario. Respondes en español, claro y sin rodeos. "
+           "Si no sabes algo o los fragmentos no lo cubren, lo dices en vez de inventarlo.")
+_t: dict = {"fase": "libre", "texto": "", "fuentes": [], "error": "", "n": 0}
+_parar = threading.Event()
+_lock = threading.Lock()
+
+
+def modelos() -> dict:
+    """{modelos: [nombres instalados en Ollama], por_defecto, error}; por defecto el base más grande (no el afinado para clasificar)."""
+    try:
+        nombres = [m["name"] for m in recursos._http(llm.URL + "/api/tags").get("models", [])]
+    except Exception as e:
+        return {"modelos": [], "por_defecto": "", "error": f"No hay Ollama en este equipo ({type(e).__name__})."}
+    base = [n for n in nombres if not any(k in n.lower() for k in ("arbol", "atlas", "clasific"))]
+    pref = next((n for n in ("qwen2.5:7b", "qwen2.5:3b") if n in base), base[0] if base else (nombres[0] if nombres else ""))
+    return {"modelos": nombres, "por_defecto": pref, "error": ""}
+
+
+def _contexto(pregunta: str) -> tuple[str, list]:
+    try:
+        from . import buscar
+        res = buscar(pregunta, n=6)
+    except Exception:
+        return "", []
+    fuentes = [{"n": i + 1, "titulo": r["titulo"], "ubicacion": r.get("ubicacion", ""), "coleccion": r["coleccion"], "ruta": r.get("ruta", "")} for i, r in enumerate(res)]
+    texto = "\n".join(f"[{i + 1}] {r['titulo']} ({r.get('ubicacion', '')}): {r['fragmento']}" for i, r in enumerate(res))
+    return (f"\n\nFragmentos de la biblioteca de Mario que pueden servir (cítalos como [n]):\n{texto}" if texto else ""), fuentes
+
+
+def _correr(mensajes: list, modelo: str, biblioteca: bool, n: int) -> None:
+    try:
+        pregunta = next((m["content"] for m in reversed(mensajes) if m["role"] == "user"), "")
+        extra, fuentes = _contexto(pregunta) if biblioteca else ("", [])
+        with _lock:
+            _t.update(fuentes=fuentes)
+        url = llm.ajustes()["url"]
+        op = {"num_ctx": 4096, **recursos.opciones_ollama(modelo, url)}
+        cuerpo = {"model": modelo, "stream": True, "options": op, "messages": [{"role": "system", "content": SISTEMA + extra}, *[{"role": m["role"], "content": m["content"]} for m in mensajes]]}
+        req = urllib.request.Request(url + "/api/chat", json.dumps(cuerpo).encode(), {"Content-Type": "application/json"})
+        if not url.startswith(("http://localhost", "http://127.0.0.1")):
+            raise ValueError("solo se habla con Ollama en este equipo")
+        with urllib.request.urlopen(req, timeout=300) as r:
+            for linea in r:
+                if _parar.is_set():
+                    break
+                if not linea.strip():
+                    continue
+                j = json.loads(linea)
+                with _lock:
+                    if _t["n"] != n:
+                        return
+                    _t["texto"] += j.get("message", {}).get("content", "")
+                if j.get("done"):
+                    break
+    except Exception as e:
+        with _lock:
+            if _t["n"] == n:
+                _t["error"] = f"{type(e).__name__}: {e}"
+    finally:
+        with _lock:
+            if _t["n"] == n:
+                _t["fase"] = "fin"
+
+
+def iniciar(mensajes: list, modelo: str, biblioteca: bool = False) -> dict:
+    """Empieza a generar la respuesta a `mensajes` ([{role: user|assistant, content}]) en segundo plano."""
+    with _lock:
+        if _t["fase"] == "trabajando":
+            return {"error": "ya se está generando una respuesta"}
+        if not mensajes or mensajes[-1].get("role") != "user":
+            return {"error": "falta la pregunta"}
+        _parar.clear()
+        _t.update(fase="trabajando", texto="", fuentes=[], error="", n=_t["n"] + 1)
+        n = _t["n"]
+    threading.Thread(target=_correr, args=([dict(m) for m in mensajes], str(modelo), bool(biblioteca), n), daemon=True).start()
+    return {"ok": True}
+
+
+def estado() -> dict:
+    with _lock:
+        return dict(_t)
+
+
+def parar() -> dict:
+    _parar.set()
+    return {"ok": True}
+:::END
 :::BEGIN py/conocimiento/clasificador.py|text
 """Clasificador por parecido (embeddings): sugiere el género de un libro comparándolo con ejemplos, sin palabras clave.
 
@@ -15161,7 +15304,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from . import CARPETA, RAIZ
+from . import CARPETA, RAIZ, recursos
 
 PUERTO = 8765
 MODELOS = {"Qwen/Qwen2.5-3B-Instruct": "3B (cabe con 12 GB de VRAM)", "Qwen/Qwen2.5-7B-Instruct": "7B (cierra todo lo demás: necesita casi toda la VRAM)"}
@@ -15243,7 +15386,7 @@ def abrir_panel() -> dict:
         py = Path(sys.executable)
         if py.name.lower() == "pythonw.exe" and (py.parent / "python.exe").exists():
             py = py.parent / "python.exe"
-        subprocess.Popen([str(py), str(RAIZ / "herramientas" / "panel_progreso.py"), str(corpus()), "--puerto", str(PUERTO)], cwd=str(RAIZ), creationflags=_SIN_VENTANA,
+        subprocess.Popen([str(py), str(RAIZ / "herramientas" / "panel_progreso.py"), str(corpus()), "--puerto", str(PUERTO), "--padre", str(os.getpid())], cwd=str(RAIZ), creationflags=_SIN_VENTANA,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, env={**os.environ, "PYTHONIOENCODING": "utf-8"})
         for _ in range(30):
             time.sleep(.3)
@@ -15283,9 +15426,11 @@ def lanzar(nombre: str, modelo: str = "Qwen/Qwen2.5-3B-Instruct", biblioteca: bo
     lote = c / "enes" / "entrenamiento" / "_lanzar.bat"
     lote.write_text("@echo off\nset \"ARBOL_VENV=%s\"\n%s\n" % (venv_python().parent.parent, " && ".join(pasos)), encoding="utf-8")
     _soltar_gpu()
-    p = subprocess.Popen(["cmd", "/c", str(lote)], cwd=str(RAIZ), creationflags=_SIN_VENTANA, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+    p = subprocess.Popen(["cmd", "/c", str(lote)], cwd=str(RAIZ), creationflags=_SIN_VENTANA, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+                         env={**os.environ, **recursos.entorno()})                  # los límites de VRAM y GPU los lee entrenar.py
+    ram = recursos.limitar_ram(p.pid, recursos.ajustes()["ram"])                      # el de RAM se pone aquí, al proceso entero
     _marca(c).write_text(json.dumps({"pid": p.pid, "nombre": nombre, "modelo": modelo, "desde": time.strftime("%Y-%m-%d %H:%M:%S")}), encoding="utf-8")
-    return {"ok": True, "pid": p.pid}
+    return {"ok": True, "pid": p.pid, "limite_ram": ram}
 
 
 def parar() -> dict:
@@ -16445,7 +16590,7 @@ import urllib.request
 from shutil import which
 from pathlib import Path
 
-from . import CARPETA
+from . import CARPETA, recursos
 from .etiquetas import MAXIMO
 
 def ram_gb() -> float:
@@ -16575,7 +16720,7 @@ def prompt_generos(titulo: str, capitulos: list, vista: str, materias: list, gen
 def _pedir(a: dict, prompt: str, esquema: dict) -> dict | None:
     """Una consulta a Ollama con salida JSON forzada por `esquema`; None si falla o la respuesta no es JSON."""
     try:
-        r = _http(a["url"] + "/api/chat", {"model": a["modelo"], "stream": False, "format": esquema, "options": {"temperature": 0, "num_predict": 100, "num_ctx": 2048},
+        r = _http(a["url"] + "/api/chat", {"model": a["modelo"], "stream": False, "format": esquema, "options": {"temperature": 0, "num_predict": 100, "num_ctx": 2048, **recursos.opciones_ollama(a["modelo"], a["url"])},
                                            "messages": [{"role": "user", "content": prompt}]})
         _estado["fallo_red"] = False
         return json.loads(re.sub(r"^```(?:json)?|```$", "", r["message"]["content"].strip()))
@@ -16628,6 +16773,163 @@ def subgeneros(titulo: str, capitulos: list, vista: str, genero: str, subs: list
 def subgenero(titulo: str, capitulos: list, vista: str, genero: str, subs: list, autor: str = "", carpeta: Path | str = CARPETA, vecinos: list | None = None) -> str | None:
     """Id del subgénero principal que elige el LLM (el primero de `subgeneros`), o None."""
     return next(iter(subgeneros(titulo, capitulos, vista, genero, subs, autor, carpeta, vecinos)), None)
+:::END
+:::BEGIN py/conocimiento/recursos.py|text
+"""Límites de GPU, VRAM y RAM para el entrenamiento y para el LLM (pestaña «🧠 IA» › Configuración) y lectura del uso real de la máquina.
+
+Se guardan en `conocimiento/ajustes.json` → {"recursos": {"vram": 85, "ram": 80, "gpu": 100}} (porcentajes; 100 = sin límite). Qué se puede limitar de verdad:
+  · VRAM: entrenamiento → tope real (`torch.cuda.set_per_process_memory_fraction`, lo lee entrenar.py de ARBOL_VRAM_PCT); Ollama → aproximado: se reparten las capas
+    del modelo entre GPU y CPU (`num_gpu`), así que con menos VRAM el modelo sigue cabiendo pero va más lento.
+  · RAM: tope real al proceso que lanzamos (un Job Object de Windows con límite de memoria comprometida); el servidor de Ollama lo arranca él solo y no lo controlamos.
+  · GPU: Windows no deja capar el % de cómputo de una tarjeta de consumo. En el entrenamiento se aproxima con pausas entre ejemplos (50 % ≈ el doble de tiempo; ARBOL_GPU_PCT);
+    en Ollama no se puede.
+"""
+from __future__ import annotations
+
+import ctypes
+import json
+import subprocess
+import sys
+import time
+import urllib.request
+from pathlib import Path
+
+from . import CARPETA
+
+DEFECTO = {"vram": 100, "ram": 100, "gpu": 100}
+MINIMO = 10
+_SIN_VENTANA = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+_capas: dict = {}                         # modelo -> nº de capas (se pregunta una vez a Ollama)
+
+
+def _limpiar(v: dict) -> dict:
+    out = dict(DEFECTO)
+    for k in DEFECTO:
+        try:
+            out[k] = max(MINIMO, min(100, int(round(float(v[k])))))
+        except (KeyError, TypeError, ValueError):
+            pass
+    return out
+
+
+def ajustes(carpeta: Path | str = CARPETA) -> dict:
+    try:
+        return _limpiar(json.loads((Path(carpeta) / "ajustes.json").read_text(encoding="utf-8")).get("recursos", {}))
+    except (OSError, ValueError):
+        return dict(DEFECTO)
+
+
+def guardar(valores: dict, carpeta: Path | str = CARPETA) -> dict:
+    """Guarda los límites sin tocar el resto de ajustes.json y devuelve lo guardado (ya recortado a 10-100)."""
+    f = Path(carpeta) / "ajustes.json"
+    try:
+        j = json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        j = {}
+    j["recursos"] = _limpiar({**ajustes(carpeta), **valores})
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps(j, ensure_ascii=False, indent=1), encoding="utf-8")
+    return j["recursos"]
+
+
+def entorno(carpeta: Path | str = CARPETA) -> dict:
+    """Variables de entorno con las que entrena entrenar.py (solo las que limitan algo)."""
+    a = ajustes(carpeta)
+    return {**({"ARBOL_VRAM_PCT": str(a["vram"])} if a["vram"] < 100 else {}), **({"ARBOL_GPU_PCT": str(a["gpu"])} if a["gpu"] < 100 else {})}
+
+
+def _ram() -> tuple[float, float]:
+    """(usada, total) en GB; (0, 0) si no se sabe."""
+    class _Mem(ctypes.Structure):
+        _fields_ = [("l", ctypes.c_ulong), ("c", ctypes.c_ulong), ("total", ctypes.c_ulonglong), ("libre", ctypes.c_ulonglong), ("tp", ctypes.c_ulonglong),
+                    ("lp", ctypes.c_ulonglong), ("tv", ctypes.c_ulonglong), ("lv", ctypes.c_ulonglong), ("ext", ctypes.c_ulonglong)]
+    try:
+        m = _Mem(); m.l = ctypes.sizeof(_Mem)
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(m))
+        return (m.total - m.libre) / 1e9, m.total / 1e9
+    except Exception:
+        return 0.0, 0.0
+
+
+def maquina() -> dict:
+    """Uso real ahora mismo: {gpu, vram_usada, vram_total (GB), vram_pct, ram_usada, ram_total (GB), ram_pct, gpu_nombre} (None donde no se pueda medir)."""
+    usada, total = _ram()
+    out = {"ram_usada": round(usada, 1), "ram_total": round(total, 1), "ram_pct": round(100 * usada / total) if total else None, "gpu": None, "vram_usada": None, "vram_total": None, "vram_pct": None, "gpu_nombre": ""}
+    try:
+        s = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total,name", "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=4,
+                           creationflags=_SIN_VENTANA).stdout.strip().splitlines()[0].split(", ")
+        u, mu, mt = float(s[0]), float(s[1]) / 1024, float(s[2]) / 1024
+        out.update(gpu=round(u), vram_usada=round(mu, 1), vram_total=round(mt, 1), vram_pct=round(100 * mu / mt), gpu_nombre=s[3])
+    except Exception:
+        pass
+    return out
+
+
+def limitar_ram(pid: int, pct: int) -> bool:
+    """Mete el proceso (y lo que lance) en un Job Object con tope de memoria = pct % de la RAM. False si pct = 100, no es Windows o no se pudo."""
+    _, total = _ram()
+    if pct >= 100 or not total or sys.platform != "win32":
+        return False
+
+    class _Basica(ctypes.Structure):
+        _fields_ = [("t1", ctypes.c_int64), ("t2", ctypes.c_int64), ("flags", ctypes.c_uint32), ("ws_min", ctypes.c_size_t), ("ws_max", ctypes.c_size_t), ("activos", ctypes.c_uint32),
+                    ("afinidad", ctypes.c_size_t), ("prioridad", ctypes.c_uint32), ("sched", ctypes.c_uint32)]
+
+    class _Extendida(ctypes.Structure):
+        _fields_ = [("basica", _Basica), ("io", ctypes.c_uint64 * 6), ("proceso", ctypes.c_size_t), ("trabajo", ctypes.c_size_t), ("pico_p", ctypes.c_size_t), ("pico_t", ctypes.c_size_t)]
+    try:
+        k = ctypes.windll.kernel32
+        k.CreateJobObjectW.restype = ctypes.c_void_p
+        k.OpenProcess.restype = ctypes.c_void_p
+        job = k.CreateJobObjectW(None, None)
+        info = _Extendida()
+        info.basica.flags = 0x200                                      # JOB_OBJECT_LIMIT_JOB_MEMORY
+        info.trabajo = int(total * 1e9 * pct / 100)
+        if not k.SetInformationJobObject(ctypes.c_void_p(job), 9, ctypes.byref(info), ctypes.sizeof(info)):
+            return False
+        h = k.OpenProcess(0x0101, False, int(pid))                     # PROCESS_SET_QUOTA | PROCESS_TERMINATE
+        return bool(h and k.AssignProcessToJobObject(ctypes.c_void_p(job), ctypes.c_void_p(h)))
+    except Exception:
+        return False
+
+
+def _http(url: str, datos: dict | None = None) -> dict:
+    if not url.startswith(("http://localhost", "http://127.0.0.1")):
+        raise ValueError("solo se habla con Ollama en este equipo")
+    req = urllib.request.Request(url, json.dumps(datos).encode() if datos is not None else None, {"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=8) as r:
+        return json.load(r)
+
+
+def capas(modelo: str, url: str) -> int:
+    """Nº de bloques del modelo (de /api/show); 0 si no se puede saber."""
+    if modelo not in _capas:
+        try:
+            info = _http(url + "/api/show", {"model": modelo}).get("model_info", {})
+            _capas[modelo] = next((int(v) for k, v in info.items() if k.endswith(".block_count")), 0)
+        except Exception:
+            return 0
+    return _capas[modelo]
+
+
+def opciones_ollama(modelo: str, url: str, carpeta: Path | str = CARPETA) -> dict:
+    """Opciones de Ollama que aplican el límite de VRAM: {'num_gpu': capas en GPU} o {} sin límite. (num_gpu cuenta las capas de bloques más la de salida.)"""
+    pct = ajustes(carpeta)["vram"]
+    if pct >= 100:
+        return {}
+    n = capas(modelo, url)
+    return {"num_gpu": max(0, round((n + 1) * pct / 100))} if n else {}
+
+
+def fijar_modelo_llm(modelo: str, carpeta: Path | str = CARPETA) -> None:
+    """Modelo de Ollama con el que clasifica la app (ajustes.json → llm.modelo), sin tocar el resto."""
+    f = Path(carpeta) / "ajustes.json"
+    try:
+        j = json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        j = {}
+    j.setdefault("llm", {})["modelo"] = modelo
+    f.write_text(json.dumps(j, ensure_ascii=False, indent=1), encoding="utf-8")
 :::END
 :::BEGIN py/conocimiento/taxonomia.py|text
 """Taxonomía de la biblioteca: género (nivel 1) › subgénero (nivel 2). Cada subgénero lleva una frase en español y otra en inglés: con ellas el clasificador por parecido
@@ -34701,7 +35003,7 @@ def test_lanzar_escribe_lote_y_marca_y_no_duplica(tmp_path, monkeypatch):
     monkeypatch.setattr(ent.subprocess, "Popen", lambda *a, **k: llamadas.append(a) or P())
     monkeypatch.setattr(ent, "_vivo", lambda pid: True)
     r = ent.lanzar("mi ft/../3", "Qwen/Qwen2.5-3B-Instruct", biblioteca=False)
-    assert r == {"ok": True, "pid": 4242} and len(llamadas) == 1
+    assert r["ok"] and r["pid"] == 4242 and len(llamadas) == 1
     lote = (c / "enes" / "entrenamiento" / "_lanzar.bat").read_text(encoding="utf-8")
     assert "ARBOL_VENV" in lote and "entrenar" in lote and " datos " not in lote       # los datos ya existen y no se pidió sumar la biblioteca
     assert "mift3" in lote                                                               # el nombre se limpia (nada de rutas)
@@ -35454,6 +35756,112 @@ def test_clustering_y_vif():
     v = calcular_vif(sm.add_constant(df.assign(c=df.a * 2 + rng.normal(0, 0.01, len(df)))))
     textos = [t.get_text() for t in grafico_vif(v).axes[0].texts]
     assert any("ALTO" in t for t in textos)
+:::END
+:::BEGIN py/tests/test_ia.py|text
+"""Pestaña «IA»: límites de recursos (ajustes, entorno, num_gpu de Ollama) y chat con Ollama (falso)."""
+import io
+import json
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conocimiento import chat, recursos
+
+
+def test_ajustes_por_defecto_recortan_y_conservan_lo_demas(tmp_path):
+    assert recursos.ajustes(tmp_path) == {"vram": 100, "ram": 100, "gpu": 100}
+    (tmp_path / "ajustes.json").write_text(json.dumps({"llm": {"modelo": "qwen2.5:7b"}}), encoding="utf-8")
+    assert recursos.guardar({"vram": 5, "gpu": 250, "ram": "70"}, tmp_path) == {"vram": 10, "ram": 70, "gpu": 100}       # 10-100 %, y acepta números como texto
+    j = json.loads((tmp_path / "ajustes.json").read_text(encoding="utf-8"))
+    assert j["llm"] == {"modelo": "qwen2.5:7b"} and j["recursos"]["ram"] == 70
+    recursos.fijar_modelo_llm("arbol-ft2", tmp_path)
+    assert json.loads((tmp_path / "ajustes.json").read_text(encoding="utf-8"))["llm"]["modelo"] == "arbol-ft2"
+    assert recursos.ajustes(tmp_path)["ram"] == 70                                                                         # fijar el modelo no pisa los límites
+
+
+def test_entorno_solo_lleva_lo_que_limita(tmp_path):
+    assert recursos.entorno(tmp_path) == {}
+    recursos.guardar({"vram": 60, "gpu": 50}, tmp_path)
+    assert recursos.entorno(tmp_path) == {"ARBOL_VRAM_PCT": "60", "ARBOL_GPU_PCT": "50"}
+
+
+def test_num_gpu_reparte_las_capas_segun_la_vram(tmp_path, monkeypatch):
+    monkeypatch.setattr(recursos, "capas", lambda m, u: 28)
+    assert recursos.opciones_ollama("qwen2.5:7b", "http://localhost:11434", tmp_path) == {}                                # 100 %: sin límite (y ni pregunta a Ollama)
+    recursos.guardar({"vram": 50}, tmp_path)
+    assert recursos.opciones_ollama("qwen2.5:7b", "http://localhost:11434", tmp_path) == {"num_gpu": 14}                  # (28 + 1) · 0,5 redondeado
+    monkeypatch.setattr(recursos, "capas", lambda m, u: 0)                                                                   # no se sabe cuántas capas tiene: no se toca
+    assert recursos.opciones_ollama("raro", "http://localhost:11434", tmp_path) == {}
+
+
+def test_recursos_solo_habla_con_localhost():
+    try:
+        recursos._http("http://ejemplo.com/api/tags")
+    except ValueError:
+        return
+    raise AssertionError("debía rechazar una URL que no es local")
+
+
+def test_maquina_devuelve_las_claves():
+    m = recursos.maquina()
+    assert {"gpu", "vram_pct", "ram_pct", "ram_total"} <= set(m)
+
+
+class _Resp(io.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def _ollama_falso(trozos):
+    cuerpo = b"".join(json.dumps({"message": {"content": t}, "done": False}).encode() + b"\n" for t in trozos) + b'{"done": true}\n'
+    pedidos = []
+
+    def urlopen(req, timeout=0):
+        pedidos.append(json.loads(req.data))
+        return _Resp(cuerpo)
+    return urlopen, pedidos
+
+
+def _esperar():
+    for _ in range(100):
+        if chat.estado()["fase"] == "fin":
+            return chat.estado()
+        time.sleep(.05)
+    raise AssertionError("el chat no terminó")
+
+
+def test_chat_acumula_el_texto_y_manda_el_historial(monkeypatch):
+    urlopen, pedidos = _ollama_falso(["Hola", ", ", "Mario"])
+    monkeypatch.setattr(chat.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(chat.recursos, "opciones_ollama", lambda *a, **k: {})
+    r = chat.iniciar([{"role": "user", "content": "¿Qué tal?"}], "qwen2.5:7b", biblioteca=False)
+    assert r == {"ok": True}
+    e = _esperar()
+    assert e["texto"] == "Hola, Mario" and not e["error"] and e["fuentes"] == []
+    assert pedidos[0]["model"] == "qwen2.5:7b" and pedidos[0]["messages"][0]["role"] == "system" and pedidos[0]["messages"][-1]["content"] == "¿Qué tal?"
+
+
+def test_chat_con_biblioteca_cita_fuentes(monkeypatch):
+    urlopen, pedidos = _ollama_falso(["Ok"])
+    monkeypatch.setattr(chat.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(chat.recursos, "opciones_ollama", lambda *a, **k: {})
+    import conocimiento
+    monkeypatch.setattr(conocimiento, "buscar", lambda q, n=6, **k: [{"coleccion": "libros", "titulo": "Libro X", "ubicacion": "p. 3", "ruta": "x.pdf", "fragmento": "texto «clave»"}])
+    chat.iniciar([{"role": "user", "content": "clave"}], "m", biblioteca=True)
+    e = _esperar()
+    assert e["fuentes"][0]["titulo"] == "Libro X" and "[1] Libro X" in pedidos[0]["messages"][0]["content"]
+
+
+def test_chat_rechaza_preguntas_vacias_y_errores_llegan_a_la_pagina(monkeypatch):
+    assert "error" in chat.iniciar([], "m")
+    monkeypatch.setattr(chat.urllib.request, "urlopen", lambda *a, **k: (_ for _ in ()).throw(OSError("sin servidor")))
+    monkeypatch.setattr(chat.recursos, "opciones_ollama", lambda *a, **k: {})
+    chat.iniciar([{"role": "user", "content": "hola"}], "m")
+    assert "sin servidor" in _esperar()["error"]
 :::END
 :::BEGIN py/tests/test_importar.py|text
 """Importador: clasificación automática, copia a la biblioteca, metadatos, índice y búsqueda."""
@@ -40176,8 +40584,22 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 .ecl-pto{width:10px;height:10px;border-radius:50%} .ecl-pct{color:#8ea0c0}
 .entrenamiento[hidden]{display:none} .app.modo-entrenamiento .cuerpo{display:none}
 .entrenamiento{min-height:0;overflow:hidden;background:#02030a;color:#dfe6f5;display:flex;flex-direction:column;gap:8px;padding:10px 16px}
+.ia-cab{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between}
+.ia-sub{display:flex;gap:6px} .ia-sub .btn[aria-pressed=true]{outline:2px solid var(--accent)}
+.ia-maq{display:flex;gap:14px;flex-wrap:wrap} .ia-med{display:grid;grid-template-columns:auto 96px auto;gap:6px;align-items:center;font-size:12px;color:#8ea0c0}
+.ia-med .barra{position:relative;height:8px;border-radius:5px;background:#121a33;overflow:hidden} .ia-med .barra i{display:block;height:100%;background:#5aa0ff;transition:width .4s} .ia-med .barra i.alto{background:#ff9a3c}
+.ia-med .barra b{position:absolute;top:0;bottom:0;width:2px;background:#fff;opacity:.8}
+.ia-pane{flex:1;min-height:0;display:flex;flex-direction:column;gap:8px} .ia-pane[hidden]{display:none}
 .ent-barra{display:flex;flex-wrap:wrap;gap:8px;align-items:center} .ent-barra [hidden]{display:none} .ent-barra input[type=text]{width:90px} .ent-estado{color:#8ea0c0;font-size:12.5px}
 #entFrame{flex:1;min-height:0;width:100%;border:1px solid #1b2440;border-radius:10px;background:#0b1020}
+.chat-log{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:6px 2px}
+.chat-m{max-width:min(780px,92%);padding:8px 12px;border-radius:12px;white-space:pre-wrap;line-height:1.5;font-size:14px;word-break:break-word}
+.chat-m.u{align-self:flex-end;background:#1d2b55} .chat-m.a{align-self:flex-start;background:#121a33} .chat-m.err{color:#ff9a9a}
+.chat-fuentes{align-self:flex-start;font-size:12px;color:#8ea0c0;display:flex;flex-wrap:wrap;gap:4px 10px} .chat-fuentes a{color:#8fb8ff;cursor:pointer}
+.chat-form{display:flex;gap:8px;align-items:flex-end} .chat-form textarea{flex:1;min-height:44px;max-height:160px;resize:vertical;background:#0b1020;color:#dfe6f5;border:1px solid #1b2440;border-radius:10px;padding:8px 10px;font:inherit}
+.chat-form [hidden]{display:none}
+.ia-config{overflow:auto;gap:14px;max-width:760px;align-self:center;width:100%;padding-bottom:30px}
+.ia-ajuste{display:grid;grid-template-columns:130px 1fr 52px;gap:10px;align-items:center} .ia-ajuste input[type=range]{width:100%} .ia-nota{color:#8ea0c0;font-size:12.5px;line-height:1.5;margin:0}
 .telescopio[hidden]{display:none} .app.modo-telescopio .cuerpo{display:none}
 .telescopio{min-height:0;overflow:auto;padding:12px 16px 40px;background:#02030a;color:#dfe6f5;display:flex;flex-direction:column;align-items:center;gap:10px}
 .tel-lista{width:100%;max-width:1040px;display:flex;flex-direction:column;gap:8px} .tel-card{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:10px 12px;border:1px solid #1c2646;border-radius:10px;background:#0b1224}
@@ -40283,7 +40705,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
       <button class="pest" id="pestImportar" role="tab" type="button" aria-selected="false" title="Importar archivos: un agujero negro que los clasifica">⚫ Importar</button>
       <button class="pest" id="pestBiblioteca" role="tab" type="button" aria-selected="false" title="El observatorio: lo que has importado; edita, reclasifica o borra">🔭 Observatorio</button>
       <button class="pest" id="pestEclipses" role="tab" type="button" aria-selected="false" title="Almacenaje: lo que ocupa cada galaxia frente al límite de GitHub">🌘 Eclipses</button>
-      <button class="pest" id="pestEntrenamiento" role="tab" type="button" aria-selected="false" title="Reentrena el LLM que clasifica y mira cómo va, con la app abierta">🧠 Entrenamiento</button>
+      <button class="pest" id="pestEntrenamiento" role="tab" type="button" aria-selected="false" title="La IA: reentrénala y mira cómo va, charla con ella y ajusta cuánta GPU, VRAM y RAM puede usar">🧠 IA</button>
       <button class="pest" id="pestTelescopio" role="tab" type="button" aria-selected="false" title="Telescopio: busca obras de acceso abierto y las trae a tu biblioteca, ya clasificadas">📡 Telescopio</button>
       <button class="pest" id="btnActualizar" type="button" title="Recarga el programa (reglas y ajustes nuevos) y el universo con lo importado, sin cerrar la app">⟳ Actualizar</button>
     </nav>
@@ -40340,15 +40762,47 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
       <span id="bibN" class="bib-n"></span><button class="btn primario" id="bibAplicar" type="button" hidden>Actualizar el universo ahora</button></div>
     <div class="bib-lista" id="bibLista"></div>
   </section>
-  <section class="entrenamiento" id="entrenamiento" hidden aria-label="Entrenamiento">
-    <div class="ent-barra">
-      <label class="ecl-nota" for="entNombre">Nombre</label><input id="entNombre" type="text" value="ft2" maxlength="30" aria-label="Nombre del entrenamiento (si ya existe, lo reanuda)">
-      <select id="entModelo" aria-label="Modelo base"></select>
-      <label class="ecl-nota"><input id="entBib" type="checkbox"> sumar mi biblioteca</label>
-      <button class="btn" id="entIniciar" type="button">▶ Entrenar</button><button class="btn" id="entParar" type="button" hidden>■ Parar</button>
-      <span class="ent-estado" id="entEstado"></span>
+  <section class="entrenamiento" id="entrenamiento" hidden aria-label="IA">
+    <div class="ia-cab">
+      <nav class="ia-sub" id="iaSub" aria-label="Subpáginas de la IA">
+        <button class="btn" type="button" data-sub="entrenamiento" aria-pressed="true">Entrenamiento</button>
+        <button class="btn" type="button" data-sub="chat" aria-pressed="false">Chat</button>
+        <button class="btn" type="button" data-sub="config" aria-pressed="false">Configuración</button>
+      </nav>
+      <div class="ia-maq" id="iaMaq" aria-live="off"></div>
     </div>
-    <iframe id="entFrame" title="Progreso del entrenamiento" src="about:blank"></iframe>
+    <div class="ia-pane" id="iaEnt">
+      <div class="ent-barra">
+        <label class="ecl-nota" for="entNombre">Nombre</label><input id="entNombre" type="text" value="ft2" maxlength="30" aria-label="Nombre del entrenamiento (si ya existe, lo reanuda)">
+        <select id="entModelo" aria-label="Modelo base"></select>
+        <label class="ecl-nota"><input id="entBib" type="checkbox"> sumar mi biblioteca</label>
+        <button class="btn" id="entIniciar" type="button">▶ Entrenar</button><button class="btn" id="entParar" type="button" hidden>■ Parar</button>
+        <span class="ent-estado" id="entEstado"></span>
+      </div>
+      <iframe id="entFrame" title="Progreso del entrenamiento" src="about:blank"></iframe>
+    </div>
+    <div class="ia-pane" id="iaChat" hidden>
+      <div class="ent-barra">
+        <select id="chatModelo" aria-label="Modelo del chat"></select>
+        <label class="ecl-nota"><input id="chatBib" type="checkbox" checked> usar mi biblioteca</label>
+        <button class="btn" id="chatNueva" type="button">Nueva conversación</button>
+        <span class="ent-estado" id="chatEstado"></span>
+      </div>
+      <div class="chat-log" id="chatLog" aria-live="polite"></div>
+      <div class="chat-form"><textarea id="chatTxt" placeholder="Pregunta algo…  (Enter envía, Mayús+Enter salto de línea)" aria-label="Mensaje"></textarea><button class="btn" id="chatEnviar" type="button">Enviar</button><button class="btn" id="chatParar" type="button" hidden>■ Parar</button></div>
+    </div>
+    <div class="ia-pane ia-config" id="iaConfig" hidden>
+      <p class="ia-nota">Qué parte de la máquina puede usar la IA. Las barras de arriba muestran el uso real y una marca blanca donde está el límite. 100 % = sin límite.</p>
+      <div class="ia-ajuste"><label for="cfgVram">VRAM</label><input id="cfgVram" type="range" min="10" max="100" step="5"><output id="cfgVramV"></output></div>
+      <p class="ia-nota">Entrenamiento: tope real de memoria de la tarjeta (el 3B necesita ~50 %; con menos salta ejemplos o se corta). Chat y clasificación: se reparten las capas del modelo entre la GPU y la CPU, así que sigue cabiendo pero va más lento.</p>
+      <div class="ia-ajuste"><label for="cfgRam">RAM</label><input id="cfgRam" type="range" min="10" max="100" step="5"><output id="cfgRamV"></output></div>
+      <p class="ia-nota">Tope real para el entrenamiento que lanza la app (memoria comprometida del proceso entero). El servidor de Ollama lo arranca él solo: ahí no se puede.</p>
+      <div class="ia-ajuste"><label for="cfgGpu">GPU</label><input id="cfgGpu" type="range" min="10" max="100" step="5"><output id="cfgGpuV"></output></div>
+      <p class="ia-nota">Aproximado: Windows no deja limitar el cómputo de la tarjeta. En el entrenamiento se hacen pausas entre ejemplos (50 % ≈ el doble de tiempo). En el chat no se puede.</p>
+      <div class="ia-ajuste"><label for="cfgLlm">Modelo que clasifica</label><select id="cfgLlm"></select><span></span></div>
+      <p class="ia-nota">El modelo de Ollama que usa la app para decidir el género y el subgénero al importar. Aquí eliges también el que salga de un reentrenamiento (una vez exportado a Ollama).</p>
+      <div class="ent-barra"><button class="btn" id="cfgGuardar" type="button">Guardar</button><span class="ent-estado" id="cfgEstado"></span></div>
+    </div>
   </section>
   <section class="telescopio" id="telescopio" hidden aria-label="Telescopio">
     <div class="imp-cabeza"><h2>Telescopio</h2><p>Busca en Google Books (ficha y enlace; descarga solo si es de dominio público), Project Gutenberg, Internet Archive, artículos en abierto (arXiv, OpenAlex) y tráelos a tu biblioteca: se clasifican con las materias reales de la obra. Solo fuentes legales.</p></div>
@@ -41430,15 +41884,33 @@ $('#telLista').addEventListener('click', async function (e) {
   var r = await a.telescopio_traer(x);
   if (r.estado === 'ok') { b.textContent = '✓ en ' + r.galaxia; bib.sucio = true; } else if (r.estado === 'duplicado') b.textContent = 'Ya la tenías'; else { b.disabled = false; b.textContent = 'Reintentar'; $('#telN').textContent = '✗ ' + (r.mensaje || r.error); }
 });
-/* ---------- entrenamiento: reentrenar el LLM con la app abierta; el panel de progreso (herramientas/panel_progreso.py) va en un iframe ---------- */
-var ent = {timer: null, cargado: false};
+/* ---------- IA: entrenamiento (panel en un iframe), chat con Ollama y límites de GPU/VRAM/RAM (py/conocimiento/entrenamiento.py, chat.py, recursos.py) ---------- */
+var ent = {timer: null, cargado: false, sub: 'entrenamiento', limites: {vram: 100, ram: 100, gpu: 100}};
 function entApi() { var a = window.pywebview && window.pywebview.api; return a && a.entrenamiento_estado ? a : null; }
+function iaEsc(s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
+function iaSub(s) {
+  ent.sub = s;
+  document.querySelectorAll('#iaSub .btn').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.sub === s)); });
+  $('#iaEnt').hidden = s !== 'entrenamiento'; $('#iaChat').hidden = s !== 'chat'; $('#iaConfig').hidden = s !== 'config';
+  if (s === 'chat') chatAbrir();
+  if (s === 'config') cfgAbrir();
+}
+document.querySelectorAll('#iaSub .btn').forEach(function (b) { b.onclick = function () { iaSub(b.dataset.sub); }; });
 async function entMostrar() {
   var a = entApi(), st = $('#entEstado');
-  if (!a) { st.textContent = 'El entrenamiento se controla desde la app («Atlas del conocimiento» del Escritorio).'; $('#entIniciar').disabled = true; return; }
-  await entRefrescar();
+  if (!a) { st.textContent = 'La IA se controla desde la app («Atlas del conocimiento» del Escritorio).'; $('#entIniciar').disabled = true; $('#chatEnviar').disabled = true; $('#cfgGuardar').disabled = true; return; }
+  iaSub(ent.sub); await entRefrescar(); iaMaquina();
   if (!ent.cargado) { var p = await a.entrenamiento_panel(); if (p && p.url) { $('#entFrame').src = p.url; ent.cargado = true; } else if (p && p.error) st.textContent = p.error; }
-  clearInterval(ent.timer); ent.timer = setInterval(function () { if (entAbierta()) entRefrescar(); else clearInterval(ent.timer); }, 3000);
+  clearInterval(ent.timer);
+  ent.timer = setInterval(function () { if (entAbierta()) { iaMaquina(); if (ent.sub === 'entrenamiento') entRefrescar(); } else clearInterval(ent.timer); }, 2500);
+}
+async function iaMaquina() {
+  var a = entApi(); if (!a) return; var m = await a.ia_maquina(); if (!m || m.error) return;
+  var filas = [['GPU', m.gpu, 'gpu', ''], ['VRAM', m.vram_pct, 'vram', m.vram_usada != null ? m.vram_usada + '/' + m.vram_total + ' GB' : ''], ['RAM', m.ram_pct, 'ram', m.ram_usada + '/' + m.ram_total + ' GB']];
+  $('#iaMaq').innerHTML = filas.map(function (f) {
+    var v = f[1] == null ? 0 : f[1], lim = ent.limites[f[2]];
+    return '<span class="ia-med" title="' + iaEsc(f[0] + (f[3] ? ' · ' + f[3] : '') + (lim < 100 ? ' · límite ' + lim + ' %' : '')) + '"><span>' + f[0] + '</span><span class="barra"><i class="' + (v > 90 ? 'alto' : '') + '" style="width:' + v + '%"></i>' + (lim < 100 ? '<b style="left:' + lim + '%"></b>' : '') + '</span><span>' + (f[1] == null ? '–' : v + ' %') + '</span></span>';
+  }).join('');
 }
 async function entRefrescar() {
   var e = await entApi().entrenamiento_estado(), sel = $('#entModelo'), st = $('#entEstado');
@@ -41451,7 +41923,8 @@ async function entRefrescar() {
 }
 $('#entIniciar').onclick = async function () {
   var a = entApi(); if (!a) return;
-  if (!confirm('Se libera la GPU y se entrena en segundo plano (el 3B tarda unas 2-3 horas). Cierra juegos y Wallpaper Engine. ¿Empezar?')) return;
+  var l = ent.limites, lim = l.vram < 100 || l.ram < 100 || l.gpu < 100 ? '\n\nLímites: VRAM ' + l.vram + ' %, RAM ' + l.ram + ' %, GPU ' + l.gpu + ' %.' : '';
+  if (!confirm('Se libera la GPU y se entrena en segundo plano (el 3B tarda unas 2-3 horas). Cierra juegos y Wallpaper Engine. ¿Empezar?' + lim)) return;
   var r = await a.entrenamiento_lanzar($('#entNombre').value, $('#entModelo').value, $('#entBib').checked);
   if (r && r.error) alert(r.error);
   entRefrescar();
@@ -41461,6 +41934,62 @@ $('#entParar').onclick = async function () {
   var r = await a.entrenamiento_parar(); if (r && r.error) alert(r.error);
   entRefrescar();
 };
+/* ---- configuración: límites y modelo ---- */
+async function cfgAbrir() {
+  var a = entApi(); if (!a) return; var c = await a.ia_configuracion();
+  if (!c || c.error) { $('#cfgEstado').textContent = (c && c.error) || ''; return; }
+  ent.limites = c.recursos;
+  [['Vram', 'vram'], ['Ram', 'ram'], ['Gpu', 'gpu']].forEach(function (p) { var r = $('#cfg' + p[0]); r.value = c.recursos[p[1]]; $('#cfg' + p[0] + 'V').textContent = r.value + ' %'; });
+  var sel = $('#cfgLlm'); sel.innerHTML = '';
+  (c.modelos.length ? c.modelos : [c.modelo_llm]).forEach(function (m) { var o = document.createElement('option'); o.value = m; o.textContent = m; if (m === c.modelo_llm) o.selected = true; sel.appendChild(o); });
+  $('#cfgEstado').textContent = c.error || '';
+  iaMaquina();
+}
+['Vram', 'Ram', 'Gpu'].forEach(function (n) { $('#cfg' + n).oninput = function () { $('#cfg' + n + 'V').textContent = this.value + ' %'; }; });
+$('#cfgGuardar').onclick = async function () {
+  var a = entApi(); if (!a) return;
+  var r = await a.ia_guardar({vram: +$('#cfgVram').value, ram: +$('#cfgRam').value, gpu: +$('#cfgGpu').value}, $('#cfgLlm').value);
+  if (r && r.error) { $('#cfgEstado').textContent = r.error; return; }
+  ent.limites = r.recursos; $('#cfgEstado').textContent = 'Guardado. Se aplica al próximo entrenamiento y a la próxima consulta al modelo.'; iaMaquina();
+};
+/* ---- chat ---- */
+var chat = {msgs: [], vivo: false, timer: null, listo: false};
+function chatPintar(extra) {
+  var h = chat.msgs.map(function (m) {
+    var fu = m.fuentes && m.fuentes.length ? '<div class="chat-fuentes">' + m.fuentes.map(function (f) { return '<a data-r="' + iaEsc(f.ruta) + '" data-u="' + iaEsc(f.ubicacion) + '">[' + f.n + '] ' + iaEsc(f.titulo) + '</a>'; }).join('') + '</div>' : '';
+    return '<div class="chat-m ' + (m.role === 'user' ? 'u' : 'a') + (m.error ? ' err' : '') + '">' + iaEsc(m.content) + '</div>' + fu;
+  }).join('');
+  if (extra) h += '<div class="chat-m a">' + iaEsc(extra.texto || '…') + '</div>';
+  var log = $('#chatLog'), abajo = log.scrollHeight - log.scrollTop - log.clientHeight < 80; log.innerHTML = h;
+  log.querySelectorAll('.chat-fuentes a').forEach(function (x) { x.onclick = function () { var a = entApi(); if (a && a.abrir_fuente) a.abrir_fuente(x.dataset.r, x.dataset.u); }; });
+  if (abajo) log.scrollTop = log.scrollHeight;
+}
+async function chatAbrir() {
+  var a = entApi(); if (!a) return; chatPintar();
+  if (chat.listo) return;
+  var m = await a.chat_modelos(), sel = $('#chatModelo'); sel.innerHTML = '';
+  if (!m || m.error || !m.modelos.length) { $('#chatEstado').textContent = (m && (m.error || 'No hay modelos en Ollama.')) || ''; return; }
+  m.modelos.forEach(function (n) { var o = document.createElement('option'); o.value = n; o.textContent = n; if (n === m.por_defecto) o.selected = true; sel.appendChild(o); });
+  chat.listo = true; $('#chatEstado').textContent = '';
+}
+async function chatEnviar() {
+  var a = entApi(), txt = $('#chatTxt').value.trim(); if (!a || !txt || chat.vivo) return;
+  chat.msgs.push({role: 'user', content: txt}); $('#chatTxt').value = ''; chat.vivo = true; $('#chatEnviar').hidden = true; $('#chatParar').hidden = false; chatPintar({texto: ''});
+  var r = await a.chat_iniciar(chat.msgs.map(function (m) { return {role: m.role, content: m.content}; }), $('#chatModelo').value, $('#chatBib').checked);
+  if (r && r.error) { chat.msgs.push({role: 'assistant', content: r.error, error: true}); return chatFin(); }
+  chat.timer = setInterval(async function () {
+    var e = await a.chat_estado(); if (!e || e.error) return;
+    if (e.fase === 'trabajando') return chatPintar({texto: e.texto});
+    clearInterval(chat.timer);
+    chat.msgs.push(e.error && !e.texto ? {role: 'assistant', content: e.error, error: true} : {role: 'assistant', content: e.texto || '(sin respuesta)', fuentes: e.fuentes});
+    chatFin();
+  }, 300);
+}
+function chatFin() { chat.vivo = false; $('#chatEnviar').hidden = false; $('#chatParar').hidden = true; chatPintar(); }
+$('#chatEnviar').onclick = chatEnviar;
+$('#chatParar').onclick = function () { var a = entApi(); if (a) a.chat_parar(); };
+$('#chatNueva').onclick = function () { if (chat.vivo) return; chat.msgs = []; chatPintar(); };
+$('#chatTxt').onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatEnviar(); } };
 /* ---------- eclipses: el Sol es el límite de GitHub; cada galaxia o tipo de archivo es una luna (py/conocimiento/almacenaje.py) ---------- */
 var ecl = {datos: null, github: false, tipos: false}, eclipses = crearEclipses({canvas: $('#eclipses-cv'), alPasar: function (id) { eclResaltar(id); }});
 var ECL_COL = [[90,160,255],[255,140,90],[120,210,140],[220,120,220],[240,210,90],[100,210,220],[230,110,130],[170,150,255],[160,200,90],[200,160,120]];
@@ -42287,7 +42816,7 @@ Atlas del conocimiento/
 ├── teoria/                   guías de teoría, contrastes, tabla SAS ↔ Python
 ├── ejemplos/                 flujos completos de uso
 ├── assets/                   icono.ico / icono.png
-├── herramientas/             generar_instaladores.py, descargar_python.ps1, plantillas/, entrenador/ (reentrenar el LLM: datos, QLoRA, exportar a Ollama), corpus/ + evaluar_corpus.py + panel_progreso.py (medir y ver el progreso); la pestaña «🧠 Entrenamiento» de la app los lanza y los muestra (py/conocimiento/entrenamiento.py)
+├── herramientas/             generar_instaladores.py, descargar_python.ps1, plantillas/, entrenador/ (reentrenar el LLM: datos, QLoRA, exportar a Ollama), corpus/ + evaluar_corpus.py + panel_progreso.py (medir y ver el progreso); la pestaña «🧠 IA» de la app los lanza y los muestra, con chat y límites de GPU/VRAM/RAM (py/conocimiento/entrenamiento.py, chat.py, recursos.py)
 ├── instaladores/             "Atlas X.Y.Z - Instalador.bat" y "… - Actualizar.bat" (autoextraíbles)
 ├── anteriores/               copias de seguridad que hace el actualizador (py_anterior, estructura_plana)
 └── python/                   (opcional) Python propio descargado por el instalador si el equipo no tiene
@@ -42852,6 +43381,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 5aa. **Varias etiquetas por obra (1.13.0):** una obra lleva hasta 3 géneros y hasta 3 subgéneros (`py/conocimiento/etiquetas.py`: `MAXIMO`, `DELTA`, `DELTA_SUB`, `elegir`, `poner`, `generos_de`, `subgeneros_de`). `metadatos.json` sigue teniendo `genero` y `subgenero` (la etiqueta PRINCIPAL: de ella dependen la carpeta del archivo `biblioteca/libros/<Género>/<Subgénero>/`, las correcciones y el orden) y añade `generos` = [{id, peso}] y `subgeneros` = [{genero, id, peso}] con la principal primero; lo importado antes no tiene las listas y se lee como una sola etiqueta (no hay migración). **Cómo se eligen:** una etiqueta secundaria entra si puntúa a menos de `DELTA · escala` del primero (`escala` = 1 + el peso con que cuenta ahora la cabeza supervisada, que `sugerir` devuelve en `escala`; es la misma distancia que antes hacía saltar «género poco claro», y por eso `_seguridad` ya no avisa cuando el segundo es una etiqueta de la obra), o si la propone el LLM y es plausible (entre los 4 mejores del marcador). Cada subgénero secundario sale de su propio género (`_etiquetas_sub`, y el principal de cada género secundario). El LLM devuelve `{"generos": [...], "motivo"}` y `{"subgeneros": [...], "motivo"}` (esquema con `maxItems` 3; sigue entendiendo el formato antiguo de una sola etiqueta); los prompts son `llm.prompt_generos` y `llm.prompt_subgeneros` (los usa también el entrenador, así que entrenamiento y uso ven exactamente el mismo texto) y los vecinos enseñados llevan todas sus etiquetas. Las obras con varias etiquetas son ejemplo de cada una (la principal pesa lo de siempre; las demás, la mitad). **Interfaz:** las tarjetas de importación y el Observatorio muestran las etiquetas como chips (★ = principal; en el Observatorio ✕ quita y un desplegable añade; `Api.biblioteca_editar` acepta `generos` y `subgeneros` como listas, este último con «género/subgénero»); la sala de clasificación enseña todas; `importar([{ruta, generos, subgeneros}])` las fija. **Galaxias:** no cambian (la galaxia es dónde vive el documento: Código, Libros, Notas…, no su tema, y un tema repartido entre galaxias duplicaría los objetos); en Libros una obra aparece en la rama de cada uno de sus géneros (misma obra, puntos distintos: `lib_<género>_<n>`), la descripción dice «también en …» y `historia:`/`economia:` la encuentran por cualquiera. Con más de ~12 géneros no vacíos en Libros convendría agrupar ramas, no crear galaxias. **Calibración (sin LLM, 247 obras de validación de un corpus de 1 335; 97 de ellas con varias etiquetas reales, de estanterías de Gutenberg y categorías cruzadas de arXiv, así que el «oro» de las secundarias es ruidoso):** género top-1 64,8 % (no cambia con DELTA) y subgénero 36,6 %. DELTA de género 0,03 / 0,08 / 0,15 / 0,25 → la etiqueta real está entre las predichas 67,6 / 70,4 / 74,1 / 77,7 %, con 1,09 / 1,21 / 1,39 / 1,70 géneros por obra (real 1,58) y precisión 71 / 67 / 62 / 56 % frente a exhaustividad 49 / 51 / 55 / 60 %: **la F1 es plana (58) en todo el rango**, DELTA solo mueve el equilibrio entre acertar más y etiquetar de más; se dejó 0,15. DELTA_SUB 0,00 / 0,03 / 0,08 → F1 de subgénero 31 / 31 / 29 (con 0,08 predice 1,89 por obra frente a 1,39 reales: demasiadas); se dejó 0,03. **Efecto en la cola de revisión:** como el segundo género empatado ya es una etiqueta, `_seguridad` avisa mucho menos (marca el 11 % de las obras y recoge el 13 % de los errores top-1, frente al 44 % y 67 % de antes): lo que antes era «dudoso» ahora es «dos etiquetas». Pendiente repetir la calibración con el LLM y con el modelo reentrenado.
 5ab. **Reentrenar el LLM (entrenador, 1.13.0):** `herramientas/entrenador/` (todo se lanza con `entrenar_llm.bat preparar | datos CORPUS | entrenar CORPUS [MODELO] [NOMBRE] | exportar CORPUS NOMBRE | panel CORPUS`). `preparar` crea un entorno aparte (`.venv`, ~5 GB: torch con CUDA, transformers, peft, bitsandbytes; no se instala con la aplicación). `construir_datos.py` saca de un corpus (`enes/corpus` + `enes/split.json`: solo las obras de ENTRENAMIENTO) ejemplos de género y de subgénero con el prompt exacto del programa y los 8 vecinos calculados sin contar la propia obra; con `--biblioteca` suma la tuya (lo que corregiste pesa doble). `entrenar.py` hace QLoRA (modelo base en 4 bits + LoRA r=16, solo se aprende la respuesta; bucle propio, sin `Trainer`, para no depender de la versión de transformers) y escribe `registro.jsonl`, `estado.json`, `adaptador/` y `resultado.json` (JSON válido y acierto en la validación con generación libre). `exportar_ollama.py` crea el modelo de Ollama: **Ollama 0.40 ya no admite adaptadores LoRA ni importar Qwen2 desde safetensors** (probado: «LoRA adapters are no longer supported», «unsupported MLX architecture»), así que fusiona el adaptador con el base (bf16), lo convierte a GGUF con `convert_hf_to_gguf.py` de llama.cpp (NO viene con el programa: descargarlo a mano de github.com/ggml-org/llama.cpp y `pip install gguf` en el entorno) y hace `ollama create` con la plantilla y la parada del base (`ollama show --modelfile`); con `--usar` apunta `ajustes.json` a él. **La plantilla importa:** la de Qwen en Hugging Face añade un «You are Qwen…» por defecto que la de Ollama NO añade; el entrenador usa `formato_ollama` (sin mensaje de sistema) para que entrenar y servir vean lo mismo. La GPU se comparte con otras aplicaciones (Wallpaper Engine, navegadores…; su uso de VRAM sube y baja entre 4 y 10 GB) y un primer intento se cortó por falta de memoria: por eso los logits se calculan solo sobre la respuesta (el paso pasó de ~88 s a ~38 s y de ~12 GB a ~5,7 GB), un ejemplo sin memoria se salta y se anota (`saltados`), y `entrenar_llm.bat entrenar` (o `entrenar_vigilado.sh`) reanuda solo con `--reanudar` desde el último adaptador guardado (hasta 20 intentos). Con 12 GB, el 3B entrena con unos 6 GB libres; el 7B exige cerrar lo demás (Wallpaper Engine, juegos…). **Medir:** `evaluar_corpus.py` guarda ahora los conjuntos reales y predichos (`gs`, `pgs`, `ss`, `pss`) y `metricas_etiquetas.py`/`estadisticas_clasificacion.py` calculan «la etiqueta real está entre las predichas» (comparable con el acierto de antes), etiquetas de más por obra, precisión, exhaustividad, Jaccard y F1 macro, más McNemar sobre ese acierto; para evaluar un modelo entrenado: `--set 'llm.MODELO="arbol-clasificador"'`. **Corpus con varias etiquetas:** `libros_gutenberg.py CARPETA 28 --multi N` baja además N libros con estanterías de géneros distintos (repartidos entre las combinaciones de géneros; la etiqueta principal es la de la primera estantería y es arbitraria, por eso para ellos importan las métricas de conjunto y no el top-1) y `articulos_arxiv.py` guarda las categorías cruzadas (stat.ML + cs.LG = estadística + tecnología) como etiquetas múltiples; `montar.py` las pasa a `importar`. **Panel** (`panel_progreso.py CORPUS`, localhost:8765): cuadros «Entrenamiento del LLM» (barra, curva de pérdida de entrenamiento y validación, VRAM, minutos que quedan, resultado) y «Etiquetas múltiples» (métricas por configuración, cuántos géneros predice por obra y qué pares se dan juntos). Tests: `tests/test_etiquetas.py`, `tests/test_entrenador.py`. Trampas ya vividas: en un `python - <<EOF` de bash las barras invertidas dobles (`\\n`) llegan como una sola y rompen las cadenas del código que se escribe: para parchear ficheros usar un fichero de script con cadenas crudas o la herramienta Edit.
 5ac. **Pestaña «🧠 Entrenamiento» (1.13.1):** reentrenar el LLM desde la app y verlo en vivo. `py/conocimiento/entrenamiento.py` (API `Api.entrenamiento_estado/panel/lanzar/parar`) lanza `herramientas/entrenador/entrenar_llm.bat` en un proceso APARTE y sin ventana (datos si faltan o si marcas «sumar mi biblioteca», luego entrenar; descarga antes de la VRAM los modelos de Ollama), así que se puede cerrar la app y sigue; `_lanzado.json` en `corpus/enes/entrenamiento/` guarda el pid y «■ Parar» lo corta (mismo nombre = reanuda). La pestaña lleva `herramientas/panel_progreso.py` (la app lo arranca en localhost:8765) en un iframe. Busca el corpus en `corpus/` (esta carpeta o las de arriba; o `ARBOL_CORPUS`) y el entorno `.venv` del entrenador en esta carpeta o en un worktree hermano (o `ARBOL_VENV`; pesa 5 GB, no se duplica). Solo existe en la carpeta de desarrollo. Test: `tests/test_entrenamiento.py`.
+5ad. **Página «🧠 IA» (1.15.0; antes «Entrenamiento»):** tres subpáginas con las barras de GPU/VRAM/RAM en vivo arriba (`recursos.maquina()`, nvidia-smi + GlobalMemoryStatusEx; una marca blanca señala el límite puesto). **Entrenamiento** = lo de 5ac. **Chat** (`py/conocimiento/chat.py`, `Api.chat_*`): conversa con Ollama en localhost, la respuesta se genera en un hilo y la página pregunta cada 0,3 s (`chat_estado`); «usar mi biblioteca» busca con `conocimiento.buscar` y pasa los fragmentos numerados como contexto (las fuentes salen debajo y se abren con `abrir_fuente`); el modelo por defecto es el base (`qwen2.5:7b`), no el afinado, que contesta JSON. **Configuración** (`py/conocimiento/recursos.py`, `Api.ia_*`): límites de VRAM, RAM y GPU (10-100 %, en `conocimiento/ajustes.json` → `recursos`) y modelo con el que clasifica (`llm.modelo`). **Qué es real y qué aproximado:** VRAM en entrenamiento = tope real (`set_per_process_memory_fraction`, `ARBOL_VRAM_PCT` en `entrenar.py`); VRAM en Ollama = reparto de capas GPU/CPU con `num_gpu` (medido: con 50 % `size_vram` ≈ mitad del modelo; también afecta a la clasificación al importar, `llm._pedir`); RAM = Job Object de Windows con tope de memoria comprometida al proceso de entrenamiento (el servidor de Ollama no se controla); GPU % = pausas entre ejemplos (`ARBOL_GPU_PCT`), Windows no deja limitar el cómputo de verdad y en Ollama no se puede. El panel de progreso se lanza con `--padre PID` y se cierra solo cuando se cierra la app (antes se quedaba abierto y bloqueaba la carpeta). Tests: `tests/test_ia.py`.
 5w. **Cola de revisión («no estoy seguro»):** `importar._seguridad` mide el margen entre el género ganador y el segundo (y lo mismo en el subgénero), si el LLM y el parecido discrepan, si casi no hay texto o si no encaja en ningún género; `clasificar` devuelve `revisar`, `motivos_revisar` y `margen`, `importar()` los guarda en `metadatos.json`. El Observatorio muestra ⚠ con el motivo y «✓ Está bien» (`Api.biblioteca_confirmar` → `importar.confirmar`, que además lo recuerda como corrección tuya), la casilla «Solo por revisar» y un contador en la pestaña 🔭 (`Api.biblioteca_por_revisar`); tocar cualquier campo cuenta como revisado; al terminar una importación se avisa de cuántos hay. Consola: `python -m conocimiento revisar --dudosos`. Umbrales calibrados con datos (`MARGEN_REVISAR`, `MARGEN_SUB_REVISAR`): ~44 % marcado recoge ~67 % de los errores de género; subirlos avisa más. Tests: `tests/test_cola_revision.py`.
 5x. **Información web (Wikipedia/Wikidata) y vídeos:** `py/conocimiento/webinfo.py` busca «título autor» en Wikipedia (APIs oficiales, nada de rascar HTML), exige que la introducción nombre al autor y que Wikidata diga que es una obra escrita (no una persona, película o personaje) y devuelve descripción, tipo, género y subgénero de novela; entra al clasificador como descripción (para el parecido y el LLM) y como pista de género (`PESO_WIKI`). Respeta a los servidores: 1 petición por segundo, reintentos con espera ante 429 (Wikimedia limita de verdad), descanso tras fallos y caché en `conocimiento/webinfo_cache.json`; solo sale el título y el autor; `clasificador.WIKI = "auto"` (por defecto) la usa solo cuando el LLM no está disponible, porque con LLM no suma; `True` = siempre, `False` o `ARBOL_WIKI=no` = nunca (los tests la apagan). Medido en 73 obras conocidas (dejando uno fuera): sin LLM 75/49 → con Wikipedia 79/56; con LLM 7b y ejemplos parecidos 86/68, y 86/66 si además se usa Wikipedia. **Vídeos:** `py/conocimiento/enlaces.py` acepta accesos directos `.url` de YouTube/Vimeo: título, canal y miniatura (portada) salen del oEmbed oficial, sin transcripciones; tipo `video`, galaxia Libros, se clasifican por título y canal (+ Wikipedia si es un documental con ficha). Tests: `tests/test_webinfo.py`, `tests/test_enlaces.py`.
 5y. **LLM por defecto (1.11.0):** `llm.py` pregunta por TODAS las obras (`siempre`) y le enseña los `VECINOS = 8` libros más parecidos ya clasificados; el modelo por defecto depende de la RAM (`qwen2.5:7b` con 12 GB o más, `qwen2.5:3b` con menos; si falta el elegido usa el otro), y el instalador (`motor.ps1`) baja el que corresponda. Se cambia con `ajustes.json` o `ARBOL_LLM`.

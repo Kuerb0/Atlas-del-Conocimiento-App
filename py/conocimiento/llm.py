@@ -17,7 +17,7 @@ import urllib.request
 from shutil import which
 from pathlib import Path
 
-from . import CARPETA
+from . import CARPETA, recursos
 from .etiquetas import MAXIMO
 
 def ram_gb() -> float:
@@ -147,7 +147,7 @@ def prompt_generos(titulo: str, capitulos: list, vista: str, materias: list, gen
 def _pedir(a: dict, prompt: str, esquema: dict) -> dict | None:
     """Una consulta a Ollama con salida JSON forzada por `esquema`; None si falla o la respuesta no es JSON."""
     try:
-        r = _http(a["url"] + "/api/chat", {"model": a["modelo"], "stream": False, "format": esquema, "options": {"temperature": 0, "num_predict": 100, "num_ctx": 2048},
+        r = _http(a["url"] + "/api/chat", {"model": a["modelo"], "stream": False, "format": esquema, "options": {"temperature": 0, "num_predict": 100, "num_ctx": 2048, **recursos.opciones_ollama(a["modelo"], a["url"])},
                                            "messages": [{"role": "user", "content": prompt}]})
         _estado["fallo_red"] = False
         return json.loads(re.sub(r"^```(?:json)?|```$", "", r["message"]["content"].strip()))

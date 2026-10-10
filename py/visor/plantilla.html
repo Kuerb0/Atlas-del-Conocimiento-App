@@ -298,8 +298,22 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 .ecl-pto{width:10px;height:10px;border-radius:50%} .ecl-pct{color:#8ea0c0}
 .entrenamiento[hidden]{display:none} .app.modo-entrenamiento .cuerpo{display:none}
 .entrenamiento{min-height:0;overflow:hidden;background:#02030a;color:#dfe6f5;display:flex;flex-direction:column;gap:8px;padding:10px 16px}
+.ia-cab{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between}
+.ia-sub{display:flex;gap:6px} .ia-sub .btn[aria-pressed=true]{outline:2px solid var(--accent)}
+.ia-maq{display:flex;gap:14px;flex-wrap:wrap} .ia-med{display:grid;grid-template-columns:auto 96px auto;gap:6px;align-items:center;font-size:12px;color:#8ea0c0}
+.ia-med .barra{position:relative;height:8px;border-radius:5px;background:#121a33;overflow:hidden} .ia-med .barra i{display:block;height:100%;background:#5aa0ff;transition:width .4s} .ia-med .barra i.alto{background:#ff9a3c}
+.ia-med .barra b{position:absolute;top:0;bottom:0;width:2px;background:#fff;opacity:.8}
+.ia-pane{flex:1;min-height:0;display:flex;flex-direction:column;gap:8px} .ia-pane[hidden]{display:none}
 .ent-barra{display:flex;flex-wrap:wrap;gap:8px;align-items:center} .ent-barra [hidden]{display:none} .ent-barra input[type=text]{width:90px} .ent-estado{color:#8ea0c0;font-size:12.5px}
 #entFrame{flex:1;min-height:0;width:100%;border:1px solid #1b2440;border-radius:10px;background:#0b1020}
+.chat-log{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:6px 2px}
+.chat-m{max-width:min(780px,92%);padding:8px 12px;border-radius:12px;white-space:pre-wrap;line-height:1.5;font-size:14px;word-break:break-word}
+.chat-m.u{align-self:flex-end;background:#1d2b55} .chat-m.a{align-self:flex-start;background:#121a33} .chat-m.err{color:#ff9a9a}
+.chat-fuentes{align-self:flex-start;font-size:12px;color:#8ea0c0;display:flex;flex-wrap:wrap;gap:4px 10px} .chat-fuentes a{color:#8fb8ff;cursor:pointer}
+.chat-form{display:flex;gap:8px;align-items:flex-end} .chat-form textarea{flex:1;min-height:44px;max-height:160px;resize:vertical;background:#0b1020;color:#dfe6f5;border:1px solid #1b2440;border-radius:10px;padding:8px 10px;font:inherit}
+.chat-form [hidden]{display:none}
+.ia-config{overflow:auto;gap:14px;max-width:760px;align-self:center;width:100%;padding-bottom:30px}
+.ia-ajuste{display:grid;grid-template-columns:130px 1fr 52px;gap:10px;align-items:center} .ia-ajuste input[type=range]{width:100%} .ia-nota{color:#8ea0c0;font-size:12.5px;line-height:1.5;margin:0}
 .telescopio[hidden]{display:none} .app.modo-telescopio .cuerpo{display:none}
 .telescopio{min-height:0;overflow:auto;padding:12px 16px 40px;background:#02030a;color:#dfe6f5;display:flex;flex-direction:column;align-items:center;gap:10px}
 .tel-lista{width:100%;max-width:1040px;display:flex;flex-direction:column;gap:8px} .tel-card{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:10px 12px;border:1px solid #1c2646;border-radius:10px;background:#0b1224}
@@ -405,7 +419,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
       <button class="pest" id="pestImportar" role="tab" type="button" aria-selected="false" title="Importar archivos: un agujero negro que los clasifica">⚫ Importar</button>
       <button class="pest" id="pestBiblioteca" role="tab" type="button" aria-selected="false" title="El observatorio: lo que has importado; edita, reclasifica o borra">🔭 Observatorio</button>
       <button class="pest" id="pestEclipses" role="tab" type="button" aria-selected="false" title="Almacenaje: lo que ocupa cada galaxia frente al límite de GitHub">🌘 Eclipses</button>
-      <button class="pest" id="pestEntrenamiento" role="tab" type="button" aria-selected="false" title="Reentrena el LLM que clasifica y mira cómo va, con la app abierta">🧠 Entrenamiento</button>
+      <button class="pest" id="pestEntrenamiento" role="tab" type="button" aria-selected="false" title="La IA: reentrénala y mira cómo va, charla con ella y ajusta cuánta GPU, VRAM y RAM puede usar">🧠 IA</button>
       <button class="pest" id="pestTelescopio" role="tab" type="button" aria-selected="false" title="Telescopio: busca obras de acceso abierto y las trae a tu biblioteca, ya clasificadas">📡 Telescopio</button>
       <button class="pest" id="btnActualizar" type="button" title="Recarga el programa (reglas y ajustes nuevos) y el universo con lo importado, sin cerrar la app">⟳ Actualizar</button>
     </nav>
@@ -462,15 +476,47 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
       <span id="bibN" class="bib-n"></span><button class="btn primario" id="bibAplicar" type="button" hidden>Actualizar el universo ahora</button></div>
     <div class="bib-lista" id="bibLista"></div>
   </section>
-  <section class="entrenamiento" id="entrenamiento" hidden aria-label="Entrenamiento">
-    <div class="ent-barra">
-      <label class="ecl-nota" for="entNombre">Nombre</label><input id="entNombre" type="text" value="ft2" maxlength="30" aria-label="Nombre del entrenamiento (si ya existe, lo reanuda)">
-      <select id="entModelo" aria-label="Modelo base"></select>
-      <label class="ecl-nota"><input id="entBib" type="checkbox"> sumar mi biblioteca</label>
-      <button class="btn" id="entIniciar" type="button">▶ Entrenar</button><button class="btn" id="entParar" type="button" hidden>■ Parar</button>
-      <span class="ent-estado" id="entEstado"></span>
+  <section class="entrenamiento" id="entrenamiento" hidden aria-label="IA">
+    <div class="ia-cab">
+      <nav class="ia-sub" id="iaSub" aria-label="Subpáginas de la IA">
+        <button class="btn" type="button" data-sub="entrenamiento" aria-pressed="true">Entrenamiento</button>
+        <button class="btn" type="button" data-sub="chat" aria-pressed="false">Chat</button>
+        <button class="btn" type="button" data-sub="config" aria-pressed="false">Configuración</button>
+      </nav>
+      <div class="ia-maq" id="iaMaq" aria-live="off"></div>
     </div>
-    <iframe id="entFrame" title="Progreso del entrenamiento" src="about:blank"></iframe>
+    <div class="ia-pane" id="iaEnt">
+      <div class="ent-barra">
+        <label class="ecl-nota" for="entNombre">Nombre</label><input id="entNombre" type="text" value="ft2" maxlength="30" aria-label="Nombre del entrenamiento (si ya existe, lo reanuda)">
+        <select id="entModelo" aria-label="Modelo base"></select>
+        <label class="ecl-nota"><input id="entBib" type="checkbox"> sumar mi biblioteca</label>
+        <button class="btn" id="entIniciar" type="button">▶ Entrenar</button><button class="btn" id="entParar" type="button" hidden>■ Parar</button>
+        <span class="ent-estado" id="entEstado"></span>
+      </div>
+      <iframe id="entFrame" title="Progreso del entrenamiento" src="about:blank"></iframe>
+    </div>
+    <div class="ia-pane" id="iaChat" hidden>
+      <div class="ent-barra">
+        <select id="chatModelo" aria-label="Modelo del chat"></select>
+        <label class="ecl-nota"><input id="chatBib" type="checkbox" checked> usar mi biblioteca</label>
+        <button class="btn" id="chatNueva" type="button">Nueva conversación</button>
+        <span class="ent-estado" id="chatEstado"></span>
+      </div>
+      <div class="chat-log" id="chatLog" aria-live="polite"></div>
+      <div class="chat-form"><textarea id="chatTxt" placeholder="Pregunta algo…  (Enter envía, Mayús+Enter salto de línea)" aria-label="Mensaje"></textarea><button class="btn" id="chatEnviar" type="button">Enviar</button><button class="btn" id="chatParar" type="button" hidden>■ Parar</button></div>
+    </div>
+    <div class="ia-pane ia-config" id="iaConfig" hidden>
+      <p class="ia-nota">Qué parte de la máquina puede usar la IA. Las barras de arriba muestran el uso real y una marca blanca donde está el límite. 100 % = sin límite.</p>
+      <div class="ia-ajuste"><label for="cfgVram">VRAM</label><input id="cfgVram" type="range" min="10" max="100" step="5"><output id="cfgVramV"></output></div>
+      <p class="ia-nota">Entrenamiento: tope real de memoria de la tarjeta (el 3B necesita ~50 %; con menos salta ejemplos o se corta). Chat y clasificación: se reparten las capas del modelo entre la GPU y la CPU, así que sigue cabiendo pero va más lento.</p>
+      <div class="ia-ajuste"><label for="cfgRam">RAM</label><input id="cfgRam" type="range" min="10" max="100" step="5"><output id="cfgRamV"></output></div>
+      <p class="ia-nota">Tope real para el entrenamiento que lanza la app (memoria comprometida del proceso entero). El servidor de Ollama lo arranca él solo: ahí no se puede.</p>
+      <div class="ia-ajuste"><label for="cfgGpu">GPU</label><input id="cfgGpu" type="range" min="10" max="100" step="5"><output id="cfgGpuV"></output></div>
+      <p class="ia-nota">Aproximado: Windows no deja limitar el cómputo de la tarjeta. En el entrenamiento se hacen pausas entre ejemplos (50 % ≈ el doble de tiempo). En el chat no se puede.</p>
+      <div class="ia-ajuste"><label for="cfgLlm">Modelo que clasifica</label><select id="cfgLlm"></select><span></span></div>
+      <p class="ia-nota">El modelo de Ollama que usa la app para decidir el género y el subgénero al importar. Aquí eliges también el que salga de un reentrenamiento (una vez exportado a Ollama).</p>
+      <div class="ent-barra"><button class="btn" id="cfgGuardar" type="button">Guardar</button><span class="ent-estado" id="cfgEstado"></span></div>
+    </div>
   </section>
   <section class="telescopio" id="telescopio" hidden aria-label="Telescopio">
     <div class="imp-cabeza"><h2>Telescopio</h2><p>Busca en Google Books (ficha y enlace; descarga solo si es de dominio público), Project Gutenberg, Internet Archive, artículos en abierto (arXiv, OpenAlex) y tráelos a tu biblioteca: se clasifican con las materias reales de la obra. Solo fuentes legales.</p></div>
@@ -1552,15 +1598,33 @@ $('#telLista').addEventListener('click', async function (e) {
   var r = await a.telescopio_traer(x);
   if (r.estado === 'ok') { b.textContent = '✓ en ' + r.galaxia; bib.sucio = true; } else if (r.estado === 'duplicado') b.textContent = 'Ya la tenías'; else { b.disabled = false; b.textContent = 'Reintentar'; $('#telN').textContent = '✗ ' + (r.mensaje || r.error); }
 });
-/* ---------- entrenamiento: reentrenar el LLM con la app abierta; el panel de progreso (herramientas/panel_progreso.py) va en un iframe ---------- */
-var ent = {timer: null, cargado: false};
+/* ---------- IA: entrenamiento (panel en un iframe), chat con Ollama y límites de GPU/VRAM/RAM (py/conocimiento/entrenamiento.py, chat.py, recursos.py) ---------- */
+var ent = {timer: null, cargado: false, sub: 'entrenamiento', limites: {vram: 100, ram: 100, gpu: 100}};
 function entApi() { var a = window.pywebview && window.pywebview.api; return a && a.entrenamiento_estado ? a : null; }
+function iaEsc(s) { return String(s).replace(/[&<>"]/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
+function iaSub(s) {
+  ent.sub = s;
+  document.querySelectorAll('#iaSub .btn').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.sub === s)); });
+  $('#iaEnt').hidden = s !== 'entrenamiento'; $('#iaChat').hidden = s !== 'chat'; $('#iaConfig').hidden = s !== 'config';
+  if (s === 'chat') chatAbrir();
+  if (s === 'config') cfgAbrir();
+}
+document.querySelectorAll('#iaSub .btn').forEach(function (b) { b.onclick = function () { iaSub(b.dataset.sub); }; });
 async function entMostrar() {
   var a = entApi(), st = $('#entEstado');
-  if (!a) { st.textContent = 'El entrenamiento se controla desde la app («Atlas del conocimiento» del Escritorio).'; $('#entIniciar').disabled = true; return; }
-  await entRefrescar();
+  if (!a) { st.textContent = 'La IA se controla desde la app («Atlas del conocimiento» del Escritorio).'; $('#entIniciar').disabled = true; $('#chatEnviar').disabled = true; $('#cfgGuardar').disabled = true; return; }
+  iaSub(ent.sub); await entRefrescar(); iaMaquina();
   if (!ent.cargado) { var p = await a.entrenamiento_panel(); if (p && p.url) { $('#entFrame').src = p.url; ent.cargado = true; } else if (p && p.error) st.textContent = p.error; }
-  clearInterval(ent.timer); ent.timer = setInterval(function () { if (entAbierta()) entRefrescar(); else clearInterval(ent.timer); }, 3000);
+  clearInterval(ent.timer);
+  ent.timer = setInterval(function () { if (entAbierta()) { iaMaquina(); if (ent.sub === 'entrenamiento') entRefrescar(); } else clearInterval(ent.timer); }, 2500);
+}
+async function iaMaquina() {
+  var a = entApi(); if (!a) return; var m = await a.ia_maquina(); if (!m || m.error) return;
+  var filas = [['GPU', m.gpu, 'gpu', ''], ['VRAM', m.vram_pct, 'vram', m.vram_usada != null ? m.vram_usada + '/' + m.vram_total + ' GB' : ''], ['RAM', m.ram_pct, 'ram', m.ram_usada + '/' + m.ram_total + ' GB']];
+  $('#iaMaq').innerHTML = filas.map(function (f) {
+    var v = f[1] == null ? 0 : f[1], lim = ent.limites[f[2]];
+    return '<span class="ia-med" title="' + iaEsc(f[0] + (f[3] ? ' · ' + f[3] : '') + (lim < 100 ? ' · límite ' + lim + ' %' : '')) + '"><span>' + f[0] + '</span><span class="barra"><i class="' + (v > 90 ? 'alto' : '') + '" style="width:' + v + '%"></i>' + (lim < 100 ? '<b style="left:' + lim + '%"></b>' : '') + '</span><span>' + (f[1] == null ? '–' : v + ' %') + '</span></span>';
+  }).join('');
 }
 async function entRefrescar() {
   var e = await entApi().entrenamiento_estado(), sel = $('#entModelo'), st = $('#entEstado');
@@ -1573,7 +1637,8 @@ async function entRefrescar() {
 }
 $('#entIniciar').onclick = async function () {
   var a = entApi(); if (!a) return;
-  if (!confirm('Se libera la GPU y se entrena en segundo plano (el 3B tarda unas 2-3 horas). Cierra juegos y Wallpaper Engine. ¿Empezar?')) return;
+  var l = ent.limites, lim = l.vram < 100 || l.ram < 100 || l.gpu < 100 ? '\n\nLímites: VRAM ' + l.vram + ' %, RAM ' + l.ram + ' %, GPU ' + l.gpu + ' %.' : '';
+  if (!confirm('Se libera la GPU y se entrena en segundo plano (el 3B tarda unas 2-3 horas). Cierra juegos y Wallpaper Engine. ¿Empezar?' + lim)) return;
   var r = await a.entrenamiento_lanzar($('#entNombre').value, $('#entModelo').value, $('#entBib').checked);
   if (r && r.error) alert(r.error);
   entRefrescar();
@@ -1583,6 +1648,62 @@ $('#entParar').onclick = async function () {
   var r = await a.entrenamiento_parar(); if (r && r.error) alert(r.error);
   entRefrescar();
 };
+/* ---- configuración: límites y modelo ---- */
+async function cfgAbrir() {
+  var a = entApi(); if (!a) return; var c = await a.ia_configuracion();
+  if (!c || c.error) { $('#cfgEstado').textContent = (c && c.error) || ''; return; }
+  ent.limites = c.recursos;
+  [['Vram', 'vram'], ['Ram', 'ram'], ['Gpu', 'gpu']].forEach(function (p) { var r = $('#cfg' + p[0]); r.value = c.recursos[p[1]]; $('#cfg' + p[0] + 'V').textContent = r.value + ' %'; });
+  var sel = $('#cfgLlm'); sel.innerHTML = '';
+  (c.modelos.length ? c.modelos : [c.modelo_llm]).forEach(function (m) { var o = document.createElement('option'); o.value = m; o.textContent = m; if (m === c.modelo_llm) o.selected = true; sel.appendChild(o); });
+  $('#cfgEstado').textContent = c.error || '';
+  iaMaquina();
+}
+['Vram', 'Ram', 'Gpu'].forEach(function (n) { $('#cfg' + n).oninput = function () { $('#cfg' + n + 'V').textContent = this.value + ' %'; }; });
+$('#cfgGuardar').onclick = async function () {
+  var a = entApi(); if (!a) return;
+  var r = await a.ia_guardar({vram: +$('#cfgVram').value, ram: +$('#cfgRam').value, gpu: +$('#cfgGpu').value}, $('#cfgLlm').value);
+  if (r && r.error) { $('#cfgEstado').textContent = r.error; return; }
+  ent.limites = r.recursos; $('#cfgEstado').textContent = 'Guardado. Se aplica al próximo entrenamiento y a la próxima consulta al modelo.'; iaMaquina();
+};
+/* ---- chat ---- */
+var chat = {msgs: [], vivo: false, timer: null, listo: false};
+function chatPintar(extra) {
+  var h = chat.msgs.map(function (m) {
+    var fu = m.fuentes && m.fuentes.length ? '<div class="chat-fuentes">' + m.fuentes.map(function (f) { return '<a data-r="' + iaEsc(f.ruta) + '" data-u="' + iaEsc(f.ubicacion) + '">[' + f.n + '] ' + iaEsc(f.titulo) + '</a>'; }).join('') + '</div>' : '';
+    return '<div class="chat-m ' + (m.role === 'user' ? 'u' : 'a') + (m.error ? ' err' : '') + '">' + iaEsc(m.content) + '</div>' + fu;
+  }).join('');
+  if (extra) h += '<div class="chat-m a">' + iaEsc(extra.texto || '…') + '</div>';
+  var log = $('#chatLog'), abajo = log.scrollHeight - log.scrollTop - log.clientHeight < 80; log.innerHTML = h;
+  log.querySelectorAll('.chat-fuentes a').forEach(function (x) { x.onclick = function () { var a = entApi(); if (a && a.abrir_fuente) a.abrir_fuente(x.dataset.r, x.dataset.u); }; });
+  if (abajo) log.scrollTop = log.scrollHeight;
+}
+async function chatAbrir() {
+  var a = entApi(); if (!a) return; chatPintar();
+  if (chat.listo) return;
+  var m = await a.chat_modelos(), sel = $('#chatModelo'); sel.innerHTML = '';
+  if (!m || m.error || !m.modelos.length) { $('#chatEstado').textContent = (m && (m.error || 'No hay modelos en Ollama.')) || ''; return; }
+  m.modelos.forEach(function (n) { var o = document.createElement('option'); o.value = n; o.textContent = n; if (n === m.por_defecto) o.selected = true; sel.appendChild(o); });
+  chat.listo = true; $('#chatEstado').textContent = '';
+}
+async function chatEnviar() {
+  var a = entApi(), txt = $('#chatTxt').value.trim(); if (!a || !txt || chat.vivo) return;
+  chat.msgs.push({role: 'user', content: txt}); $('#chatTxt').value = ''; chat.vivo = true; $('#chatEnviar').hidden = true; $('#chatParar').hidden = false; chatPintar({texto: ''});
+  var r = await a.chat_iniciar(chat.msgs.map(function (m) { return {role: m.role, content: m.content}; }), $('#chatModelo').value, $('#chatBib').checked);
+  if (r && r.error) { chat.msgs.push({role: 'assistant', content: r.error, error: true}); return chatFin(); }
+  chat.timer = setInterval(async function () {
+    var e = await a.chat_estado(); if (!e || e.error) return;
+    if (e.fase === 'trabajando') return chatPintar({texto: e.texto});
+    clearInterval(chat.timer);
+    chat.msgs.push(e.error && !e.texto ? {role: 'assistant', content: e.error, error: true} : {role: 'assistant', content: e.texto || '(sin respuesta)', fuentes: e.fuentes});
+    chatFin();
+  }, 300);
+}
+function chatFin() { chat.vivo = false; $('#chatEnviar').hidden = false; $('#chatParar').hidden = true; chatPintar(); }
+$('#chatEnviar').onclick = chatEnviar;
+$('#chatParar').onclick = function () { var a = entApi(); if (a) a.chat_parar(); };
+$('#chatNueva').onclick = function () { if (chat.vivo) return; chat.msgs = []; chatPintar(); };
+$('#chatTxt').onkeydown = function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatEnviar(); } };
 /* ---------- eclipses: el Sol es el límite de GitHub; cada galaxia o tipo de archivo es una luna (py/conocimiento/almacenaje.py) ---------- */
 var ecl = {datos: null, github: false, tipos: false}, eclipses = crearEclipses({canvas: $('#eclipses-cv'), alPasar: function (id) { eclResaltar(id); }});
 var ECL_COL = [[90,160,255],[255,140,90],[120,210,140],[220,120,220],[240,210,90],[100,210,220],[230,110,130],[170,150,255],[160,200,90],[200,160,120]];
