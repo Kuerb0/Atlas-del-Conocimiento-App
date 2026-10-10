@@ -1,12 +1,12 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.13.0 - Actualizar
+title Arbol de la estadistica 1.13.1 - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=actualizar"
-set "ARBOL_VERSION=1.13.0"
+set "ARBOL_MODO=instalar"
+set "ARBOL_VERSION=1.13.1"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
@@ -682,7 +682,7 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.13.0
+1.13.1
 :::END
 :::BEGIN py/arbol_app.pyw|text
 """Abre el Árbol de la estadística en su propia ventana, como una aplicación.
@@ -895,6 +895,26 @@ class Api:
             return almacenaje.medir()
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}
+
+    # ---- reentrenar el LLM (pestaña «Entrenamiento»): ver py/conocimiento/entrenamiento.py ----
+    def _ent(self, nombre, *args):
+        try:
+            from conocimiento import entrenamiento
+            return getattr(entrenamiento, nombre)(*args)
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    def entrenamiento_estado(self):
+        return self._ent("estado")
+
+    def entrenamiento_panel(self):
+        return self._ent("abrir_panel")
+
+    def entrenamiento_lanzar(self, nombre, modelo, biblioteca):
+        return self._ent("lanzar", str(nombre), str(modelo), bool(biblioteca))
+
+    def entrenamiento_parar(self):
+        return self._ent("parar")
 
     # ---- telescopio (pestaña «Telescopio»): ver py/conocimiento/telescopio.py ----
     def telescopio_buscar(self, consulta="", titulo="", autor="", tipo="todo", formato=""):
@@ -3030,7 +3050,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.13.0"
+version = "1.13.1"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3710,7 +3730,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.13.0"
+__version__ = "1.13.1"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -15120,6 +15140,159 @@ def texto(f: Path | str) -> str:
     if not i:
         return nombre
     return "\n".join(x for x in (i["titulo"] or nombre, f"Canal: {i['canal']}" if i["canal"] else "", f"Vídeo de {i['plataforma'].capitalize()}", i["url"]) if x)
+:::END
+:::BEGIN py/conocimiento/entrenamiento.py|text
+"""Reentrenar el LLM desde la app (pestaña «🧠 Entrenamiento»): lanzarlo, pararlo y enseñar el panel de progreso.
+
+El entrenamiento corre en un proceso APARTE (`herramientas/entrenador/entrenar_llm.bat`), sin ventana y sin colgar de la app: se puede cerrar y
+volver a abrir la app mientras entrena, y el panel (`herramientas/panel_progreso.py`, en localhost) sigue leyendo los ficheros que va escribiendo.
+Solo existe en la carpeta de desarrollo (necesita `herramientas/` y el corpus `corpus/enes`); en una instalación normal `estado()` dice por qué no está.
+"""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import time
+import urllib.request
+from pathlib import Path
+
+from . import CARPETA, RAIZ
+
+PUERTO = 8765
+MODELOS = {"Qwen/Qwen2.5-3B-Instruct": "3B (cabe con 12 GB de VRAM)", "Qwen/Qwen2.5-7B-Instruct": "7B (cierra todo lo demás: necesita casi toda la VRAM)"}
+_SIN_VENTANA = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+
+
+def _subiendo(inicio: Path):
+    """La carpeta, y las de arriba (los worktrees de Claude viven dentro de la carpeta principal)."""
+    yield inicio
+    yield from inicio.parents
+
+
+def corpus() -> Path | None:
+    """Carpeta con `enes/` (el corpus): ARBOL_CORPUS, o `corpus/` en esta carpeta o en alguna de arriba."""
+    if os.environ.get("ARBOL_CORPUS"):
+        return Path(os.environ["ARBOL_CORPUS"])
+    return next((d / "corpus" for d in _subiendo(RAIZ) if (d / "corpus" / "enes").is_dir()), None)
+
+
+def venv_python() -> Path | None:
+    """El Python del entorno de entrenamiento (torch, peft…): ARBOL_VENV, el de esta carpeta o el de algún worktree hermano (es gitignored y pesa 5 GB: no se duplica)."""
+    rel = Path("herramientas/entrenador/.venv/Scripts/python.exe")
+    if os.environ.get("ARBOL_VENV"):
+        p = Path(os.environ["ARBOL_VENV"]) / "Scripts" / "python.exe"
+        return p if p.exists() else None
+    for d in _subiendo(RAIZ):
+        for p in [d / rel, *sorted((d / ".claude" / "worktrees").glob(f"*/{rel.as_posix()}"))]:
+            if p.exists():
+                return p
+    return None
+
+
+def _marca(c: Path) -> Path:
+    return c / "enes" / "entrenamiento" / "_lanzado.json"
+
+
+def _vivo(pid: int) -> bool:
+    try:
+        salida = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"], capture_output=True, text=True, timeout=10, creationflags=_SIN_VENTANA).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return str(pid) in salida
+
+
+def _lanzado(c: Path) -> dict | None:
+    try:
+        m = json.loads(_marca(c).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return m if _vivo(int(m.get("pid", 0))) else None
+
+
+def _escucha() -> bool:
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{PUERTO}/", timeout=1.5):
+            return True
+    except OSError:
+        return False
+
+
+def estado() -> dict:
+    """{disponible, motivo, panel, entrenando: {nombre, modelo, pid, desde} | None, modelos, ultimo}."""
+    c, v = corpus(), venv_python()
+    if not (RAIZ / "herramientas" / "panel_progreso.py").exists():
+        return {"disponible": False, "motivo": "Esta pestaña solo está en la carpeta de desarrollo (falta herramientas/)."}
+    if c is None:
+        return {"disponible": False, "motivo": "No encuentro el corpus (corpus/enes). Móntalo con herramientas/corpus/ o define ARBOL_CORPUS."}
+    ult = sorted((c / "enes" / "entrenamiento").glob("*/resultado.json"), key=lambda p: p.stat().st_mtime)
+    return {"disponible": True, "motivo": "" if v else "Falta el entorno de entrenamiento: ejecuta entrenar_llm.bat preparar (unos 5 GB).", "entorno": bool(v), "panel": f"http://localhost:{PUERTO}",
+            "entrenando": _lanzado(c), "modelos": MODELOS, "ultimo": ult[-1].parent.name if ult else ""}
+
+
+def abrir_panel() -> dict:
+    """Arranca el panel de progreso si no está escuchando y devuelve su URL."""
+    e = estado()
+    if not e["disponible"]:
+        return {"error": e["motivo"]}
+    if not _escucha():
+        py = Path(sys.executable)
+        if py.name.lower() == "pythonw.exe" and (py.parent / "python.exe").exists():
+            py = py.parent / "python.exe"
+        subprocess.Popen([str(py), str(RAIZ / "herramientas" / "panel_progreso.py"), str(corpus()), "--puerto", str(PUERTO)], cwd=str(RAIZ), creationflags=_SIN_VENTANA,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+        for _ in range(30):
+            time.sleep(.3)
+            if _escucha():
+                break
+    return {"url": e["panel"]}
+
+
+def _soltar_gpu() -> None:
+    """Descarga de la VRAM los modelos que Ollama tenga cargados (el entrenamiento los necesita; ya se recargarán solos al usarlos)."""
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:11434/api/ps", timeout=2) as x:
+            nombres = [m["name"] for m in json.load(x).get("models", [])]
+        for n in nombres:
+            urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:11434/api/generate", json.dumps({"model": n, "keep_alive": 0}).encode(), {"Content-Type": "application/json"}), timeout=10).close()
+    except (OSError, ValueError):
+        pass
+
+
+def lanzar(nombre: str, modelo: str = "Qwen/Qwen2.5-3B-Instruct", biblioteca: bool = False) -> dict:
+    """Lanza datos (si faltan o si `biblioteca`: suma tu biblioteca) + entrenamiento, ambos en segundo plano. Un nombre ya usado se reanuda, no se pisa."""
+    e = estado()
+    if not e["disponible"] or not e["entorno"]:
+        return {"error": e["motivo"]}
+    if e["entrenando"]:
+        return {"error": f"ya hay un entrenamiento en marcha ({e['entrenando']['nombre']})"}
+    nombre = "".join(ch for ch in str(nombre) if ch.isalnum() or ch in "-_") or "ft2"
+    if modelo not in MODELOS:
+        return {"error": "modelo no permitido: " + modelo}
+    c, bat = corpus(), RAIZ / "herramientas" / "entrenador" / "entrenar_llm.bat"
+    datos = c / "enes" / "entrenamiento" / "datos" / "train.jsonl"
+    pasos = []
+    if biblioteca or not datos.exists():
+        pasos.append(f'call "{bat}" datos "{c}"' + (f' --biblioteca "{CARPETA}"' if biblioteca else ""))
+    pasos.append(f'call "{bat}" entrenar "{c}" {modelo} {nombre}')
+    (c / "enes" / "entrenamiento").mkdir(parents=True, exist_ok=True)
+    lote = c / "enes" / "entrenamiento" / "_lanzar.bat"
+    lote.write_text("@echo off\nset \"ARBOL_VENV=%s\"\n%s\n" % (venv_python().parent.parent, " && ".join(pasos)), encoding="utf-8")
+    _soltar_gpu()
+    p = subprocess.Popen(["cmd", "/c", str(lote)], cwd=str(RAIZ), creationflags=_SIN_VENTANA, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+    _marca(c).write_text(json.dumps({"pid": p.pid, "nombre": nombre, "modelo": modelo, "desde": time.strftime("%Y-%m-%d %H:%M:%S")}), encoding="utf-8")
+    return {"ok": True, "pid": p.pid}
+
+
+def parar() -> dict:
+    """Corta el entrenamiento y todo lo que cuelga de él. El último adaptador guardado queda: lanzar con el mismo nombre lo reanuda."""
+    c = corpus()
+    m = _lanzado(c) if c else None
+    if not m:
+        return {"error": "no hay ningún entrenamiento en marcha"}
+    subprocess.run(["taskkill", "/F", "/T", "/PID", str(m["pid"])], capture_output=True, creationflags=_SIN_VENTANA)
+    return {"ok": True}
 :::END
 :::BEGIN py/conocimiento/etiquetas.py|text
 """Varias etiquetas por obra: uno o más géneros y uno o más subgéneros (máximo MAXIMO de cada), con un peso 0-1.
@@ -34488,6 +34661,64 @@ def test_servidor_hf_habla_como_ollama_y_llm_py_lo_usa(tmp_path, monkeypatch):
         srv.shutdown()
         llm._estado.clear()
 :::END
+:::BEGIN py/tests/test_entrenamiento.py|text
+"""Pestaña «Entrenamiento»: localizar corpus y entorno, lanzar (con subprocess falso) y parar."""
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conocimiento import entrenamiento as ent
+
+
+def _preparar(tmp_path, monkeypatch, venv=True):
+    c = tmp_path / "corpus"
+    (c / "enes" / "entrenamiento" / "datos").mkdir(parents=True)
+    (c / "enes" / "entrenamiento" / "datos" / "train.jsonl").write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("ARBOL_CORPUS", str(c))
+    monkeypatch.delenv("ARBOL_VENV", raising=False)
+    monkeypatch.setattr(ent, "venv_python", lambda: tmp_path / "v" / "Scripts" / "python.exe" if venv else None)
+    monkeypatch.setattr(ent, "_soltar_gpu", lambda: None)
+    return c
+
+
+def test_estado_sin_entorno_avisa_y_no_lanza(tmp_path, monkeypatch):
+    _preparar(tmp_path, monkeypatch, venv=False)
+    e = ent.estado()
+    assert e["disponible"] and not e["entorno"] and "preparar" in e["motivo"]
+    assert "error" in ent.lanzar("ft2")
+
+
+def test_lanzar_escribe_lote_y_marca_y_no_duplica(tmp_path, monkeypatch):
+    c = _preparar(tmp_path, monkeypatch)
+
+    class P:
+        pid = 4242
+    llamadas = []
+    monkeypatch.setattr(ent.subprocess, "Popen", lambda *a, **k: llamadas.append(a) or P())
+    monkeypatch.setattr(ent, "_vivo", lambda pid: True)
+    r = ent.lanzar("mi ft/../3", "Qwen/Qwen2.5-3B-Instruct", biblioteca=False)
+    assert r == {"ok": True, "pid": 4242} and len(llamadas) == 1
+    lote = (c / "enes" / "entrenamiento" / "_lanzar.bat").read_text(encoding="utf-8")
+    assert "ARBOL_VENV" in lote and "entrenar" in lote and " datos " not in lote       # los datos ya existen y no se pidió sumar la biblioteca
+    assert "mift3" in lote                                                               # el nombre se limpia (nada de rutas)
+    assert json.loads((c / "enes" / "entrenamiento" / "_lanzado.json").read_text(encoding="utf-8"))["pid"] == 4242
+    assert ent.estado()["entrenando"]["nombre"] == "mift3"
+    assert "ya hay" in ent.lanzar("otro")["error"] and len(llamadas) == 1
+
+
+def test_biblioteca_reconstruye_datos_y_modelo_desconocido_se_rechaza(tmp_path, monkeypatch):
+    c = _preparar(tmp_path, monkeypatch)
+    monkeypatch.setattr(ent.subprocess, "Popen", lambda *a, **k: type("P", (), {"pid": 1})())
+    assert "modelo" in ent.lanzar("x", "evil/modelo")["error"]
+    assert ent.lanzar("x", "Qwen/Qwen2.5-3B-Instruct", biblioteca=True)["ok"]
+    assert " datos " in (c / "enes" / "entrenamiento" / "_lanzar.bat").read_text(encoding="utf-8")
+
+
+def test_parar_sin_entrenamiento(tmp_path, monkeypatch):
+    _preparar(tmp_path, monkeypatch)
+    assert "error" in ent.parar()
+:::END
 :::BEGIN py/tests/test_etiquetas.py|text
 """Varias etiquetas por obra: varios géneros y varios subgéneros (máximo 3 de cada), con peso; el principal manda sobre la carpeta, las correcciones y el orden."""
 import json
@@ -39921,6 +40152,10 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 .ecl-lista{width:100%;max-width:980px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:6px 14px}
 .ecl-fila{display:grid;grid-template-columns:12px 1fr auto;gap:8px;align-items:center;font-size:12.5px;padding:3px 6px;border-radius:6px} .ecl-fila.hot{background:#121a33}
 .ecl-pto{width:10px;height:10px;border-radius:50%} .ecl-pct{color:#8ea0c0}
+.entrenamiento[hidden]{display:none} .app.modo-entrenamiento .cuerpo{display:none}
+.entrenamiento{min-height:0;overflow:hidden;background:#02030a;color:#dfe6f5;display:flex;flex-direction:column;gap:8px;padding:10px 16px}
+.ent-barra{display:flex;flex-wrap:wrap;gap:8px;align-items:center} .ent-barra [hidden]{display:none} .ent-barra input[type=text]{width:90px} .ent-estado{color:#8ea0c0;font-size:12.5px}
+#entFrame{flex:1;min-height:0;width:100%;border:1px solid #1b2440;border-radius:10px;background:#0b1020}
 .telescopio[hidden]{display:none} .app.modo-telescopio .cuerpo{display:none}
 .telescopio{min-height:0;overflow:auto;padding:12px 16px 40px;background:#02030a;color:#dfe6f5;display:flex;flex-direction:column;align-items:center;gap:10px}
 .tel-lista{width:100%;max-width:1040px;display:flex;flex-direction:column;gap:8px} .tel-card{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:10px 12px;border:1px solid #1c2646;border-radius:10px;background:#0b1224}
@@ -40026,6 +40261,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
       <button class="pest" id="pestImportar" role="tab" type="button" aria-selected="false" title="Importar archivos: un agujero negro que los clasifica">⚫ Importar</button>
       <button class="pest" id="pestBiblioteca" role="tab" type="button" aria-selected="false" title="El observatorio: lo que has importado; edita, reclasifica o borra">🔭 Observatorio</button>
       <button class="pest" id="pestEclipses" role="tab" type="button" aria-selected="false" title="Almacenaje: lo que ocupa cada galaxia frente al límite de GitHub">🌘 Eclipses</button>
+      <button class="pest" id="pestEntrenamiento" role="tab" type="button" aria-selected="false" title="Reentrena el LLM que clasifica y mira cómo va, con la app abierta">🧠 Entrenamiento</button>
       <button class="pest" id="pestTelescopio" role="tab" type="button" aria-selected="false" title="Telescopio: busca obras de acceso abierto y las trae a tu biblioteca, ya clasificadas">📡 Telescopio</button>
       <button class="pest" id="btnActualizar" type="button" title="Recarga el programa (reglas y ajustes nuevos) y el universo con lo importado, sin cerrar la app">⟳ Actualizar</button>
     </nav>
@@ -40081,6 +40317,16 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
     <div class="bib-barra"><input id="bibQ" type="search" placeholder="Filtrar por título, género, subtema, etiqueta…" aria-label="Filtrar el observatorio"><select id="bibGal" aria-label="Galaxia"></select><select id="bibOrden" aria-label="Orden"><option value="fecha">Más recientes primero</option><option value="gal">Por galaxia y título</option></select><label class="bib-n" for="bibDesde">Importados desde</label><input id="bibDesde" type="date" aria-label="Importados desde esta fecha"><label class="bib-n" for="bibRev" title="Lo que el clasificador no vio claro y aún no has mirado"><input id="bibRev" type="checkbox"> ⚠ Solo por revisar <span id="bibRevN"></span></label>
       <span id="bibN" class="bib-n"></span><button class="btn primario" id="bibAplicar" type="button" hidden>Actualizar el universo ahora</button></div>
     <div class="bib-lista" id="bibLista"></div>
+  </section>
+  <section class="entrenamiento" id="entrenamiento" hidden aria-label="Entrenamiento">
+    <div class="ent-barra">
+      <label class="ecl-nota" for="entNombre">Nombre</label><input id="entNombre" type="text" value="ft2" maxlength="30" aria-label="Nombre del entrenamiento (si ya existe, lo reanuda)">
+      <select id="entModelo" aria-label="Modelo base"></select>
+      <label class="ecl-nota"><input id="entBib" type="checkbox"> sumar mi biblioteca</label>
+      <button class="btn" id="entIniciar" type="button">▶ Entrenar</button><button class="btn" id="entParar" type="button" hidden>■ Parar</button>
+      <span class="ent-estado" id="entEstado"></span>
+    </div>
+    <iframe id="entFrame" title="Progreso del entrenamiento" src="about:blank"></iframe>
   </section>
   <section class="telescopio" id="telescopio" hidden aria-label="Telescopio">
     <div class="imp-cabeza"><h2>Telescopio</h2><p>Busca en Google Books (ficha y enlace; descarga solo si es de dominio público), Project Gutenberg, Internet Archive, artículos en abierto (arXiv, OpenAlex) y tráelos a tu biblioteca: se clasifican con las materias reales de la obra. Solo fuentes legales.</p></div>
@@ -40848,13 +41094,14 @@ $('#aprenderBtn').onclick = function () { apMostrar(!apAbierta()); };
 /* ---------- pestañas: Universo (el mapa) · Importar (el agujero negro) · Aprender (la guía) ---------- */
 function impAbierta() { return $('.app').classList.contains('modo-importar'); }
 function telAbierta() { return $('.app').classList.contains('modo-telescopio'); }
+function entAbierta() { return $('.app').classList.contains('modo-entrenamiento'); }
 function eclAbierta() { return $('.app').classList.contains('modo-eclipses'); }
 function bibAbierta() { return $('.app').classList.contains('modo-biblioteca'); }
 function pintarPestanas() {
-  var u = !apAbierta() && !impAbierta() && !bibAbierta() && !eclAbierta() && !telAbierta(); $('#pestTelescopio').setAttribute('aria-selected', String(telAbierta())); $('#pestEclipses').setAttribute('aria-selected', String(eclAbierta())); $('#pestUniverso').setAttribute('aria-selected', String(u));
+  var u = !apAbierta() && !impAbierta() && !bibAbierta() && !eclAbierta() && !telAbierta() && !entAbierta(); $('#pestEntrenamiento').setAttribute('aria-selected', String(entAbierta())); $('#pestTelescopio').setAttribute('aria-selected', String(telAbierta())); $('#pestEclipses').setAttribute('aria-selected', String(eclAbierta())); $('#pestUniverso').setAttribute('aria-selected', String(u));
   $('#pestImportar').setAttribute('aria-selected', String(impAbierta())); $('#pestBiblioteca').setAttribute('aria-selected', String(bibAbierta()));
 }
-function modoCerrar() { $('.app').classList.remove('modo-importar', 'modo-biblioteca', 'modo-eclipses', 'modo-telescopio'); $('#telescopio').hidden = true; $('#importar').hidden = true; $('#biblioteca').hidden = true; $('#eclipses').hidden = true; agujero.ocultar(); eclipses.ocultar(); }
+function modoCerrar() { $('.app').classList.remove('modo-importar', 'modo-biblioteca', 'modo-eclipses', 'modo-telescopio', 'modo-entrenamiento'); $('#entrenamiento').hidden = true; $('#telescopio').hidden = true; $('#importar').hidden = true; $('#biblioteca').hidden = true; $('#eclipses').hidden = true; agujero.ocultar(); eclipses.ocultar(); }
 function impCerrar() { modoCerrar(); pintarPestanas(); }
 function pestana(p) {
   if (p === 'universo' && bibAbierta() && bib.sucio) { bibAplicar(); return; }          /* hay cambios en el observatorio: se actualiza el universo al volver a él */
@@ -40863,6 +41110,7 @@ function pestana(p) {
   if (p === 'importar') { $('.app').classList.add('modo-importar'); $('#importar').hidden = false; agujero.mostrar(); impOpciones(); }
   else if (p === 'biblioteca') { $('.app').classList.add('modo-biblioteca'); $('#biblioteca').hidden = false; bibCargar(); }
   else if (p === 'telescopio') { $('.app').classList.add('modo-telescopio'); $('#telescopio').hidden = false; $('#telQ').focus(); }
+  else if (p === 'entrenamiento') { $('.app').classList.add('modo-entrenamiento'); $('#entrenamiento').hidden = false; entMostrar(); }
   else if (p === 'eclipses') { $('.app').classList.add('modo-eclipses'); $('#eclipses').hidden = false; eclCargar(); }
   else pintar();
   pintarPestanas();
@@ -40871,11 +41119,12 @@ $('#pestUniverso').onclick = function () { pestana('universo'); };
 $('#pestImportar').onclick = function () { pestana('importar'); };
 $('#pestBiblioteca').onclick = function () { pestana('biblioteca'); };
 $('#pestEclipses').onclick = function () { pestana('eclipses'); };
+$('#pestEntrenamiento').onclick = function () { pestana('entrenamiento'); };
 $('#pestTelescopio').onclick = function () { pestana('telescopio'); };
 $('#btnActualizar').onclick = async function () {              /* recarga el código de Python y regenera el universo; vuelve a la misma pestaña */
   var a = window.pywebview && window.pywebview.api, b = this;
   if (!a || !a.recargar) { location.reload(); return; }
-  var pest = impAbierta() ? 'importar' : bibAbierta() ? 'biblioteca' : eclAbierta() ? 'eclipses' : telAbierta() ? 'telescopio' : 'universo';
+  var pest = impAbierta() ? 'importar' : bibAbierta() ? 'biblioteca' : eclAbierta() ? 'eclipses' : entAbierta() ? 'entrenamiento' : telAbierta() ? 'telescopio' : 'universo';
   b.disabled = true; b.textContent = '⟳ Actualizando…';
   var v = await a.recargar();
   if (v && v.error) { b.disabled = false; b.textContent = '⟳ Actualizar'; b.title = 'No se pudo actualizar: ' + v.error; alert('No se pudo actualizar: ' + v.error); return; }
@@ -40883,7 +41132,7 @@ $('#btnActualizar').onclick = async function () {              /* recarga el có
   location.reload();
 };
 var apMostrarOrig = apMostrar;
-apMostrar = function (on) { if (on && (impAbierta() || bibAbierta() || eclAbierta() || telAbierta())) impCerrar(); apMostrarOrig(on); pintarPestanas(); };
+apMostrar = function (on) { if (on && (impAbierta() || bibAbierta() || eclAbierta() || telAbierta() || entAbierta())) impCerrar(); apMostrarOrig(on); pintarPestanas(); };
 
 /* ---------- el importador: agujero negro + tarjetas de archivos con lo detectado, desplegables y progreso (el trabajo lo hace py/conocimiento/importar.py) ---------- */
 var imp = {archivos: [], opciones: null, ocupado: false, resultados: null, modo: 'copiar'};
@@ -41159,6 +41408,37 @@ $('#telLista').addEventListener('click', async function (e) {
   var r = await a.telescopio_traer(x);
   if (r.estado === 'ok') { b.textContent = '✓ en ' + r.galaxia; bib.sucio = true; } else if (r.estado === 'duplicado') b.textContent = 'Ya la tenías'; else { b.disabled = false; b.textContent = 'Reintentar'; $('#telN').textContent = '✗ ' + (r.mensaje || r.error); }
 });
+/* ---------- entrenamiento: reentrenar el LLM con la app abierta; el panel de progreso (herramientas/panel_progreso.py) va en un iframe ---------- */
+var ent = {timer: null, cargado: false};
+function entApi() { var a = window.pywebview && window.pywebview.api; return a && a.entrenamiento_estado ? a : null; }
+async function entMostrar() {
+  var a = entApi(), st = $('#entEstado');
+  if (!a) { st.textContent = 'El entrenamiento se controla desde la app («Árbol de la estadística» del Escritorio).'; $('#entIniciar').disabled = true; return; }
+  await entRefrescar();
+  if (!ent.cargado) { var p = await a.entrenamiento_panel(); if (p && p.url) { $('#entFrame').src = p.url; ent.cargado = true; } else if (p && p.error) st.textContent = p.error; }
+  clearInterval(ent.timer); ent.timer = setInterval(function () { if (entAbierta()) entRefrescar(); else clearInterval(ent.timer); }, 3000);
+}
+async function entRefrescar() {
+  var e = await entApi().entrenamiento_estado(), sel = $('#entModelo'), st = $('#entEstado');
+  if (!e || e.error || !e.disponible) { st.textContent = (e && (e.error || e.motivo)) || ''; $('#entIniciar').disabled = true; return; }
+  if (!sel.options.length) Object.keys(e.modelos).forEach(function (k) { var o = document.createElement('option'); o.value = k; o.textContent = e.modelos[k]; sel.appendChild(o); });
+  var en = e.entrenando;
+  $('#entIniciar').hidden = !!en; $('#entParar').hidden = !en; $('#entIniciar').disabled = !e.entorno;
+  ['entNombre', 'entModelo', 'entBib'].forEach(function (i) { $('#' + i).disabled = !!en; });
+  st.textContent = en ? 'Entrenando «' + en.nombre + '» desde ' + en.desde + ' (sigue aunque cierres la app).' : (e.motivo || (e.ultimo ? 'Último entrenamiento: ' + e.ultimo + '.' : 'Sin entrenamientos todavía.'));
+}
+$('#entIniciar').onclick = async function () {
+  var a = entApi(); if (!a) return;
+  if (!confirm('Se libera la GPU y se entrena en segundo plano (el 3B tarda unas 2-3 horas). Cierra juegos y Wallpaper Engine. ¿Empezar?')) return;
+  var r = await a.entrenamiento_lanzar($('#entNombre').value, $('#entModelo').value, $('#entBib').checked);
+  if (r && r.error) alert(r.error);
+  entRefrescar();
+};
+$('#entParar').onclick = async function () {
+  var a = entApi(); if (!a || !confirm('¿Parar el entrenamiento? Lo guardado se conserva y, con el mismo nombre, se reanuda.')) return;
+  var r = await a.entrenamiento_parar(); if (r && r.error) alert(r.error);
+  entRefrescar();
+};
 /* ---------- eclipses: el Sol es el límite de GitHub; cada galaxia o tipo de archivo es una luna (py/conocimiento/almacenaje.py) ---------- */
 var ecl = {datos: null, github: false, tipos: false}, eclipses = crearEclipses({canvas: $('#eclipses-cv'), alPasar: function (id) { eclResaltar(id); }});
 var ECL_COL = [[90,160,255],[255,140,90],[120,210,140],[220,120,220],[240,210,90],[100,210,220],[230,110,130],[170,150,255],[160,200,90],[200,160,120]];
@@ -41983,7 +42263,7 @@ Arbol de la estadística/
 ├── teoria/                   guías de teoría, contrastes, tabla SAS ↔ Python
 ├── ejemplos/                 flujos completos de uso
 ├── assets/                   icono.ico / icono.png
-├── herramientas/             generar_instaladores.py, descargar_python.ps1, plantillas/, entrenador/ (reentrenar el LLM: datos, QLoRA, exportar a Ollama), corpus/ + evaluar_corpus.py + panel_progreso.py (medir y ver el progreso)
+├── herramientas/             generar_instaladores.py, descargar_python.ps1, plantillas/, entrenador/ (reentrenar el LLM: datos, QLoRA, exportar a Ollama), corpus/ + evaluar_corpus.py + panel_progreso.py (medir y ver el progreso); la pestaña «🧠 Entrenamiento» de la app los lanza y los muestra (py/conocimiento/entrenamiento.py)
 ├── instaladores/             "Arbol X.Y.Z - Instalador.bat" y "… - Actualizar.bat" (autoextraíbles)
 ├── anteriores/               copias de seguridad que hace el actualizador (py_anterior, estructura_plana)
 └── python/                   (opcional) Python propio descargado por el instalador si el equipo no tiene
@@ -42547,6 +42827,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
 5z. **Lectura del cuerpo y género «literatura» (1.12.0):** el modelo de embeddings (MiniLM) solo lee ~100 palabras, que en un libro suelen ser portada y licencia: `clasificador.vector_cuerpo` embebe 8 pasajes de 500 caracteres repartidos por el documento (`pasajes`) y su media se mezcla con el vector de título + capítulos + principio (`mezcla`, `PESO_CUERPO`); los libros importados guardan su vector en `conocimiento/biblioteca/vectores.npz` (por hash; no se publica) para servir de ejemplo con la misma representación (`_matriz`). Medido sin LLM en 232 obras de validación: género 68,1 → 74,6 % (McNemar p = 0,028), subgénero 41,4 → 46,6 %; en el experimento previo con solo una regresión logística, 63 → 73 %. `CUERPO = False` lo apaga. **Sin medir:** que el LLM vea también pasajes del cuerpo (`llm.PASAJES`, apagado por defecto; probar con `--set llm.PASAJES=3`) y el efecto exacto del cuerpo encima del LLM. **Género nuevo `literatura`** (poesía, teatro, cuentos, crítica; `arte` pierde la poesía y la crítica literaria): neutro en precisión (78,7 % → 78,7 % en las mismas 310 obras con el oro antiguo) y reconoce la literatura (35/50); a cambio roba algunas obras de ensayo, novela y viajes. Los pares de subgéneros que más se confunden (ingeniería de software ↔ programación, física ↔ química, guías ↔ relatos de viaje) son parecidos de verdad y varias etiquetas del corpus salen de categorías de arXiv mapeadas a ojo: no merece la pena retocar definiciones sin etiquetas mejores. `herramientas/panel_progreso.py --log fichero` enseña ese registro en vivo.
 5aa. **Varias etiquetas por obra (1.13.0):** una obra lleva hasta 3 géneros y hasta 3 subgéneros (`py/conocimiento/etiquetas.py`: `MAXIMO`, `DELTA`, `DELTA_SUB`, `elegir`, `poner`, `generos_de`, `subgeneros_de`). `metadatos.json` sigue teniendo `genero` y `subgenero` (la etiqueta PRINCIPAL: de ella dependen la carpeta del archivo `biblioteca/libros/<Género>/<Subgénero>/`, las correcciones y el orden) y añade `generos` = [{id, peso}] y `subgeneros` = [{genero, id, peso}] con la principal primero; lo importado antes no tiene las listas y se lee como una sola etiqueta (no hay migración). **Cómo se eligen:** una etiqueta secundaria entra si puntúa a menos de `DELTA · escala` del primero (`escala` = 1 + el peso con que cuenta ahora la cabeza supervisada, que `sugerir` devuelve en `escala`; es la misma distancia que antes hacía saltar «género poco claro», y por eso `_seguridad` ya no avisa cuando el segundo es una etiqueta de la obra), o si la propone el LLM y es plausible (entre los 4 mejores del marcador). Cada subgénero secundario sale de su propio género (`_etiquetas_sub`, y el principal de cada género secundario). El LLM devuelve `{"generos": [...], "motivo"}` y `{"subgeneros": [...], "motivo"}` (esquema con `maxItems` 3; sigue entendiendo el formato antiguo de una sola etiqueta); los prompts son `llm.prompt_generos` y `llm.prompt_subgeneros` (los usa también el entrenador, así que entrenamiento y uso ven exactamente el mismo texto) y los vecinos enseñados llevan todas sus etiquetas. Las obras con varias etiquetas son ejemplo de cada una (la principal pesa lo de siempre; las demás, la mitad). **Interfaz:** las tarjetas de importación y el Observatorio muestran las etiquetas como chips (★ = principal; en el Observatorio ✕ quita y un desplegable añade; `Api.biblioteca_editar` acepta `generos` y `subgeneros` como listas, este último con «género/subgénero»); la sala de clasificación enseña todas; `importar([{ruta, generos, subgeneros}])` las fija. **Galaxias:** no cambian (la galaxia es dónde vive el documento: Código, Libros, Notas…, no su tema, y un tema repartido entre galaxias duplicaría los objetos); en Libros una obra aparece en la rama de cada uno de sus géneros (misma obra, puntos distintos: `lib_<género>_<n>`), la descripción dice «también en …» y `historia:`/`economia:` la encuentran por cualquiera. Con más de ~12 géneros no vacíos en Libros convendría agrupar ramas, no crear galaxias. **Calibración (sin LLM, 247 obras de validación de un corpus de 1 335; 97 de ellas con varias etiquetas reales, de estanterías de Gutenberg y categorías cruzadas de arXiv, así que el «oro» de las secundarias es ruidoso):** género top-1 64,8 % (no cambia con DELTA) y subgénero 36,6 %. DELTA de género 0,03 / 0,08 / 0,15 / 0,25 → la etiqueta real está entre las predichas 67,6 / 70,4 / 74,1 / 77,7 %, con 1,09 / 1,21 / 1,39 / 1,70 géneros por obra (real 1,58) y precisión 71 / 67 / 62 / 56 % frente a exhaustividad 49 / 51 / 55 / 60 %: **la F1 es plana (58) en todo el rango**, DELTA solo mueve el equilibrio entre acertar más y etiquetar de más; se dejó 0,15. DELTA_SUB 0,00 / 0,03 / 0,08 → F1 de subgénero 31 / 31 / 29 (con 0,08 predice 1,89 por obra frente a 1,39 reales: demasiadas); se dejó 0,03. **Efecto en la cola de revisión:** como el segundo género empatado ya es una etiqueta, `_seguridad` avisa mucho menos (marca el 11 % de las obras y recoge el 13 % de los errores top-1, frente al 44 % y 67 % de antes): lo que antes era «dudoso» ahora es «dos etiquetas». Pendiente repetir la calibración con el LLM y con el modelo reentrenado.
 5ab. **Reentrenar el LLM (entrenador, 1.13.0):** `herramientas/entrenador/` (todo se lanza con `entrenar_llm.bat preparar | datos CORPUS | entrenar CORPUS [MODELO] [NOMBRE] | exportar CORPUS NOMBRE | panel CORPUS`). `preparar` crea un entorno aparte (`.venv`, ~5 GB: torch con CUDA, transformers, peft, bitsandbytes; no se instala con la aplicación). `construir_datos.py` saca de un corpus (`enes/corpus` + `enes/split.json`: solo las obras de ENTRENAMIENTO) ejemplos de género y de subgénero con el prompt exacto del programa y los 8 vecinos calculados sin contar la propia obra; con `--biblioteca` suma la tuya (lo que corregiste pesa doble). `entrenar.py` hace QLoRA (modelo base en 4 bits + LoRA r=16, solo se aprende la respuesta; bucle propio, sin `Trainer`, para no depender de la versión de transformers) y escribe `registro.jsonl`, `estado.json`, `adaptador/` y `resultado.json` (JSON válido y acierto en la validación con generación libre). `exportar_ollama.py` crea el modelo de Ollama: **Ollama 0.40 ya no admite adaptadores LoRA ni importar Qwen2 desde safetensors** (probado: «LoRA adapters are no longer supported», «unsupported MLX architecture»), así que fusiona el adaptador con el base (bf16), lo convierte a GGUF con `convert_hf_to_gguf.py` de llama.cpp (NO viene con el programa: descargarlo a mano de github.com/ggml-org/llama.cpp y `pip install gguf` en el entorno) y hace `ollama create` con la plantilla y la parada del base (`ollama show --modelfile`); con `--usar` apunta `ajustes.json` a él. **La plantilla importa:** la de Qwen en Hugging Face añade un «You are Qwen…» por defecto que la de Ollama NO añade; el entrenador usa `formato_ollama` (sin mensaje de sistema) para que entrenar y servir vean lo mismo. La GPU se comparte con otras aplicaciones (Wallpaper Engine, navegadores…; su uso de VRAM sube y baja entre 4 y 10 GB) y un primer intento se cortó por falta de memoria: por eso los logits se calculan solo sobre la respuesta (el paso pasó de ~88 s a ~38 s y de ~12 GB a ~5,7 GB), un ejemplo sin memoria se salta y se anota (`saltados`), y `entrenar_llm.bat entrenar` (o `entrenar_vigilado.sh`) reanuda solo con `--reanudar` desde el último adaptador guardado (hasta 20 intentos). Con 12 GB, el 3B entrena con unos 6 GB libres; el 7B exige cerrar lo demás (Wallpaper Engine, juegos…). **Medir:** `evaluar_corpus.py` guarda ahora los conjuntos reales y predichos (`gs`, `pgs`, `ss`, `pss`) y `metricas_etiquetas.py`/`estadisticas_clasificacion.py` calculan «la etiqueta real está entre las predichas» (comparable con el acierto de antes), etiquetas de más por obra, precisión, exhaustividad, Jaccard y F1 macro, más McNemar sobre ese acierto; para evaluar un modelo entrenado: `--set 'llm.MODELO="arbol-clasificador"'`. **Corpus con varias etiquetas:** `libros_gutenberg.py CARPETA 28 --multi N` baja además N libros con estanterías de géneros distintos (repartidos entre las combinaciones de géneros; la etiqueta principal es la de la primera estantería y es arbitraria, por eso para ellos importan las métricas de conjunto y no el top-1) y `articulos_arxiv.py` guarda las categorías cruzadas (stat.ML + cs.LG = estadística + tecnología) como etiquetas múltiples; `montar.py` las pasa a `importar`. **Panel** (`panel_progreso.py CORPUS`, localhost:8765): cuadros «Entrenamiento del LLM» (barra, curva de pérdida de entrenamiento y validación, VRAM, minutos que quedan, resultado) y «Etiquetas múltiples» (métricas por configuración, cuántos géneros predice por obra y qué pares se dan juntos). Tests: `tests/test_etiquetas.py`, `tests/test_entrenador.py`. Trampas ya vividas: en un `python - <<EOF` de bash las barras invertidas dobles (`\\n`) llegan como una sola y rompen las cadenas del código que se escribe: para parchear ficheros usar un fichero de script con cadenas crudas o la herramienta Edit.
+5ac. **Pestaña «🧠 Entrenamiento» (1.13.1):** reentrenar el LLM desde la app y verlo en vivo. `py/conocimiento/entrenamiento.py` (API `Api.entrenamiento_estado/panel/lanzar/parar`) lanza `herramientas/entrenador/entrenar_llm.bat` en un proceso APARTE y sin ventana (datos si faltan o si marcas «sumar mi biblioteca», luego entrenar; descarga antes de la VRAM los modelos de Ollama), así que se puede cerrar la app y sigue; `_lanzado.json` en `corpus/enes/entrenamiento/` guarda el pid y «■ Parar» lo corta (mismo nombre = reanuda). La pestaña lleva `herramientas/panel_progreso.py` (la app lo arranca en localhost:8765) en un iframe. Busca el corpus en `corpus/` (esta carpeta o las de arriba; o `ARBOL_CORPUS`) y el entorno `.venv` del entrenador en esta carpeta o en un worktree hermano (o `ARBOL_VENV`; pesa 5 GB, no se duplica). Solo existe en la carpeta de desarrollo. Test: `tests/test_entrenamiento.py`.
 5w. **Cola de revisión («no estoy seguro»):** `importar._seguridad` mide el margen entre el género ganador y el segundo (y lo mismo en el subgénero), si el LLM y el parecido discrepan, si casi no hay texto o si no encaja en ningún género; `clasificar` devuelve `revisar`, `motivos_revisar` y `margen`, `importar()` los guarda en `metadatos.json`. El Observatorio muestra ⚠ con el motivo y «✓ Está bien» (`Api.biblioteca_confirmar` → `importar.confirmar`, que además lo recuerda como corrección tuya), la casilla «Solo por revisar» y un contador en la pestaña 🔭 (`Api.biblioteca_por_revisar`); tocar cualquier campo cuenta como revisado; al terminar una importación se avisa de cuántos hay. Consola: `python -m conocimiento revisar --dudosos`. Umbrales calibrados con datos (`MARGEN_REVISAR`, `MARGEN_SUB_REVISAR`): ~44 % marcado recoge ~67 % de los errores de género; subirlos avisa más. Tests: `tests/test_cola_revision.py`.
 5x. **Información web (Wikipedia/Wikidata) y vídeos:** `py/conocimiento/webinfo.py` busca «título autor» en Wikipedia (APIs oficiales, nada de rascar HTML), exige que la introducción nombre al autor y que Wikidata diga que es una obra escrita (no una persona, película o personaje) y devuelve descripción, tipo, género y subgénero de novela; entra al clasificador como descripción (para el parecido y el LLM) y como pista de género (`PESO_WIKI`). Respeta a los servidores: 1 petición por segundo, reintentos con espera ante 429 (Wikimedia limita de verdad), descanso tras fallos y caché en `conocimiento/webinfo_cache.json`; solo sale el título y el autor; `clasificador.WIKI = "auto"` (por defecto) la usa solo cuando el LLM no está disponible, porque con LLM no suma; `True` = siempre, `False` o `ARBOL_WIKI=no` = nunca (los tests la apagan). Medido en 73 obras conocidas (dejando uno fuera): sin LLM 75/49 → con Wikipedia 79/56; con LLM 7b y ejemplos parecidos 86/68, y 86/66 si además se usa Wikipedia. **Vídeos:** `py/conocimiento/enlaces.py` acepta accesos directos `.url` de YouTube/Vimeo: título, canal y miniatura (portada) salen del oEmbed oficial, sin transcripciones; tipo `video`, galaxia Libros, se clasifican por título y canal (+ Wikipedia si es un documental con ficha). Tests: `tests/test_webinfo.py`, `tests/test_enlaces.py`.
 5y. **LLM por defecto (1.11.0):** `llm.py` pregunta por TODAS las obras (`siempre`) y le enseña los `VECINOS = 8` libros más parecidos ya clasificados; el modelo por defecto depende de la RAM (`qwen2.5:7b` con 12 GB o más, `qwen2.5:3b` con menos; si falta el elegido usa el otro), y el instalador (`motor.ps1`) baja el que corresponda. Se cambia con `ajustes.json` o `ARBOL_LLM`.
