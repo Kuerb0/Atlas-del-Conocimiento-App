@@ -5,11 +5,13 @@ rem   entrenar_llm.bat datos CORPUS                       construye train.jsonl 
 rem   entrenar_llm.bat entrenar CORPUS [MODELO] [NOMBRE]  entrena (por defecto Qwen/Qwen2.5-3B-Instruct) y guarda en CORPUS\enes\entrenamiento\NOMBRE
 rem   entrenar_llm.bat exportar CORPUS NOMBRE             crea el modelo de Ollama "arbol-clasificador" con el adaptador entrenado
 rem   entrenar_llm.bat panel CORPUS                       abre el panel con el progreso (http://localhost:8765)
+rem ARBOL_VENV (opcional): carpeta de otro entorno ya preparado (la app lo pone sola al lanzar el entrenamiento desde la pestaña Entrenamiento).
 rem Antes de entrenar, cierra lo que use la GPU (juegos, Wallpaper Engine, etc.): con 12 GB el modelo de 3B necesita unos 6 GB libres.
 setlocal EnableExtensions
 set "AQUI=%~dp0"
 set "RAIZ=%AQUI%..\.."
 set "VPY=%AQUI%.venv\Scripts\python.exe"
+if defined ARBOL_VENV set "VPY=%ARBOL_VENV%\Scripts\python.exe"
 set "ACCION=%~1"
 set "CORPUS=%~2"
 
@@ -56,7 +58,7 @@ if exist "%SAL%\resultado.json" exit /b 0
 set /a INTENTOS+=1
 if %INTENTOS% geq 20 (echo El entrenamiento se corto 20 veces: mira %SAL%.log & exit /b 1)
 echo [vigilante] intento %INTENTOS% cortado; reanudo en 60 s (la GPU se comparte con otras aplicaciones)
-timeout /t 60 /nobreak >nul
+ping -n 61 127.0.0.1 >nul
 goto otro_intento
 
 :exportar

@@ -209,6 +209,26 @@ class Api:
         except Exception as e:
             return {"error": f"{type(e).__name__}: {e}"}
 
+    # ---- reentrenar el LLM (pestaña «Entrenamiento»): ver py/conocimiento/entrenamiento.py ----
+    def _ent(self, nombre, *args):
+        try:
+            from conocimiento import entrenamiento
+            return getattr(entrenamiento, nombre)(*args)
+        except Exception as e:
+            return {"error": f"{type(e).__name__}: {e}"}
+
+    def entrenamiento_estado(self):
+        return self._ent("estado")
+
+    def entrenamiento_panel(self):
+        return self._ent("abrir_panel")
+
+    def entrenamiento_lanzar(self, nombre, modelo, biblioteca):
+        return self._ent("lanzar", str(nombre), str(modelo), bool(biblioteca))
+
+    def entrenamiento_parar(self):
+        return self._ent("parar")
+
     # ---- telescopio (pestaña «Telescopio»): ver py/conocimiento/telescopio.py ----
     def telescopio_buscar(self, consulta="", titulo="", autor="", tipo="todo", formato=""):
         try:
