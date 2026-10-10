@@ -26,5 +26,11 @@ mn
 *.pdf
 *.epub
 
+# corpus de pruebas del clasificador (GB de libros, arXiv, código; se monta con herramientas/corpus/)
+/corpus/
+
+# otros proyectos y libros de Mario (repos propios, consultoría): viven aquí por comodidad, no se publican
+/externos/
+
 # entorno aparte para reentrenar el LLM (torch, peft...) y sus salidas
 herramientas/entrenador/.venv/

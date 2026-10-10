@@ -296,6 +296,10 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 .ecl-lista{width:100%;max-width:980px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:6px 14px}
 .ecl-fila{display:grid;grid-template-columns:12px 1fr auto;gap:8px;align-items:center;font-size:12.5px;padding:3px 6px;border-radius:6px} .ecl-fila.hot{background:#121a33}
 .ecl-pto{width:10px;height:10px;border-radius:50%} .ecl-pct{color:#8ea0c0}
+.entrenamiento[hidden]{display:none} .app.modo-entrenamiento .cuerpo{display:none}
+.entrenamiento{min-height:0;overflow:hidden;background:#02030a;color:#dfe6f5;display:flex;flex-direction:column;gap:8px;padding:10px 16px}
+.ent-barra{display:flex;flex-wrap:wrap;gap:8px;align-items:center} .ent-barra [hidden]{display:none} .ent-barra input[type=text]{width:90px} .ent-estado{color:#8ea0c0;font-size:12.5px}
+#entFrame{flex:1;min-height:0;width:100%;border:1px solid #1b2440;border-radius:10px;background:#0b1020}
 .telescopio[hidden]{display:none} .app.modo-telescopio .cuerpo{display:none}
 .telescopio{min-height:0;overflow:auto;padding:12px 16px 40px;background:#02030a;color:#dfe6f5;display:flex;flex-direction:column;align-items:center;gap:10px}
 .tel-lista{width:100%;max-width:1040px;display:flex;flex-direction:column;gap:8px} .tel-card{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:10px 12px;border:1px solid #1c2646;border-radius:10px;background:#0b1224}
@@ -401,6 +405,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
       <button class="pest" id="pestImportar" role="tab" type="button" aria-selected="false" title="Importar archivos: un agujero negro que los clasifica">⚫ Importar</button>
       <button class="pest" id="pestBiblioteca" role="tab" type="button" aria-selected="false" title="El observatorio: lo que has importado; edita, reclasifica o borra">🔭 Observatorio</button>
       <button class="pest" id="pestEclipses" role="tab" type="button" aria-selected="false" title="Almacenaje: lo que ocupa cada galaxia frente al límite de GitHub">🌘 Eclipses</button>
+      <button class="pest" id="pestEntrenamiento" role="tab" type="button" aria-selected="false" title="Reentrena el LLM que clasifica y mira cómo va, con la app abierta">🧠 Entrenamiento</button>
       <button class="pest" id="pestTelescopio" role="tab" type="button" aria-selected="false" title="Telescopio: busca obras de acceso abierto y las trae a tu biblioteca, ya clasificadas">📡 Telescopio</button>
       <button class="pest" id="btnActualizar" type="button" title="Recarga el programa (reglas y ajustes nuevos) y el universo con lo importado, sin cerrar la app">⟳ Actualizar</button>
     </nav>
@@ -456,6 +461,16 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
     <div class="bib-barra"><input id="bibQ" type="search" placeholder="Filtrar por título, género, subtema, etiqueta…" aria-label="Filtrar el observatorio"><select id="bibGal" aria-label="Galaxia"></select><select id="bibOrden" aria-label="Orden"><option value="fecha">Más recientes primero</option><option value="gal">Por galaxia y título</option></select><label class="bib-n" for="bibDesde">Importados desde</label><input id="bibDesde" type="date" aria-label="Importados desde esta fecha"><label class="bib-n" for="bibRev" title="Lo que el clasificador no vio claro y aún no has mirado"><input id="bibRev" type="checkbox"> ⚠ Solo por revisar <span id="bibRevN"></span></label>
       <span id="bibN" class="bib-n"></span><button class="btn primario" id="bibAplicar" type="button" hidden>Actualizar el universo ahora</button></div>
     <div class="bib-lista" id="bibLista"></div>
+  </section>
+  <section class="entrenamiento" id="entrenamiento" hidden aria-label="Entrenamiento">
+    <div class="ent-barra">
+      <label class="ecl-nota" for="entNombre">Nombre</label><input id="entNombre" type="text" value="ft2" maxlength="30" aria-label="Nombre del entrenamiento (si ya existe, lo reanuda)">
+      <select id="entModelo" aria-label="Modelo base"></select>
+      <label class="ecl-nota"><input id="entBib" type="checkbox"> sumar mi biblioteca</label>
+      <button class="btn" id="entIniciar" type="button">▶ Entrenar</button><button class="btn" id="entParar" type="button" hidden>■ Parar</button>
+      <span class="ent-estado" id="entEstado"></span>
+    </div>
+    <iframe id="entFrame" title="Progreso del entrenamiento" src="about:blank"></iframe>
   </section>
   <section class="telescopio" id="telescopio" hidden aria-label="Telescopio">
     <div class="imp-cabeza"><h2>Telescopio</h2><p>Busca en Google Books (ficha y enlace; descarga solo si es de dominio público), Project Gutenberg, Internet Archive, artículos en abierto (arXiv, OpenAlex) y tráelos a tu biblioteca: se clasifican con las materias reales de la obra. Solo fuentes legales.</p></div>
@@ -1223,13 +1238,14 @@ $('#aprenderBtn').onclick = function () { apMostrar(!apAbierta()); };
 /* ---------- pestañas: Universo (el mapa) · Importar (el agujero negro) · Aprender (la guía) ---------- */
 function impAbierta() { return $('.app').classList.contains('modo-importar'); }
 function telAbierta() { return $('.app').classList.contains('modo-telescopio'); }
+function entAbierta() { return $('.app').classList.contains('modo-entrenamiento'); }
 function eclAbierta() { return $('.app').classList.contains('modo-eclipses'); }
 function bibAbierta() { return $('.app').classList.contains('modo-biblioteca'); }
 function pintarPestanas() {
-  var u = !apAbierta() && !impAbierta() && !bibAbierta() && !eclAbierta() && !telAbierta(); $('#pestTelescopio').setAttribute('aria-selected', String(telAbierta())); $('#pestEclipses').setAttribute('aria-selected', String(eclAbierta())); $('#pestUniverso').setAttribute('aria-selected', String(u));
+  var u = !apAbierta() && !impAbierta() && !bibAbierta() && !eclAbierta() && !telAbierta() && !entAbierta(); $('#pestEntrenamiento').setAttribute('aria-selected', String(entAbierta())); $('#pestTelescopio').setAttribute('aria-selected', String(telAbierta())); $('#pestEclipses').setAttribute('aria-selected', String(eclAbierta())); $('#pestUniverso').setAttribute('aria-selected', String(u));
   $('#pestImportar').setAttribute('aria-selected', String(impAbierta())); $('#pestBiblioteca').setAttribute('aria-selected', String(bibAbierta()));
 }
-function modoCerrar() { $('.app').classList.remove('modo-importar', 'modo-biblioteca', 'modo-eclipses', 'modo-telescopio'); $('#telescopio').hidden = true; $('#importar').hidden = true; $('#biblioteca').hidden = true; $('#eclipses').hidden = true; agujero.ocultar(); eclipses.ocultar(); }
+function modoCerrar() { $('.app').classList.remove('modo-importar', 'modo-biblioteca', 'modo-eclipses', 'modo-telescopio', 'modo-entrenamiento'); $('#entrenamiento').hidden = true; $('#telescopio').hidden = true; $('#importar').hidden = true; $('#biblioteca').hidden = true; $('#eclipses').hidden = true; agujero.ocultar(); eclipses.ocultar(); }
 function impCerrar() { modoCerrar(); pintarPestanas(); }
 function pestana(p) {
   if (p === 'universo' && bibAbierta() && bib.sucio) { bibAplicar(); return; }          /* hay cambios en el observatorio: se actualiza el universo al volver a él */
@@ -1238,6 +1254,7 @@ function pestana(p) {
   if (p === 'importar') { $('.app').classList.add('modo-importar'); $('#importar').hidden = false; agujero.mostrar(); impOpciones(); }
   else if (p === 'biblioteca') { $('.app').classList.add('modo-biblioteca'); $('#biblioteca').hidden = false; bibCargar(); }
   else if (p === 'telescopio') { $('.app').classList.add('modo-telescopio'); $('#telescopio').hidden = false; $('#telQ').focus(); }
+  else if (p === 'entrenamiento') { $('.app').classList.add('modo-entrenamiento'); $('#entrenamiento').hidden = false; entMostrar(); }
   else if (p === 'eclipses') { $('.app').classList.add('modo-eclipses'); $('#eclipses').hidden = false; eclCargar(); }
   else pintar();
   pintarPestanas();
@@ -1246,11 +1263,12 @@ $('#pestUniverso').onclick = function () { pestana('universo'); };
 $('#pestImportar').onclick = function () { pestana('importar'); };
 $('#pestBiblioteca').onclick = function () { pestana('biblioteca'); };
 $('#pestEclipses').onclick = function () { pestana('eclipses'); };
+$('#pestEntrenamiento').onclick = function () { pestana('entrenamiento'); };
 $('#pestTelescopio').onclick = function () { pestana('telescopio'); };
 $('#btnActualizar').onclick = async function () {              /* recarga el código de Python y regenera el universo; vuelve a la misma pestaña */
   var a = window.pywebview && window.pywebview.api, b = this;
   if (!a || !a.recargar) { location.reload(); return; }
-  var pest = impAbierta() ? 'importar' : bibAbierta() ? 'biblioteca' : eclAbierta() ? 'eclipses' : telAbierta() ? 'telescopio' : 'universo';
+  var pest = impAbierta() ? 'importar' : bibAbierta() ? 'biblioteca' : eclAbierta() ? 'eclipses' : entAbierta() ? 'entrenamiento' : telAbierta() ? 'telescopio' : 'universo';
   b.disabled = true; b.textContent = '⟳ Actualizando…';
   var v = await a.recargar();
   if (v && v.error) { b.disabled = false; b.textContent = '⟳ Actualizar'; b.title = 'No se pudo actualizar: ' + v.error; alert('No se pudo actualizar: ' + v.error); return; }
@@ -1258,7 +1276,7 @@ $('#btnActualizar').onclick = async function () {              /* recarga el có
   location.reload();
 };
 var apMostrarOrig = apMostrar;
-apMostrar = function (on) { if (on && (impAbierta() || bibAbierta() || eclAbierta() || telAbierta())) impCerrar(); apMostrarOrig(on); pintarPestanas(); };
+apMostrar = function (on) { if (on && (impAbierta() || bibAbierta() || eclAbierta() || telAbierta() || entAbierta())) impCerrar(); apMostrarOrig(on); pintarPestanas(); };
 
 /* ---------- el importador: agujero negro + tarjetas de archivos con lo detectado, desplegables y progreso (el trabajo lo hace py/conocimiento/importar.py) ---------- */
 var imp = {archivos: [], opciones: null, ocupado: false, resultados: null, modo: 'copiar'};
@@ -1534,6 +1552,37 @@ $('#telLista').addEventListener('click', async function (e) {
   var r = await a.telescopio_traer(x);
   if (r.estado === 'ok') { b.textContent = '✓ en ' + r.galaxia; bib.sucio = true; } else if (r.estado === 'duplicado') b.textContent = 'Ya la tenías'; else { b.disabled = false; b.textContent = 'Reintentar'; $('#telN').textContent = '✗ ' + (r.mensaje || r.error); }
 });
+/* ---------- entrenamiento: reentrenar el LLM con la app abierta; el panel de progreso (herramientas/panel_progreso.py) va en un iframe ---------- */
+var ent = {timer: null, cargado: false};
+function entApi() { var a = window.pywebview && window.pywebview.api; return a && a.entrenamiento_estado ? a : null; }
+async function entMostrar() {
+  var a = entApi(), st = $('#entEstado');
+  if (!a) { st.textContent = 'El entrenamiento se controla desde la app («Árbol de la estadística» del Escritorio).'; $('#entIniciar').disabled = true; return; }
+  await entRefrescar();
+  if (!ent.cargado) { var p = await a.entrenamiento_panel(); if (p && p.url) { $('#entFrame').src = p.url; ent.cargado = true; } else if (p && p.error) st.textContent = p.error; }
+  clearInterval(ent.timer); ent.timer = setInterval(function () { if (entAbierta()) entRefrescar(); else clearInterval(ent.timer); }, 3000);
+}
+async function entRefrescar() {
+  var e = await entApi().entrenamiento_estado(), sel = $('#entModelo'), st = $('#entEstado');
+  if (!e || e.error || !e.disponible) { st.textContent = (e && (e.error || e.motivo)) || ''; $('#entIniciar').disabled = true; return; }
+  if (!sel.options.length) Object.keys(e.modelos).forEach(function (k) { var o = document.createElement('option'); o.value = k; o.textContent = e.modelos[k]; sel.appendChild(o); });
+  var en = e.entrenando;
+  $('#entIniciar').hidden = !!en; $('#entParar').hidden = !en; $('#entIniciar').disabled = !e.entorno;
+  ['entNombre', 'entModelo', 'entBib'].forEach(function (i) { $('#' + i).disabled = !!en; });
+  st.textContent = en ? 'Entrenando «' + en.nombre + '» desde ' + en.desde + ' (sigue aunque cierres la app).' : (e.motivo || (e.ultimo ? 'Último entrenamiento: ' + e.ultimo + '.' : 'Sin entrenamientos todavía.'));
+}
+$('#entIniciar').onclick = async function () {
+  var a = entApi(); if (!a) return;
+  if (!confirm('Se libera la GPU y se entrena en segundo plano (el 3B tarda unas 2-3 horas). Cierra juegos y Wallpaper Engine. ¿Empezar?')) return;
+  var r = await a.entrenamiento_lanzar($('#entNombre').value, $('#entModelo').value, $('#entBib').checked);
+  if (r && r.error) alert(r.error);
+  entRefrescar();
+};
+$('#entParar').onclick = async function () {
+  var a = entApi(); if (!a || !confirm('¿Parar el entrenamiento? Lo guardado se conserva y, con el mismo nombre, se reanuda.')) return;
+  var r = await a.entrenamiento_parar(); if (r && r.error) alert(r.error);
+  entRefrescar();
+};
 /* ---------- eclipses: el Sol es el límite de GitHub; cada galaxia o tipo de archivo es una luna (py/conocimiento/almacenaje.py) ---------- */
 var ecl = {datos: null, github: false, tipos: false}, eclipses = crearEclipses({canvas: $('#eclipses-cv'), alPasar: function (id) { eclResaltar(id); }});
 var ECL_COL = [[90,160,255],[255,140,90],[120,210,140],[220,120,220],[240,210,90],[100,210,220],[230,110,130],[170,150,255],[160,200,90],[200,160,120]];
