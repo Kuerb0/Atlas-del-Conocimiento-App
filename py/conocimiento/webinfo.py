@@ -20,7 +20,7 @@ from . import CARPETA, _norm
 
 INTERVALO = 1.0                  # segundos mínimos entre dos peticiones (todas las de este módulo)
 ESPERA = 10                      # segundos de espera por petición
-UA = "ArbolEstadistica/1.11 (https://github.com/Kuerb0/Arbol_de_la_estadistica; biblioteca personal que clasifica libros) python-urllib"      # Wikimedia pide nombre de la herramienta y un contacto
+UA = "AtlasDelConocimiento/1.14 (https://github.com/Kuerb0/Atlas_del_conocimiento; biblioteca personal que clasifica libros) python-urllib"      # Wikimedia pide nombre de la herramienta y un contacto
 _cerrojo, _cache_lock = threading.Lock(), threading.Lock()
 _estado: dict = {"ultimo": 0.0, "fallos": 0, "descanso": 0.0, "cache": None, "nuevos": 0}
 _etiq: dict = {}                    # Q-id -> nombre (se repiten mucho: «literary work», «novel»…)

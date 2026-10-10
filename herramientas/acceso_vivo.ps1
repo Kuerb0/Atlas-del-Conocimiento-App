@@ -1,11 +1,11 @@
-# Apunta el acceso directo «Árbol de la estadística» del Escritorio a ESTA carpeta, en modo vivo (se recarga sola y sigue el foco).
+# Apunta el acceso directo «Atlas del conocimiento» del Escritorio a ESTA carpeta, en modo vivo (se recarga sola y sigue el foco).
 #   powershell -ExecutionPolicy Bypass -File herramientas\acceso_vivo.ps1 on     # usa esta carpeta
 #   powershell -ExecutionPolicy Bypass -File herramientas\acceso_vivo.ps1 off    # lo deja como estaba
 # Lo original se guarda en %LOCALAPPDATA%\ArbolEstadistica\acceso_original.json.
 param([Parameter(Mandatory)][ValidateSet('on', 'off')][string]$Modo)
 $raiz = Split-Path -Parent $PSScriptRoot
-$lnk = Get-ChildItem ([Environment]::GetFolderPath('Desktop')) -Filter '*.lnk' | Where-Object { $_.BaseName -like '*rbol de la estad*' } | Select-Object -First 1
-if (-not $lnk) { Write-Host 'No encuentro el acceso directo del Arbol en el Escritorio.'; exit 1 }
+$lnk = Get-ChildItem ([Environment]::GetFolderPath('Desktop')) -Filter '*.lnk' | Where-Object { $_.BaseName -match 'rbol de la estad|Atlas del conocimiento' } | Select-Object -First 1
+if (-not $lnk) { Write-Host 'No encuentro el acceso directo del Atlas en el Escritorio.'; exit 1 }
 $w = New-Object -ComObject WScript.Shell
 $s = $w.CreateShortcut($lnk.FullName)
 $copia = Join-Path $env:LOCALAPPDATA 'ArbolEstadistica\acceso_original.json'

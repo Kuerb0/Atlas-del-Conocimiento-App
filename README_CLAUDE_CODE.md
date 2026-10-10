@@ -1,4 +1,4 @@
-# Árbol de la estadística — guía para Claude Code
+# Atlas del conocimiento — guía para Claude Code
 
 Léeme al empezar una sesión de Claude Code en esta carpeta. Las **reglas** del proyecto (convenciones, errores conocidos que
 no se deben reintroducir, la tabla «qué usar») están en `CLAUDE.md`, que Claude Code carga solo. El **mapa de funciones** está
@@ -13,7 +13,7 @@ Estado actual: **v0.15.1**.
 
 ## 1. Entorno
 
-- **Windows.** La carpeta se llama «Árbol de la estadística» (con tilde).
+- **Windows.** La carpeta de desarrollo se llama «Atlas_del_conocimiento»; las instalaciones antiguas pueden seguir en «Árbol de la estadística» (el actualizador las encuentra).
   Cita siempre las rutas entre comillas.
 - **Python.** Usa el de la carpeta (`python\python.exe`) si existe; si no, `py -3`. Los `.bat` ya lo resuelven así.
   `python_arbol.txt` apunta al Python 3.12 del usuario.
@@ -116,7 +116,7 @@ Hay **tests que fallan si falta cualquiera de estos pasos**: ficha, bench, ejemp
 1. Sube la versión **en los tres sitios**: `py/VERSION.txt`, `py/pyproject.toml` y `__version__` en `arbol_estadistica/__init__.py`.
 2. Ejecuta la suite completa y regenera el visor.
 3. Ejecuta `python herramientas/generar_instaladores.py`, que comprueba que se extraen idénticos.
-4. El usuario actualiza con `instaladores/Arbol X.Y.Z - Actualizar.bat`, que conserva su `catalogo.json` y le fusiona los conceptos nuevos.
+4. El usuario actualiza con `instaladores/Atlas X.Y.Z - Actualizar.bat`, que conserva su `catalogo.json` y le fusiona los conceptos nuevos.
 
 ## 5. Trampas que ya han salido (no repetirlas)
 

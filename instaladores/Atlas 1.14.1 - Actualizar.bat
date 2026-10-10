@@ -1,19 +1,19 @@
 @echo off
 setlocal
-title Arbol de la estadistica 1.14.0 - Instalador
+title Atlas del conocimiento 1.14.1 - Actualizar
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.
 set "ARBOL_SELF=%~f0"
-set "ARBOL_MODO=instalar"
-set "ARBOL_VERSION=1.14.0"
+set "ARBOL_MODO=actualizar"
+set "ARBOL_VERSION=1.14.1"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$l=[IO.File]::ReadAllLines($env:ARBOL_SELF,[Text.Encoding]::UTF8); $s=[Array]::IndexOf($l,':::PSSTART'); $e=[Array]::IndexOf($l,':::PSEND'); & ([scriptblock]::Create(($l[($s+1)..($e-1)] -join [Environment]::NewLine)))"
 set "RC=%ERRORLEVEL%"
 echo.
 if not "%ARBOL_SIN_PAUSA%"=="1" pause
 exit /b %RC%
 :::PSSTART
-# Motor de instalación / actualización del Árbol de la estadística (Windows PowerShell 5.1 o superior).
+# Motor de instalación / actualización del Atlas del conocimiento (Windows PowerShell 5.1 o superior).
 # Lo arranca el .bat (instalador o actualizador) con estas variables de entorno:
 #   ARBOL_SELF    ruta del propio .bat (lleva empaquetados los ficheros tras la línea :::PSEND)
 #   ARBOL_MODO    'instalar' o 'actualizar'
@@ -30,7 +30,8 @@ $Self = $env:ARBOL_SELF
 $Modo = $env:ARBOL_MODO
 $Version = $env:ARBOL_VERSION
 $EnWindows = [Environment]::OSVersion.Platform -eq 'Win32NT'
-$Nombre = [string][char]0xC1 + 'rbol de la estad' + [char]0xED + 'stica'
+$Nombre = 'Atlas del conocimiento'
+$NombreViejo = [string][char]0xC1 + 'rbol de la estad' + [char]0xED + 'stica'      # el de las versiones anteriores a 1.14.1: se sigue buscando y se retira su acceso directo
 $Utf8 = New-Object Text.UTF8Encoding($false)
 $DirRegistro = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'ArbolEstadistica' } else { Join-Path ([IO.Path]::GetTempPath()) 'ArbolEstadistica' }
 $FicheroRegistro = Join-Path $DirRegistro 'ubicacion.txt'
@@ -175,7 +176,7 @@ function Elegir-Destino-Instalacion {
         if ($op -match '^\s*[qQ]') { return $null }
         $cand = $null
         if ($op -match '^\s*2') {
-            $cand = Elegir-Con-Dialogo ([Environment]::GetFolderPath('MyDocuments')) 'Elige la carpeta donde instalar el Árbol de la estadística (si no está vacía, se creará dentro una subcarpeta)'
+            $cand = Elegir-Con-Dialogo ([Environment]::GetFolderPath('MyDocuments')) 'Elige la carpeta donde instalar el Atlas del conocimiento (si no está vacía, se creará dentro una subcarpeta)'
             if (-not $cand) { Write-Host '  No has elegido ninguna carpeta.'; continue }
         } elseif ($op -match '^\s*3') {
             $cand = Read-Host '  Escribe la ruta completa (p. ej. D:\Estadistica\Arbol)'
@@ -200,13 +201,14 @@ function Buscar-Instalacion {
     $cands = @($aqui, (Split-Path -Parent $aqui))
     if (Test-Path -LiteralPath $FicheroRegistro) { $cands += (Get-Content -LiteralPath $FicheroRegistro -Encoding UTF8 | Select-Object -First 1) }
     $cands += (Join-Path ([Environment]::GetFolderPath('MyDocuments')) $Nombre)
+    $cands += (Join-Path ([Environment]::GetFolderPath('MyDocuments')) $NombreViejo)      # instalaciones de versiones anteriores a 1.14.1
     foreach ($c in $cands) { if (Es-Instalacion $c) { return $c } }
     Write-Host ''
-    Write-Host '  No encuentro una instalación del Árbol junto a este actualizador.'
+    Write-Host '  No encuentro una instalación del Atlas junto a este actualizador.'
     Write-Host '  Elige la carpeta donde lo tienes instalado (la que contiene py, conceptos, teoria...).'
-    $c = Elegir-Con-Dialogo ([Environment]::GetFolderPath('MyDocuments')) 'Elige la carpeta donde está instalado el Árbol de la estadística'
+    $c = Elegir-Con-Dialogo ([Environment]::GetFolderPath('MyDocuments')) 'Elige la carpeta donde está instalado el Atlas del conocimiento'
     if ($c -and (Es-Instalacion $c)) { return $c }
-    if ($c) { Write-Host "  Esa carpeta no parece una instalación del Árbol: $c" }
+    if ($c) { Write-Host "  Esa carpeta no parece una instalación del Atlas: $c" }
     return $null
 }
 
@@ -352,9 +354,10 @@ function Crear-Accesos($dest) {
         }
         $s.WorkingDirectory = $dest
         if (Test-Path -LiteralPath $ico) { $s.IconLocation = $ico + ',0' }
-        $s.Description = 'Árbol de la estadística'; $s.Save()
+        $s.Description = 'Atlas del conocimiento'; $s.Save()
         try { Start-Process -FilePath (Join-Path $env:windir 'System32\ie4uinit.exe') -ArgumentList '-show' -WindowStyle Hidden -Wait } catch { }   # refresca la caché de iconos de Windows
         # El segundo acceso («- regenerar») ya no se crea; si lo dejó una versión anterior, se quita.
+        foreach ($v in @(($NombreViejo + '.lnk'), ($NombreViejo + ' - regenerar.lnk'), ($Nombre + ' - regenerar.lnk'))) { $x = Join-Path $esc $v; if (Test-Path -LiteralPath $x) { Remove-Item -LiteralPath $x -Force -ErrorAction SilentlyContinue } }      # el acceso con el nombre antiguo
         $viejo = Join-Path $esc ($Nombre + ' - regenerar.lnk')
         if (Test-Path -LiteralPath $viejo) { Remove-Item -LiteralPath $viejo -Force -ErrorAction SilentlyContinue; Info 'Quitado el acceso «regenerar» del Escritorio (ya no hace falta; sigue regenerar_visor.bat en la carpeta).' }
         Info "Acceso directo «$Nombre» en el Escritorio -> $(if ($l) { $l[0] } else { 'abrir_arbol.bat' })."
@@ -501,14 +504,14 @@ function Preparar-IA($py, $dest) {
     $faltaAlgo = (-not $tieneFE) -or (-not $tieneEmb) -or (-not $exe) -or ($exe -and -not $tieneLLM)
     if (-not $faltaAlgo) { Info 'Todo al día: no hay nada que descargar.'; return }
     if (-not $env:ARBOL_DESTINO) {
-        $r = Read-Host '  ¿Instalar lo que falta? Es opcional: sin ello el Árbol clasifica con reglas, pero peor [S/n]'
+        $r = Read-Host '  ¿Instalar lo que falta? Es opcional: sin ello el Atlas clasifica con reglas, pero peor [S/n]'
         if ($r -match '^\s*[nN]') { Info 'Omitido. Puedes repetirlo cuando quieras ejecutando de nuevo este archivo.'; return }
     }
     if (-not $tieneFE) {
         Paso '[IA local] Instalando fastembed...'
         & $py -m pip install --disable-pip-version-check --no-warn-script-location -q fastembed | Out-Host
         $tieneFE = ($LASTEXITCODE -eq 0)
-        if (-not $tieneFE) { Aviso 'fastembed no se instaló (¿internet o versión de Python?): el Árbol seguirá con reglas.' }
+        if (-not $tieneFE) { Aviso 'fastembed no se instaló (¿internet o versión de Python?): el Atlas seguirá con reglas.' }
     }
     if ($tieneFE -and -not $tieneEmb) {
         Paso '[IA local] Descargando el modelo de parecido (MiniLM, 240 MB)...'
@@ -538,7 +541,7 @@ function Preparar-Python-Y-Visor($dest) {
     Paso '[Python] Buscando Python 3.10 o superior...'
     $py = Buscar-Python $dest
     if (-not $py -and $env:ARBOL_SIN_RED -ne '1') {
-        Info 'No hay Python en este equipo: lo descargo e instalo dentro de la carpeta del Árbol.'
+        Info 'No hay Python en este equipo: lo descargo e instalo dentro de la carpeta del Atlas.'
         $py = Instalar-Python $dest
     }
     if (-not $py) {
@@ -638,7 +641,7 @@ if ($Modo -eq 'actualizar') {
     if ($EnWindows) {                                            # una app abierta bloquea la carpeta py: se cierra (con aviso) antes de moverla
         $abiertas = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^pythonw?\.exe$' -and $_.CommandLine -like '*arbol_app.pyw*' })
         if ($abiertas.Count) {
-            Info 'La app del Árbol está abierta: la cierro para poder actualizarla (se volverá a abrir al terminar).'
+            Info 'La app del Atlas está abierta: la cierro para poder actualizarla (se volverá a abrir al terminar).'
             foreach ($a in $abiertas) { try { Stop-Process -Id $a.ProcessId -Force -ErrorAction Stop } catch { } }
             Start-Sleep -Seconds 2
         }
@@ -682,10 +685,10 @@ Fallo "Modo desconocido: '$Modo'"
 :::PSEND
 
 :::BEGIN py/VERSION.txt|text
-1.14.0
+1.14.1
 :::END
 :::BEGIN py/arbol_app.pyw|text
-"""Abre el Árbol de la estadística en su propia ventana, como una aplicación.
+"""Abre el Atlas del conocimiento en su propia ventana, como una aplicación.
 
 Uso: doble clic en el acceso directo del Escritorio (lo crean el instalador y el actualizador),
 o desde una consola:  pythonw py/arbol_app.pyw
@@ -715,7 +718,7 @@ if str(CODIGO) not in sys.path:          # arbol_estadistica y el cuaderno, aunq
 VISOR = RAIZ / "visor_arbol.html"
 FOCO = RAIZ / ".foco"                  # modo vivo: dónde debe colocarse la app (ver vigilar)
 VIVO = "--vivo" in sys.argv
-TITULO = "Árbol de la estadística"
+TITULO = "Atlas del conocimiento"
 
 
 def asegurar_visor() -> None:
@@ -1420,7 +1423,7 @@ def ramas_conceptos(funciones: set[str]) -> list[dict]:
             print(f"AVISO: el concepto «{k['nombre']}» cita funciones que no están en py/: {desconocidas} "
                   "(¿falta ejecutar el actualizador?)")
             k = dict(k, funciones=[f for f in k["funciones"] if f in funciones])
-        origen = "; ".join({"very_normal": "Very Normal: ", "master": "Máster: ", "manual": "Manual: ", "curso": "Curso: "}.get(f["tipo"], "Árbol (consultoría): ") + f["ref"] + (f" ({f['base']})" if f.get("base") else "")
+        origen = "; ".join({"very_normal": "Very Normal: ", "master": "Máster: ", "manual": "Manual: ", "curso": "Curso: "}.get(f["tipo"], "Atlas (consultoría): ") + f["ref"] + (f" ({f['base']})" if f.get("base") else "")
                            for f in k["fuentes"])
         return {
             "id": k["id"], "nombre": k["nombre"], "tipo": "concepto", "firma": "", "doc": " ".join(k["sinonimos"] + k["funciones"]),
@@ -3050,7 +3053,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arbol-estadistica"
-version = "1.14.0"
+version = "1.14.1"
 description = "Biblioteca estadística personal: funciones GLM, diagnóstico, selección, clustering y contrastes (portadas de SAS)."
 requires-python = ">=3.10"
 dependencies = [
@@ -3730,7 +3733,7 @@ from . import (actuarial, clustering, contrastes, descriptiva, diagnostico, dise
 
 __all__ = ["actuarial", "clustering", "contrastes", "descriptiva", "diagnostico", "finanzas", "ml", "modelos", "multivariante", "preprocesado", "seleccion",
            "simulacion", "diseno"]
-__version__ = "1.14.0"
+__version__ = "1.14.1"
 :::END
 :::BEGIN py/arbol_estadistica/_util.py|text
 """Utilidades internas compartidas (validación de entradas). No forman parte del árbol público."""
@@ -17076,7 +17079,7 @@ from . import CARPETA, _norm
 
 INTERVALO = 1.0                  # segundos mínimos entre dos peticiones (todas las de este módulo)
 ESPERA = 10                      # segundos de espera por petición
-UA = "ArbolEstadistica/1.11 (https://github.com/Kuerb0/Arbol_de_la_estadistica; biblioteca personal que clasifica libros) python-urllib"      # Wikimedia pide nombre de la herramienta y un contacto
+UA = "AtlasDelConocimiento/1.14 (https://github.com/Kuerb0/Atlas_del_conocimiento; biblioteca personal que clasifica libros) python-urllib"      # Wikimedia pide nombre de la herramienta y un contacto
 _cerrojo, _cache_lock = threading.Lock(), threading.Lock()
 _estado: dict = {"ultimo": 0.0, "fallos": 0, "descanso": 0.0, "cache": None, "nuevos": 0}
 _etiq: dict = {}                    # Q-id -> nombre (se repiten mucho: «literary work», «novel»…)
@@ -35792,7 +35795,7 @@ def test_generar_y_extraer(tmp_path):
     escritos = gen.generar(str(RAIZ), str(tmp_path))      # ya comprueba ida y vuelta byte a byte
     nombres = sorted(Path(e).name for e in escritos)
     version = gen.version_del_programa(str(RAIZ))
-    assert nombres == [f"Arbol {version} - Actualizar.bat", f"Arbol {version} - Instalador.bat"]
+    assert nombres == [f"Atlas {version} - Actualizar.bat", f"Atlas {version} - Instalador.bat"]
     for e in escritos:
         sacado = gen.extraer(Path(e).read_bytes())
         assert sacado["py/arbol_estadistica/modelos/logit_sas.py"][0] == "text"
@@ -39878,7 +39881,7 @@ window.crearMapa3D = function (o) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Árbol de la estadística</title>
+<title>Atlas del conocimiento</title>
 <link rel="icon" type="image/png" href="__ICONO__">
 <style>
 /* Visor del árbol: mapa 3D (núcleo + ramas en órbita), buscador y panel de código. Un solo fichero, sin internet. */
@@ -40274,7 +40277,7 @@ details.ap-paso.hecho .ap-num{background:var(--c-clustering,#2a9d6f);color:var(-
 <body>
 <div class="app">
   <header class="top">
-    <div class="brand"><h1 id="titulo">Árbol</h1></div>
+    <div class="brand"><h1 id="titulo">Atlas</h1></div>
     <nav class="pestanas" id="pestanas" role="tablist" aria-label="Pestañas">
       <button class="pest" id="pestUniverso" role="tab" type="button" aria-selected="true" title="El universo: todo tu conocimiento">🌌 Universo</button>
       <button class="pest" id="pestImportar" role="tab" type="button" aria-selected="false" title="Importar archivos: un agujero negro que los clasifica">⚫ Importar</button>
@@ -40410,7 +40413,7 @@ var reducir = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)'
 /* ---------- árbol ---------- */
 var VIDEO_RE = /youtube|youtu\.be|vimeo|3blue1brown|ocw\.mit\.edu\/.*(video|lecture)|stat110|video/i;
 function esVideo(f) { return !!f.url && (f.tipo === 'very_normal' || VIDEO_RE.test(f.url)); }
-var root = {id: 'raiz', nombre: 'Árbol de la estadística', kind: 'raiz', hijos: [], depth: 0, parent: null};
+var root = {id: 'raiz', nombre: 'Atlas del conocimiento', kind: 'raiz', hijos: [], depth: 0, parent: null};
 DATA.ramas.forEach(function (rm) {
   var rn = {id: 'r-' + rm.id, rama: rm.id, nombre: rm.nombre, desc: rm.desc, kind: 'rama', hijos: [], parent: root, depth: 1, colorHex: rm.color ? rm.color.oscuro : null, grupo: rm.grupo || '', galaxia: rm.galaxia || '', biblioteca: !!rm.biblioteca};
   rm.modulos.forEach(function (md) {
@@ -40632,7 +40635,7 @@ function migas() {
 }
 var nCon = hojas.filter(function (h) { return h.tipo === 'concepto'; }), nHuecos = nCon.filter(esHueco).length;
 var RESUMEN = hojas.filter(function (h) { return h.tipo === 'funcion'; }).length + ' funciones · ' + nCon.length + ' conceptos (' + nHuecos + ' huecos) · ' + hojas.filter(function (h) { return h.tipo === 'demo'; }).length + ' demos · ' + DATA.pruebas + ' pruebas · generado ' + DATA.generado;
-$('#titulo').title = 'Árbol de la estadística · ' + RESUMEN;
+$('#titulo').title = 'Atlas del conocimiento · ' + RESUMEN;
 $('#panelBtn').addEventListener('click', function () { window.alternarDetalle(); });
 function pantallaCompleta() {
   var d = document, el = d.documentElement;
@@ -40953,7 +40956,7 @@ function detalleConcepto(n, d) {
   h += botonesDemo(n.rid);
   h += '<h3>Dónde aparece</h3><ul class="fuentes">' + (n.fuentes || []).map(function (f) {
     var vn = f.tipo === 'very_normal';
-    return '<li><span class="tag' + (vn ? ' vn' : '') + '">' + (vn ? 'Very Normal' : f.tipo === 'master' ? 'Máster' : f.tipo === 'manual' ? 'Manual' : f.tipo === 'curso' ? 'Curso' : 'Árbol (consultoría)') + '</span>' +
+    return '<li><span class="tag' + (vn ? ' vn' : '') + '">' + (vn ? 'Very Normal' : f.tipo === 'master' ? 'Máster' : f.tipo === 'manual' ? 'Manual' : f.tipo === 'curso' ? 'Curso' : 'Atlas (consultoría)') + '</span>' +
       (f.url ? '<a href="' + esc(f.url) + '" target="_blank" rel="noopener noreferrer">' + esc(f.ref) + '</a>' : '<span>' + esc(f.ref) + '</span>') +
       (f.base ? '<span class="base">' + esc(f.base) + '</span>' : '') + '</li>'; }).join('') + '</ul>';
   h += '<div class="acciones"><button class="btn primario" data-a="nota" type="button">Copiar nota para Claude</button>' +
@@ -41169,7 +41172,7 @@ async function impOpciones() {
 }
 function impClic() {
   if (imp.ocupado) return;
-  if (!impApi()) { impAviso('El importador funciona en la app («Árbol de la estadística» del Escritorio): necesita abrir el explorador de archivos y guardar en tu observatorio.'); return; }
+  if (!impApi()) { impAviso('El importador funciona en la app («Atlas del conocimiento» del Escritorio): necesita abrir el explorador de archivos y guardar en tu observatorio.'); return; }
   impElegir();
 }
 async function impElegir() {
@@ -41405,7 +41408,7 @@ var bib = {lista: null, sucio: false, filtro: '', gal: '', borrando: null, rev: 
 var tel = {lista: []};
 async function telBuscar() {
   var a = window.pywebview && window.pywebview.api, q = $('#telQ').value.trim();
-  if (!a || !a.telescopio_buscar) { $('#telN').textContent = 'El telescopio funciona desde la app («Árbol de la estadística» del Escritorio).'; return; }
+  if (!a || !a.telescopio_buscar) { $('#telN').textContent = 'El telescopio funciona desde la app («Atlas del conocimiento» del Escritorio).'; return; }
   var tit = $('#telTit').value.trim(), aut = $('#telAut').value.trim(); if (!q && !tit && !aut) return; $('#telN').textContent = 'Buscando…'; $('#telBuscar').disabled = true;
   var r = await a.telescopio_buscar(q, tit, aut, $('#telTipo').value, $('#telFmt').value); $('#telBuscar').disabled = false;
   if (r.error) { $('#telN').textContent = r.error; return; }
@@ -41432,7 +41435,7 @@ var ent = {timer: null, cargado: false};
 function entApi() { var a = window.pywebview && window.pywebview.api; return a && a.entrenamiento_estado ? a : null; }
 async function entMostrar() {
   var a = entApi(), st = $('#entEstado');
-  if (!a) { st.textContent = 'El entrenamiento se controla desde la app («Árbol de la estadística» del Escritorio).'; $('#entIniciar').disabled = true; return; }
+  if (!a) { st.textContent = 'El entrenamiento se controla desde la app («Atlas del conocimiento» del Escritorio).'; $('#entIniciar').disabled = true; return; }
   await entRefrescar();
   if (!ent.cargado) { var p = await a.entrenamiento_panel(); if (p && p.url) { $('#entFrame').src = p.url; ent.cargado = true; } else if (p && p.error) st.textContent = p.error; }
   clearInterval(ent.timer); ent.timer = setInterval(function () { if (entAbierta()) entRefrescar(); else clearInterval(ent.timer); }, 3000);
@@ -41480,7 +41483,7 @@ function eclRender() {
 }
 async function eclCargar() {
   var a = window.pywebview && window.pywebview.api;
-  if (!a || !a.almacenaje) { $('#eclNota').textContent = 'Los eclipses se miden desde la app («Árbol de la estadística» del Escritorio).'; return; }
+  if (!a || !a.almacenaje) { $('#eclNota').textContent = 'Los eclipses se miden desde la app («Atlas del conocimiento» del Escritorio).'; return; }
   var r = await a.almacenaje(); if (r.error) { $('#eclNota').textContent = r.error; return; }
   ecl.datos = r; if (!r.github) ecl.github = false; eclRender(); eclipses.mostrar();
 }
@@ -41488,7 +41491,7 @@ $('#eclEsc').onclick = function () { ecl.github = !ecl.github; eclRender(); };
 $('#eclVista').onclick = function () { ecl.tipos = !ecl.tipos; eclRender(); };
 async function bibCargar() {
   var a = impApi(), cont = $('#bibLista');
-  if (!a || !a.biblioteca_listar) { cont.innerHTML = '<p class="imp-msg">El observatorio se gestiona desde la app («Árbol de la estadística» del Escritorio).</p>'; return; }
+  if (!a || !a.biblioteca_listar) { cont.innerHTML = '<p class="imp-msg">El observatorio se gestiona desde la app («Atlas del conocimiento» del Escritorio).</p>'; return; }
   await impOpciones();
   var r = await a.biblioteca_listar();
   if (r.error) { cont.innerHTML = '<p class="imp-msg">' + esc(r.error) + '</p>'; return; }
@@ -42274,7 +42277,7 @@ arbol_estadistica
 ## Estructura de carpetas
 
 ```
-Arbol de la estadística/
+Atlas del conocimiento/
 ├── abrir_arbol.bat · regenerar_visor.bat · ejecutar_tests.bat · medir_propiedades.bat   lanzadores (doble clic)
 ├── visor_arbol.html          mapa visual 3D (lo genera py/construir_visor.py con visor/plantilla.html + mapa3d.js + demos.js)
 ├── INDEX.md · CLAUDE.md      índice de funciones y reglas para Claude
@@ -42285,14 +42288,14 @@ Arbol de la estadística/
 ├── ejemplos/                 flujos completos de uso
 ├── assets/                   icono.ico / icono.png
 ├── herramientas/             generar_instaladores.py, descargar_python.ps1, plantillas/, entrenador/ (reentrenar el LLM: datos, QLoRA, exportar a Ollama), corpus/ + evaluar_corpus.py + panel_progreso.py (medir y ver el progreso); la pestaña «🧠 Entrenamiento» de la app los lanza y los muestra (py/conocimiento/entrenamiento.py)
-├── instaladores/             "Arbol X.Y.Z - Instalador.bat" y "… - Actualizar.bat" (autoextraíbles)
+├── instaladores/             "Atlas X.Y.Z - Instalador.bat" y "… - Actualizar.bat" (autoextraíbles)
 ├── anteriores/               copias de seguridad que hace el actualizador (py_anterior, estructura_plana)
 └── python/                   (opcional) Python propio descargado por el instalador si el equipo no tiene
 ```
 
 **Instaladores**: `python herramientas/generar_instaladores.py` empaqueta todo (py/, teoria/, ejemplos/, los `.bat`, assets/ y el
 catálogo) en dos `.bat` autoextraíbles y comprueba que se extraen idénticos. El `.bat` solo arranca PowerShell; el trabajo lo hace
-`herramientas/plantillas/motor.ps1`. *Instalador* (vale para un PC limpio): pregunta la carpeta (Enter = Documentos\Árbol de la estadística,
+`herramientas/plantillas/motor.ps1`. *Instalador* (vale para un PC limpio): pregunta la carpeta (Enter = Documentos\Atlas del conocimiento,
 C = elegir otra), instala Python dentro de esa carpeta si no hay, las librerías, registra el paquete (`.pth`), genera el visor y crea accesos.
 *Actualizar*: encuentra la instalación (junto al `.bat`, la recordada o la que elijas), mueve `py/` a `anteriores/py_<versión>_<fecha>`,
 copia la versión nueva y comprueba `py/VERSION.txt`; tu `conceptos/catalogo.json` se conserva y `py/fusionar_catalogo.py` le añade los
@@ -42792,7 +42795,7 @@ así que se usaron los índices de los temas (Biometría, Mate No Vida, Mate Vid
 - KS y Gini, curvas de calibración, lift por decil.
 :::END
 :::BEGIN CLAUDE.md|text
-# Árbol de la estadística — instrucciones para Claude
+# Atlas del conocimiento (antes «Árbol de la estadística») — instrucciones para Claude
 
 Esta carpeta es la biblioteca estadística personal de Mario: funciones probadas (muchas portadas de SAS,
 hechas en trabajos de consultoría), guías de teoría y una tabla SAS ↔ Python. **Antes de escribir código
@@ -42810,7 +42813,7 @@ Código en `py/` (paquete `arbol_estadistica`, `tests/`, `visor/`, `construir_vi
    (instalar una vez con `pip install -e py` desde esta carpeta, o `sys.path.insert(0, <carpeta>/py)`).
 3. Lee el docstring de la función: indica **origen** (notebook de consultoría), **equivalente SAS** y las
    **advertencias** (supuestos, errores conocidos del original).
-4. Si falta algo, escríbelo siguiendo las convenciones de abajo y **añádelo al árbol** (módulo + test + línea en `INDEX.md`), y regenera el visor con `python py/construir_visor.py`. Si cambias `py/`, `assets/` o los `.bat`, sube `py/VERSION.txt` (y `pyproject.toml`) y ejecuta `python herramientas/generar_instaladores.py`. **Al terminar cualquier tarea que cambie el programa, genera siempre los instaladores, publícalos con `python herramientas/publicar.py "qué cambió"` (regenera, revisa que no haya datos privados, commit y push a GitHub; en `instaladores/` solo queda la versión actual) y dile a Mario la ruta de `Arbol X.Y.Z - Instalador.bat` y `- Actualizar.bat` para que los pruebe.**
+4. Si falta algo, escríbelo siguiendo las convenciones de abajo y **añádelo al árbol** (módulo + test + línea en `INDEX.md`), y regenera el visor con `python py/construir_visor.py`. Si cambias `py/`, `assets/` o los `.bat`, sube `py/VERSION.txt` (y `pyproject.toml`) y ejecuta `python herramientas/generar_instaladores.py`. **Al terminar cualquier tarea que cambie el programa, genera siempre los instaladores, publícalos con `python herramientas/publicar.py "qué cambió"` (regenera, revisa que no haya datos privados, commit y push a GitHub; en `instaladores/` solo queda la versión actual) y dile a Mario la ruta de `Atlas X.Y.Z - Instalador.bat` y `- Actualizar.bat` para que los pruebe.**
 5. `visor_arbol.html` (doble clic, `abrir_arbol.bat` o el acceso directo del Escritorio): mapa 3D (núcleo = el árbol, ramas orbitando con sus funciones y conceptos como puntos; motor en `py/visor/mapa3d.js`, canvas sin librerías), buscador y botones para copiar código; lo genera `py/construir_visor.py` leyendo el propio código y `INDEX.md`, sin depender de nada más. Los instaladores autoextraíbles están en `instaladores/` (Instalador = Python + librerías + visor + accesos; Actualizar = solo programa, con copia en `anteriores/`); `regenerar_visor.bat` vuelve a generar el visor.
 5c. **Probar (cuaderno):** cada función tiene un ejemplo ejecutable por celdas con datos simulados en `py/cuaderno/ejemplos.py` (escenarios + celdas, con gráfico cuando lo hay). La app (`py/arbol_app.pyw`, pywebview) lo ejecuta en Python desde el visor. Al añadir una función, añade su ejemplo: un test exige que exista y que se ejecute sin errores.
 5e. **Guía de aprendizaje:** la pestaña «🎓 Aprender» del visor muestra rutas paso a paso (`py/aprender/*.json`, una ruta por fichero): cada paso tiene idea, instrucciones, una demo, palabras clave, una pregunta y las funciones en Python. Los enlaces (demos, funciones, conceptos) se validan al construir el visor y en `tests/test_aprender.py`; el progreso se guarda en el navegador. Al añadir una demo o un concepto importante, plantéate si encaja en una ruta.
@@ -53597,7 +53600,7 @@ exit 1
     {
      "tipo": "arbol",
      "ref": "Distribuciones básicas (demos Fundamentos del visor)",
-     "base": "Árbol de la estadística"
+     "base": "Atlas del conocimiento"
     },
     {
      "tipo": "curso",
@@ -53629,7 +53632,7 @@ exit 1
     {
      "tipo": "arbol",
      "ref": "Distribuciones básicas (demos Fundamentos del visor)",
-     "base": "Árbol de la estadística"
+     "base": "Atlas del conocimiento"
     },
     {
      "tipo": "curso",
@@ -53654,7 +53657,7 @@ exit 1
     {
      "tipo": "arbol",
      "ref": "Distribuciones básicas (demos Fundamentos del visor)",
-     "base": "Árbol de la estadística"
+     "base": "Atlas del conocimiento"
     },
     {
      "tipo": "curso",
@@ -53688,7 +53691,7 @@ exit 1
    "fuentes": [
     {
      "tipo": "arbol",
-     "base": "Árbol de la estadística",
+     "base": "Atlas del conocimiento",
      "ref": "Ruta «Estadística descriptiva» de la pestaña Aprender"
     },
     {
@@ -53716,7 +53719,7 @@ exit 1
    "fuentes": [
     {
      "tipo": "arbol",
-     "base": "Árbol de la estadística",
+     "base": "Atlas del conocimiento",
      "ref": "Demo «Describir una variable»"
     },
     {
@@ -53749,7 +53752,7 @@ exit 1
    "fuentes": [
     {
      "tipo": "arbol",
-     "base": "Árbol de la estadística",
+     "base": "Atlas del conocimiento",
      "ref": "Demo «Cuarteto de Anscombe»"
     },
     {
@@ -53777,7 +53780,7 @@ exit 1
    "fuentes": [
     {
      "tipo": "arbol",
-     "base": "Árbol de la estadística",
+     "base": "Atlas del conocimiento",
      "ref": "Anscombe (1973), «Graphs in Statistical Analysis»; demo del visor"
     }
    ]
@@ -53799,7 +53802,7 @@ exit 1
    "fuentes": [
     {
      "tipo": "arbol",
-     "base": "Árbol de la estadística",
+     "base": "Atlas del conocimiento",
      "ref": "Demo «Paradoja de Simpson»"
     },
     {
@@ -53826,7 +53829,7 @@ exit 1
    "fuentes": [
     {
      "tipo": "arbol",
-     "base": "Árbol de la estadística",
+     "base": "Atlas del conocimiento",
      "ref": "Demo «Gráficos que engañan»"
     }
    ]
@@ -64295,7 +64298,7 @@ exit 1
     {
      "tipo": "arbol",
      "ref": "Distribuciones básicas (demos Fundamentos del visor)",
-     "base": "Árbol de la estadística"
+     "base": "Atlas del conocimiento"
     },
     {
      "tipo": "curso",
@@ -64327,7 +64330,7 @@ exit 1
     {
      "tipo": "arbol",
      "ref": "Distribuciones básicas (demos Fundamentos del visor)",
-     "base": "Árbol de la estadística"
+     "base": "Atlas del conocimiento"
     },
     {
      "tipo": "curso",
@@ -64352,7 +64355,7 @@ exit 1
     {
      "tipo": "arbol",
      "ref": "Distribuciones básicas (demos Fundamentos del visor)",
-     "base": "Árbol de la estadística"
+     "base": "Atlas del conocimiento"
     },
     {
      "tipo": "curso",
@@ -64386,7 +64389,7 @@ exit 1
    "fuentes": [
     {
      "tipo": "arbol",
-     "base": "Árbol de la estadística",
+     "base": "Atlas del conocimiento",
      "ref": "Ruta «Estadística descriptiva» de la pestaña Aprender"
     },
     {
@@ -64414,7 +64417,7 @@ exit 1
    "fuentes": [
     {
      "tipo": "arbol",
-     "base": "Árbol de la estadística",
+     "base": "Atlas del conocimiento",
      "ref": "Demo «Describir una variable»"
     },
     {
@@ -64447,7 +64450,7 @@ exit 1
    "fuentes": [
     {
      "tipo": "arbol",
-     "base": "Árbol de la estadística",
+     "base": "Atlas del conocimiento",
      "ref": "Demo «Cuarteto de Anscombe»"
     },
     {
@@ -64475,7 +64478,7 @@ exit 1
    "fuentes": [
     {
      "tipo": "arbol",
-     "base": "Árbol de la estadística",
+     "base": "Atlas del conocimiento",
      "ref": "Anscombe (1973), «Graphs in Statistical Analysis»; demo del visor"
     }
    ]
@@ -64497,7 +64500,7 @@ exit 1
    "fuentes": [
     {
      "tipo": "arbol",
-     "base": "Árbol de la estadística",
+     "base": "Atlas del conocimiento",
      "ref": "Demo «Paradoja de Simpson»"
     },
     {
@@ -64524,7 +64527,7 @@ exit 1
    "fuentes": [
     {
      "tipo": "arbol",
-     "base": "Árbol de la estadística",
+     "base": "Atlas del conocimiento",
      "ref": "Demo «Gráficos que engañan»"
     }
    ]

@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title Arbol de la estadistica @@VERSION@@ - Instalador
+title Atlas del conocimiento @@VERSION@@ - Instalador
 rem Este .bat solo arranca PowerShell: todo el trabajo lo hace el script entre :::PSSTART y :::PSEND
 rem (herramientas/plantillas/motor.ps1). Debajo van empaquetados los ficheros del programa.
 rem Sin cambiar la pagina de codigos ni saltar a etiquetas: cmd nunca lee el contenido empaquetado.

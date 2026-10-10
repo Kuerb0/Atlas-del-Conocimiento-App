@@ -1,4 +1,4 @@
-# Motor de instalación / actualización del Árbol de la estadística (Windows PowerShell 5.1 o superior).
+# Motor de instalación / actualización del Atlas del conocimiento (Windows PowerShell 5.1 o superior).
 # Lo arranca el .bat (instalador o actualizador) con estas variables de entorno:
 #   ARBOL_SELF    ruta del propio .bat (lleva empaquetados los ficheros tras la línea :::PSEND)
 #   ARBOL_MODO    'instalar' o 'actualizar'
@@ -15,7 +15,8 @@ $Self = $env:ARBOL_SELF
 $Modo = $env:ARBOL_MODO
 $Version = $env:ARBOL_VERSION
 $EnWindows = [Environment]::OSVersion.Platform -eq 'Win32NT'
-$Nombre = [string][char]0xC1 + 'rbol de la estad' + [char]0xED + 'stica'
+$Nombre = 'Atlas del conocimiento'
+$NombreViejo = [string][char]0xC1 + 'rbol de la estad' + [char]0xED + 'stica'      # el de las versiones anteriores a 1.14.1: se sigue buscando y se retira su acceso directo
 $Utf8 = New-Object Text.UTF8Encoding($false)
 $DirRegistro = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'ArbolEstadistica' } else { Join-Path ([IO.Path]::GetTempPath()) 'ArbolEstadistica' }
 $FicheroRegistro = Join-Path $DirRegistro 'ubicacion.txt'
@@ -160,7 +161,7 @@ function Elegir-Destino-Instalacion {
         if ($op -match '^\s*[qQ]') { return $null }
         $cand = $null
         if ($op -match '^\s*2') {
-            $cand = Elegir-Con-Dialogo ([Environment]::GetFolderPath('MyDocuments')) 'Elige la carpeta donde instalar el Árbol de la estadística (si no está vacía, se creará dentro una subcarpeta)'
+            $cand = Elegir-Con-Dialogo ([Environment]::GetFolderPath('MyDocuments')) 'Elige la carpeta donde instalar el Atlas del conocimiento (si no está vacía, se creará dentro una subcarpeta)'
             if (-not $cand) { Write-Host '  No has elegido ninguna carpeta.'; continue }
         } elseif ($op -match '^\s*3') {
             $cand = Read-Host '  Escribe la ruta completa (p. ej. D:\Estadistica\Arbol)'
@@ -185,13 +186,14 @@ function Buscar-Instalacion {
     $cands = @($aqui, (Split-Path -Parent $aqui))
     if (Test-Path -LiteralPath $FicheroRegistro) { $cands += (Get-Content -LiteralPath $FicheroRegistro -Encoding UTF8 | Select-Object -First 1) }
     $cands += (Join-Path ([Environment]::GetFolderPath('MyDocuments')) $Nombre)
+    $cands += (Join-Path ([Environment]::GetFolderPath('MyDocuments')) $NombreViejo)      # instalaciones de versiones anteriores a 1.14.1
     foreach ($c in $cands) { if (Es-Instalacion $c) { return $c } }
     Write-Host ''
-    Write-Host '  No encuentro una instalación del Árbol junto a este actualizador.'
+    Write-Host '  No encuentro una instalación del Atlas junto a este actualizador.'
     Write-Host '  Elige la carpeta donde lo tienes instalado (la que contiene py, conceptos, teoria...).'
-    $c = Elegir-Con-Dialogo ([Environment]::GetFolderPath('MyDocuments')) 'Elige la carpeta donde está instalado el Árbol de la estadística'
+    $c = Elegir-Con-Dialogo ([Environment]::GetFolderPath('MyDocuments')) 'Elige la carpeta donde está instalado el Atlas del conocimiento'
     if ($c -and (Es-Instalacion $c)) { return $c }
-    if ($c) { Write-Host "  Esa carpeta no parece una instalación del Árbol: $c" }
+    if ($c) { Write-Host "  Esa carpeta no parece una instalación del Atlas: $c" }
     return $null
 }
 
@@ -337,9 +339,10 @@ function Crear-Accesos($dest) {
         }
         $s.WorkingDirectory = $dest
         if (Test-Path -LiteralPath $ico) { $s.IconLocation = $ico + ',0' }
-        $s.Description = 'Árbol de la estadística'; $s.Save()
+        $s.Description = 'Atlas del conocimiento'; $s.Save()
         try { Start-Process -FilePath (Join-Path $env:windir 'System32\ie4uinit.exe') -ArgumentList '-show' -WindowStyle Hidden -Wait } catch { }   # refresca la caché de iconos de Windows
         # El segundo acceso («- regenerar») ya no se crea; si lo dejó una versión anterior, se quita.
+        foreach ($v in @(($NombreViejo + '.lnk'), ($NombreViejo + ' - regenerar.lnk'), ($Nombre + ' - regenerar.lnk'))) { $x = Join-Path $esc $v; if (Test-Path -LiteralPath $x) { Remove-Item -LiteralPath $x -Force -ErrorAction SilentlyContinue } }      # el acceso con el nombre antiguo
         $viejo = Join-Path $esc ($Nombre + ' - regenerar.lnk')
         if (Test-Path -LiteralPath $viejo) { Remove-Item -LiteralPath $viejo -Force -ErrorAction SilentlyContinue; Info 'Quitado el acceso «regenerar» del Escritorio (ya no hace falta; sigue regenerar_visor.bat en la carpeta).' }
         Info "Acceso directo «$Nombre» en el Escritorio -> $(if ($l) { $l[0] } else { 'abrir_arbol.bat' })."
@@ -486,14 +489,14 @@ function Preparar-IA($py, $dest) {
     $faltaAlgo = (-not $tieneFE) -or (-not $tieneEmb) -or (-not $exe) -or ($exe -and -not $tieneLLM)
     if (-not $faltaAlgo) { Info 'Todo al día: no hay nada que descargar.'; return }
     if (-not $env:ARBOL_DESTINO) {
-        $r = Read-Host '  ¿Instalar lo que falta? Es opcional: sin ello el Árbol clasifica con reglas, pero peor [S/n]'
+        $r = Read-Host '  ¿Instalar lo que falta? Es opcional: sin ello el Atlas clasifica con reglas, pero peor [S/n]'
         if ($r -match '^\s*[nN]') { Info 'Omitido. Puedes repetirlo cuando quieras ejecutando de nuevo este archivo.'; return }
     }
     if (-not $tieneFE) {
         Paso '[IA local] Instalando fastembed...'
         & $py -m pip install --disable-pip-version-check --no-warn-script-location -q fastembed | Out-Host
         $tieneFE = ($LASTEXITCODE -eq 0)
-        if (-not $tieneFE) { Aviso 'fastembed no se instaló (¿internet o versión de Python?): el Árbol seguirá con reglas.' }
+        if (-not $tieneFE) { Aviso 'fastembed no se instaló (¿internet o versión de Python?): el Atlas seguirá con reglas.' }
     }
     if ($tieneFE -and -not $tieneEmb) {
         Paso '[IA local] Descargando el modelo de parecido (MiniLM, 240 MB)...'
@@ -523,7 +526,7 @@ function Preparar-Python-Y-Visor($dest) {
     Paso '[Python] Buscando Python 3.10 o superior...'
     $py = Buscar-Python $dest
     if (-not $py -and $env:ARBOL_SIN_RED -ne '1') {
-        Info 'No hay Python en este equipo: lo descargo e instalo dentro de la carpeta del Árbol.'
+        Info 'No hay Python en este equipo: lo descargo e instalo dentro de la carpeta del Atlas.'
         $py = Instalar-Python $dest
     }
     if (-not $py) {
@@ -623,7 +626,7 @@ if ($Modo -eq 'actualizar') {
     if ($EnWindows) {                                            # una app abierta bloquea la carpeta py: se cierra (con aviso) antes de moverla
         $abiertas = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^pythonw?\.exe$' -and $_.CommandLine -like '*arbol_app.pyw*' })
         if ($abiertas.Count) {
-            Info 'La app del Árbol está abierta: la cierro para poder actualizarla (se volverá a abrir al terminar).'
+            Info 'La app del Atlas está abierta: la cierro para poder actualizarla (se volverá a abrir al terminar).'
             foreach ($a in $abiertas) { try { Stop-Process -Id $a.ProcessId -Force -ErrorAction Stop } catch { } }
             Start-Sleep -Seconds 2
         }
