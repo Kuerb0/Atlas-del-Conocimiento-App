@@ -611,7 +611,7 @@ if ($Modo -eq 'actualizar') {
     if ($anterior -eq $Version -and -not $env:ARBOL_DESTINO) {
         Write-Host ''
         Write-Host "  Ya tienes instalada la versión ${Version}: no hace falta sustituir el programa." -ForegroundColor Green
-        Write-Host '  Solo voy a comprobar que están todos los componentes (Python, librerías, IA local) e instalar los que falten.'
+        Write-Host '  Solo voy a comprobar que están todos los componentes (Python, librerías, IA local), instalar los que falten y rehacer el acceso directo del Escritorio.'
         $r = Read-Host '  Enter = comprobar componentes   R = reinstalar el programa igualmente   Q = salir'
         if ($r -match '^\s*[qQ]') { exit 2 }
         if ($r -notmatch '^\s*[rR]') {
@@ -619,6 +619,7 @@ if ($Modo -eq 'actualizar') {
             if (-not $pyc) { Fallo 'No encuentro Python en esta instalación. Usa el instalador completo.' }
             $Estado.py = $pyc
             Preparar-IA $pyc $dest
+            if ($env:ARBOL_SIN_ACCESOS -ne '1') { Crear-Accesos $dest; Registrar $dest }      # el acceso directo y la ubicación se rehacen siempre (si se movió o renombró la carpeta, el viejo no abre)
             Titulo 'Comprobación terminada'
             exit 0
         }
