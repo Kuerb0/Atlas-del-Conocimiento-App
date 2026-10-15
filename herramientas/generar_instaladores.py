@@ -149,10 +149,18 @@ def generar(raiz=None, salida=None):
         with open(os.path.join(raiz, "herramientas", "plantillas", plantilla), encoding="utf-8") as f:
             texto = f.read().replace("\r\n", "\n")
         assert "@@PAYLOAD@@" in texto and "@@MOTOR@@" in texto, plantilla
+        # banner de Kuerb0 y titulo: motor.ps1 los pinta (aguamarina y blanco) leyendolos de estos bloques;
+        # los crea herramientas/crear_banner.py
+        def leer_plantilla(n):
+            with open(os.path.join(raiz, "herramientas", "plantillas", n), encoding="utf-8") as f:
+                return f.read().replace("\r\n", "\n").rstrip("\n").split("\n")
+        titulo_txt = "titulo_instalador.txt" if "Instalador" in nombre else "titulo_actualizar.txt"
+        banner = ([":::BANNERSTART"] + leer_plantilla("banner.txt") + [":::BANNEREND", ":::TITULOSTART"]
+                  + [l.replace("@@VERSION@@", version) for l in leer_plantilla(titulo_txt)] + [":::TITULOEND"])
         completo = []
         for linea in texto.replace("@@VERSION@@", version).split("\n"):
             if linea.strip() == "@@PAYLOAD@@":
-                completo += carga
+                completo += banner + carga
             elif linea.strip() == "@@MOTOR@@":
                 completo += motor
             else:
