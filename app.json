@@ -1,0 +1,37 @@
+{
+  "nombre": "Atlas",
+  "nombre_visible": "Atlas del conocimiento",
+  "version_fichero": "py/VERSION.txt",
+  "icono": "assets/icono.ico",
+  "icono_png": "assets/icono.png",
+  "exe": {
+    "modo": "python",
+    "lanzador": "py/arbol_app.pyw",
+    "archivos": [
+      "py",
+      "assets",
+      "teoria",
+      "ejemplos",
+      "INDEX.md",
+      "CLAUDE.md",
+      "conceptos/catalogo.json",
+      "conceptos/catalogo_base.json"
+    ],
+    "paths": [
+      "py"
+    ],
+    "requirements": "py/requirements.txt",
+    "paquetes": [
+      "pywebview>=5"
+    ],
+    "excluir_paquetes": [
+      "pytest"
+    ],
+    "datos_usuario": [
+      "conocimiento",
+      "conceptos/catalogo.json",
+      "corpus",
+      "externos"
+    ]
+  }
+}

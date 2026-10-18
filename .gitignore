@@ -34,3 +34,5 @@ mn
 
 # entorno aparte para reentrenar el LLM (torch, peft...) y sus salidas
 herramientas/entrenador/.venv/
+build/
+dist/
