@@ -1,6 +1,6 @@
 """Vuelve a clasificar lo importado en tu biblioteca con las categorías y reglas de hoy y enseña qué cambiaría (género, subgénero, tipo, título). No toca nada salvo con --aplicar.
 
-    python herramientas/estandarizar_biblioteca.py [CARPETA_CONOCIMIENTO] [--desde AAAA-MM-DD] [--sin-llm] [--aplicar] [--json salida.json]
+    python herramientas/estandarizar_biblioteca.py [CARPETA_CONOCIMIENTO] [--desde AAAA-MM-DD] [--sin-llm] [--aplicar] [--json salida.json] [--como criterio.json]
 
 Cada obra se clasifica como si no estuviera importada (sus ejemplos son los demás), así lo que ves es lo que el sistema haría con un archivo nuevo, no una copia de sí mismo.
 Con --aplicar, antes hace una copia de metadatos.json, referencias.json y correcciones.json en `biblioteca/_copia_antes_de_estandarizar/` y después cambia lo propuesto
@@ -22,7 +22,8 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 from conocimiento import clasificador, importar, llm  # noqa: E402
 
 
-def proponer(carpeta: Path, desde: str = "", con_llm: bool = True) -> list[dict]:
+def proponer(carpeta: Path, desde: str = "", con_llm: bool = True, como: dict | None = None) -> list[dict]:
+    """`como`: {rel: campos} que se aplican a los ejemplos (los demás documentos) antes de clasificar: mide lo que acertaría el sistema con la biblioteca ya estandarizada."""
     meta, base = importar.leer_metadatos(carpeta), carpeta / "biblioteca"
     clasificador.WEB = False
     llm.ACTIVO = con_llm
@@ -34,7 +35,7 @@ def proponer(carpeta: Path, desde: str = "", con_llm: bool = True) -> list[dict]
         with tempfile.TemporaryDirectory() as t:
             tmp = Path(t)
             (tmp / "biblioteca").mkdir()
-            (tmp / "biblioteca" / "metadatos.json").write_text(json.dumps({r: x for r, x in meta.items() if r != rel}, ensure_ascii=False), encoding="utf-8")
+            (tmp / "biblioteca" / "metadatos.json").write_text(json.dumps({r: {**x, **(como or {}).get(r, {})} for r, x in meta.items() if r != rel}, ensure_ascii=False), encoding="utf-8")
             if (base / "vectores.npz").exists():
                 shutil.copy(base / "vectores.npz", tmp / "biblioteca" / "vectores.npz")
             for n in ("ajustes.json", "taxonomia.json"):
@@ -71,7 +72,8 @@ if __name__ == "__main__":
     pos = [x for x in a if not x.startswith("--") and (a.index(x) == 0 or not a[a.index(x) - 1].startswith("--"))]
     carpeta = Path(pos[0]) if pos else Path(importar.carpeta_datos())
     desde = a[a.index("--desde") + 1] if "--desde" in a else ""
-    props = proponer(carpeta, desde, con_llm="--sin-llm" not in a)
+    como = json.loads(Path(a[a.index("--como") + 1]).read_text(encoding="utf-8")) if "--como" in a else None
+    props = proponer(carpeta, desde, con_llm="--sin-llm" not in a, como=como)
     cambian = [p for p in props if p["antes"] != p["ahora"]]
     print(f"{len(props)} obras · cambiarían {len(cambian)} · géneros nuevos: {Counter(p['ahora']['genero'] for p in cambian).most_common(6)}")
     if "--json" in a:
